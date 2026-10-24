@@ -16,9 +16,10 @@
 # hotkey block. Everything it changes is backed up first; running it again is
 # a no-op.
 #
-# Usage: install-plugin [--port N] [--bindings] [--no-service] [--dry-run]
+# Usage: install-plugin [--port N] [--bindings] [--no-service] [--no-prompt] [--dry-run]
 #   --bindings     also add the Omarkets hotkeys (marked block, added once)
 #   --no-service   skip installing/starting the user service
+#   --no-prompt    do not ask for the OpenRouter API key (see omarchy/setup-env)
 #   --dry-run      print what would change and change nothing
 set -euo pipefail
 
@@ -27,14 +28,16 @@ plugin_src="$repo/omarchy/omarkets"
 port=8765
 bindings=0
 install_service=1
+prompt_key=1
 dry_run=0
 
 help() {
     printf '%s\n' \
-        'Usage: install-plugin [--port N] [--bindings] [--no-service] [--dry-run]' \
+        'Usage: install-plugin [--port N] [--bindings] [--no-service] [--no-prompt] [--dry-run]' \
         'Installs the Omarkets bar widget, popup, launcher and user service.' \
         '--bindings    add Omarkets hotkeys (SUPER+M open, SUPER+CTRL+M popup, SUPER+ALT+M calendar)' \
         '--no-service  do not install the systemd --user service' \
+        '--no-prompt   do not ask for the OpenRouter API key' \
         '--dry-run     print what would change and change nothing'
 }
 
@@ -43,6 +46,7 @@ while [[ $# -gt 0 ]]; do
         --help|-h) help; exit 0 ;;
         --bindings) bindings=1; shift ;;
         --no-service) install_service=0; shift ;;
+        --no-prompt) prompt_key=0; shift ;;
         --dry-run) dry_run=1; shift ;;
         --port)
             [[ $# -ge 2 ]] || { printf 'install-plugin: --port needs a value\n' >&2; exit 2; }
@@ -153,10 +157,16 @@ fi
 
 if (( dry_run )); then
     printf 'Dry run: stopping before the install stages.\n'
+    printf 'Would create .env from .env.example if missing and ask for the OpenRouter API key if none is set.\n'
     printf 'Would link %s, install omarkets.service for %s and enable it.\n' \
         "$config_home/omarchy/plugins/omarkets" "$repo"
     exit 0
 fi
+
+# --- 0b. settings: .env and the OpenRouter API key -----------------------
+setup_args=()
+(( prompt_key )) || setup_args+=(--no-prompt)
+"$repo/omarchy/setup-env" "${setup_args[@]}"
 
 # --- 1. shell plugin ------------------------------------------------------
 [[ -f $plugin_src/manifest.json ]] || { printf 'install-plugin: manifest missing at %s\n' "$plugin_src" >&2; exit 1; }

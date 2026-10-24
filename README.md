@@ -57,13 +57,17 @@ python3 -m venv .venv
 # Web app
 (cd web && npm ci && npm run build)
 
-# Settings: add your OpenRouter key
-cp .env.example .env
-$EDITOR .env
-
-# Bar widget, launcher and the systemd user service
+# Bar widget, launcher, settings and the systemd user service
 ./omarchy/install-plugin
 ```
+
+`install-plugin` creates `.env` from `.env.example` and asks you to paste your
+OpenRouter API key. The key is hidden as you type and saved to `.env`, which
+only you can read. Press Enter to skip; the app still runs, but AI notes stay
+off until you add a key. To add it later, put it after `OPENROUTER_API_KEY=`
+in `.env` and run `systemctl --user restart omarkets.service`. Use
+`--no-prompt` to skip the question, or set `OPENROUTER_API_KEY` in your
+environment before running the installer.
 
 `install-plugin` installs `omarkets.service` for your checkout and starts it.
 If you used `--no-service`, enable it yourself:

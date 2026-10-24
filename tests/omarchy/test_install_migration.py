@@ -63,7 +63,10 @@ def sandbox(tmp_path: Path) -> tuple[dict[str, str], Path]:
         "HOME": str(tmp_path),
         "XDG_CONFIG_HOME": str(config),
         "XDG_DATA_HOME": str(tmp_path / "data"),
+        # Never touch the checkout's real .env from a test.
+        "OMARKETS_ENV_FILE": str(tmp_path / "test.env"),
     }
+    env.pop("OPENROUTER_API_KEY", None)
     return env, config
 
 

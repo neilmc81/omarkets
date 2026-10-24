@@ -42,7 +42,7 @@ from core.interfaces.mcp.client import (
 from core.interfaces.mcp.launcher import launch_omarkets
 
 PROTOCOL_VERSION = "2025-06-18"
-SERVER_INFO = {"name": "omarkets", "version": "0.1.0"}
+SERVER_INFO = {"name": "omarkets", "version": "0.1.1"}
 SERVER_KEY = "omarkets"
 
 #: Tool surface. Deliberately user-level intents, not one tool per endpoint.

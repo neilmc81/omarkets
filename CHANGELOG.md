@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.1
+
+- The installer now asks for your OpenRouter API key. `install-plugin` creates
+  `.env` from `.env.example` if it's missing, asks you to paste the key
+  (hidden input; press Enter to skip) and saves it to `.env` with owner-only
+  permissions. It doesn't ask when a key is already set, when there's no
+  terminal, or with `--no-prompt`. A key in the `OPENROUTER_API_KEY`
+  environment variable is used instead of asking.
+- New `omarchy/setup-env` script does the same on its own.
+
+## 0.1.0
 
 First public release. NQ (Nasdaq-100 futures) only.
 
