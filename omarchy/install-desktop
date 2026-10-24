@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 1 && $1 == --help ]]; then
+    printf '%s\n' 'Usage: install-desktop [5173|4173]' 'Installs a per-user Omarkets application-menu entry; never overwrites one.' 'Keep this repository in place. Frontend and backend must already be running.' 'No services are started and no Hyprland configuration is changed.'
+    exit 0
+fi
+
+if [[ $# -gt 1 ]]; then
+    printf '%s\n' 'Usage: install-desktop [5173|4173]' >&2
+    exit 2
+fi
+
+case ${1-5173} in
+    5173|4173) port=${1-5173} ;;
+    *) printf '%s\n' 'Only loopback ports 5173 and 4173 are supported.' >&2; exit 2 ;;
+esac
+
+launcher="$(dirname -- "$(realpath -- "$0")")/omarkets-launch"
+data_home=${XDG_DATA_HOME:-${HOME:?}/.local/share}
+if [[ $data_home != /* || $launcher == *$'\n'* || $launcher == *$'\r'* ]]; then
+    printf '%s\n' 'An absolute data directory and a launcher path without line breaks are required.' >&2
+    exit 2
+fi
+if [[ ! -x $launcher ]]; then
+    printf '%s\n' 'The adjacent omarkets-launch must be executable.' >&2
+    exit 1
+fi
+
+entry="$data_home/applications/omarkets.desktop"
+if [[ -e $entry || -L $entry ]]; then
+    printf 'Refusing to overwrite %s\n' "$entry" >&2
+    exit 1
+fi
+
+launcher=${launcher//\\/\\\\\\\\}
+launcher=${launcher//\"/\\\\\"}
+launcher=${launcher//\$/\\\\\$}
+launcher=${launcher//\`/\\\\\`}
+launcher=${launcher//%/%%}
+
+mkdir -p -- "$data_home/applications"
+(set -o noclobber; printf '%s\n' \
+    '[Desktop Entry]' \
+    'Type=Application' \
+    'Name=Omarkets' \
+    "Exec=\"$launcher\" $port" \
+    'Icon=utilities-system-monitor' \
+    'Terminal=false' \
+    'Categories=Office;Finance;' > "$entry")
+printf 'Installed %s\n' "$entry"

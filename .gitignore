@@ -1,0 +1,35 @@
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Data / storage (local runtime state, never commit)
+data/
+*.duckdb
+*.duckdb.wal
+*.sqlite
+*.sqlite3
+*.db
+logs/
+
+# Node / web
+node_modules/
+dist/
+*.tsbuildinfo
+build/
+
+# OpenCode local artifacts
+.opencode/local/
+*.log

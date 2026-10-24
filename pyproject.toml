@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omarkets"
+version = "0.1.0"
+description = "Deterministic market-analysis core for the Omarkets workstation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    # DuckDB 2.0.0 breaks 20 tests on a fresh install; the suite passes on 1.5.5.
+    "duckdb>=1.1,<2",
+    # DuckDB does not declare this, but its TIMESTAMPTZ decoding imports pytz
+    # at runtime. Market timestamps are all TIMESTAMPTZ, so it is required.
+    "pytz>=2024.1",
+    "httpx>=0.27",
+    "icalendar>=6.0",
+    "defusedxml>=0.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+omarkets = "core.main:main"
+omarketsctl = "core.cli:main"
+# Stdlib-only MCP stdio server for a local voice assistant.
+omarkets-mcp = "core.interfaces.mcp.server:serve"
+# Pre-rename command names, kept for compatibility with existing installs.
+marketos = "core.main:main"
+marketctl = "core.cli:main"
+marketos-mcp = "core.interfaces.mcp.server:serve"
+
+[tool.setuptools.packages.find]
+include = ["core*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# Third-party deprecations (Starlette's TestClient/httpx transition and an
+# anyio alias) are ignored; warnings from our own code remain errors.
+filterwarnings = [
+    "error::RuntimeWarning",
+    # Starlette 1.6 emits a UserWarning while its httpx2 transition settles.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated.*:UserWarning",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated.*:DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]

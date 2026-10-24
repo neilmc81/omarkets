@@ -1,0 +1,514 @@
+"""Deterministic facts for desk notes.
+
+Everything a note states as a number is computed here: release grouping,
+rounding-aware beat/miss verdicts, price and yield moves, the quote strip and
+the bond-market view. No language model is involved.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from math import isfinite
+from typing import Any
+
+from core.desk import explainers as X
+from core.desk.models import Figure, Move, Quote, RatesView, Surprise, UpcomingItem, YieldLine
+from core.domain.sessions import volatility_index_open
+
+#: Markets measured after a release or move, in display order.
+REACTION_SYMBOLS: tuple[str, ...] = ("NQ", "ES", "US2Y", "US10Y", "DXY", "VIX")
+#: Markets on the Today strip.
+STRIP_SYMBOLS: tuple[str, ...] = ("NQ", "ES", "US10Y", "US2Y", "DXY", "VIX", "WTI", "GOLD")
+YIELD_SYMBOLS = frozenset({"US2Y", "US10Y"})
+#: Cash indexes computed only in Cboe's hours (see ``volatility_index_open``).
+CASH_INDEXES = frozenset({"VIX", "VXN"})
+
+LABELS: dict[str, str] = {
+    "NQ": "Nasdaq 100 futures",
+    "ES": "S&P 500 futures",
+    "US2Y": "2-year yield",
+    "US10Y": "10-year yield",
+    "DXY": "US dollar",
+    "VIX": "VIX fear gauge",
+    "VXN": "Nasdaq fear gauge",
+    "WTI": "Crude oil",
+    "GOLD": "Gold",
+    "BTC": "Bitcoin",
+}
+
+FED_CODES = frozenset({"FOMC", "FOMC_PRESS_CONFERENCE", "FOMC_MINUTES"})
+#: Fed Board speeches and testimony: shown in "Coming up", never written up as a release.
+SPEAKER_CODES = frozenset({"FED_SPEECH", "FED_TESTIMONY"})
+_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+
+#: Codes whose figures are named from the explainer library. Kept to this set
+#: because figure names key the playbook's history; other codes keep the
+#: calendar's own name.
+_NAMED_CODES = frozenset({
+    "CPI", "CORE_CPI", "PPI", "CORE_PPI", "PCE", "PAYROLLS", "UNEMPLOYMENT",
+    "INITIAL_CLAIMS", "JOLTS", "ADP", "RETAIL_SALES", "CORE_RETAIL_SALES", "GDP",
+    "INDUSTRIAL_PRODUCTION", "ISM_MFG", "ISM_MFG_PRICES", "ISM_SERVICES",
+    "EXISTING_HOME_SALES", "HOUSING_STARTS", "BUILDING_PERMITS", "FOMC",
+    "FOMC_PRESS_CONFERENCE", "FOMC_MINUTES", "BEIGE_BOOK",
+})
+
+
+def friendly_name(code: str, fallback: str) -> str:
+    entry = X.indicator(code) if code in _NAMED_CODES else None
+    return entry.title if entry else fallback
+
+
+def explainer(code: str) -> str | None:
+    """What a calendar release is and why it matters, from the explainer library."""
+    entry = X.indicator(code)
+    return entry.text if entry else None
+
+
+# --------------------------------------------------------------------------- numbers
+
+
+def _decimals(value: float) -> int:
+    text = f"{round(value, 4):.4f}".rstrip("0").rstrip(".")
+    return len(text.split(".")[1]) if "." in text else 0
+
+
+def reporting_decimals(unit: str, *refs: float | None) -> int:
+    """Decimals a figure is officially reported at, inferred from its forecast/previous."""
+    known = [r for r in refs if r is not None and isfinite(r)]
+    if unit == "percent":
+        return min(2, max([1, *(_decimals(r) for r in known)]))
+    return min(2, max([0, *(_decimals(r) for r in known)]))
+
+
+def _compare_round(value: float, decimals: int) -> float:
+    magnitude = abs(value)
+    if magnitude >= 1_000_000:
+        return round(value, -4)  # e.g. 3.99M
+    if magnitude >= 1_000:
+        return round(value, -3)  # e.g. 199K
+    return round(value, decimals)
+
+
+def format_value(value: float | None, unit: str, decimals: int = 1) -> str:
+    if value is None or not isfinite(value):
+        return "—"
+    magnitude = abs(value)
+    if unit == "percent":
+        return f"{value:.{decimals}f}%"
+    if magnitude >= 1_000_000:
+        return f"{value / 1_000_000:.2f}M"
+    if magnitude >= 1_000:
+        return f"{value / 1_000:.0f}K"
+    return f"{value:.{decimals}f}"
+
+
+def build_figure(
+    name: str,
+    unit: str,
+    actual: float | None,
+    forecast: float | None,
+    previous: float | None,
+) -> Figure:
+    decimals = reporting_decimals(unit, forecast, previous)
+    shown = None if actual is None else _compare_round(actual, decimals)
+    if shown is None:
+        verdict = "not_reported"
+    elif forecast is None:
+        verdict = "no_forecast"
+    else:
+        expected = _compare_round(forecast, decimals)
+        verdict = "in_line" if shown == expected else ("above" if shown > expected else "below")
+    return Figure(
+        name=name,
+        unit=unit,
+        actual=shown,
+        forecast=forecast,
+        previous=previous,
+        decimals=decimals,
+        verdict=verdict,
+        actual_text=format_value(shown, unit, decimals),
+        forecast_text=format_value(forecast, unit, decimals),
+        previous_text=format_value(previous, unit, decimals),
+    )
+
+
+#: Past surprises compared against (most recent first), and the minimum needed.
+SURPRISE_HISTORY = 12
+SURPRISE_MIN_HISTORY = 5
+#: How far back an indicator's history is looked for.
+SURPRISE_LOOKBACK = timedelta(days=4 * 365)
+
+
+def surprise_value(figure: Figure) -> float | None:
+    """Actual minus forecast at the official reporting precision."""
+    if figure.verdict not in ("above", "below", "in_line") or figure.forecast is None:
+        return None
+    value = figure.actual - _compare_round(figure.forecast, figure.decimals)
+    return 0.0 if figure.verdict == "in_line" else round(value, figure.decimals)
+
+
+def surprise_text(value: float, unit: str, decimals: int) -> str:
+    sign = "+" if value > 0 else "−" if value < 0 else ""
+    if unit == "percent":
+        return f"{sign}{abs(value):.{decimals}f} pt"
+    return sign + format_value(abs(value), unit, decimals)
+
+
+def size_surprises(figures: Sequence[Figure], history: Iterable[Any], *,
+                   before: datetime) -> list[Figure]:
+    """Attach a :class:`Surprise` to each figure that has an actual and a forecast.
+
+    The surprise is compared with the same figure's surprises at earlier
+    releases (matched by name, e.g. "CPI m/m" and "CPI y/y" stay separate),
+    using the same grouping and rounding as the note itself.
+    """
+    past: dict[str, list[float]] = {}
+    for slot in sorted(release_slots(history, start=before - SURPRISE_LOOKBACK, end=before,
+                                     min_importance="low"),
+                       key=lambda s: s.at, reverse=True):
+        for old in slot.figures:
+            value = surprise_value(old)
+            if value is not None:
+                past.setdefault(old.name.casefold(), []).append(value)
+    sized: list[Figure] = []
+    for figure in figures:
+        value = surprise_value(figure)
+        if value is None:
+            sized.append(figure)
+            continue
+        earlier = past.get(figure.name.casefold(), [])[:SURPRISE_HISTORY]
+        count = len(earlier)
+        direction = "above" if value > 0 else "below"
+        larger: int | None = None
+        if value == 0:
+            size, text = "in_line", "In line with the forecast"
+        elif count < SURPRISE_MIN_HISTORY:
+            size = "not_enough_history"
+            text = (f"Not enough history yet to size this surprise "
+                    f"({count} earlier release{'s' if count != 1 else ''} stored)")
+        else:
+            larger = sum(1 for old in earlier if abs(old) < abs(value))
+            share = larger / count
+            size = "bigger" if share >= 0.8 else "smaller" if share <= 0.3 else "typical"
+            words = {"bigger": "Bigger than usual", "smaller": "Smaller than usual",
+                     "typical": "A typical-sized"}[size]
+            text = (f"{words} surprise {direction} the forecast — larger than "
+                    f"{larger} of the last {count}")
+        sized.append(figure.model_copy(update={"surprise": Surprise(
+            value=value, value_text=surprise_text(value, figure.unit, figure.decimals),
+            size=size, history_count=count, larger_than=larger, text=text,
+        )}))
+    return sized
+
+
+def signed(value: float, unit: str) -> str:
+    if unit == "bp":
+        return f"{value:+.1f}bp"
+    return f"{value:+.2f}%"
+
+
+# --------------------------------------------------------------------------- releases
+
+
+@dataclass
+class ReleaseSlot:
+    """All calendar rows released at the same moment, merged into one story."""
+
+    at: datetime
+    codes: list[str]
+    title: str
+    importance: str
+    figures: list[Figure] = field(default_factory=list)
+    #: Where a Fed speech takes place, from the source's "Venue:" note.
+    venue: str = ""
+
+    @property
+    def is_fed(self) -> bool:
+        return any(code in FED_CODES for code in self.codes)
+
+    @property
+    def speakers_only(self) -> bool:
+        return all(code in SPEAKER_CODES for code in self.codes)
+
+    @property
+    def primary_code(self) -> str:
+        return self.codes[0]
+
+    @property
+    def key(self) -> str:
+        return f"{self.at:%Y%m%dT%H%M}:{'+'.join(sorted(set(self.codes)))}"
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.figures) and all(f.actual is not None for f in self.figures)
+
+
+def _value(item: Any, name: str):
+    value = getattr(item, name, None)
+    return getattr(value, "value", value)
+
+
+def release_slots(
+    events: Iterable[Any],
+    *,
+    start: datetime,
+    end: datetime,
+    min_importance: str = "high",
+) -> list[ReleaseSlot]:
+    """Group calendar rows into release moments between ``start`` and ``end``.
+
+    Rows from different sources describing the same figure are merged; a slot is
+    kept only when its most important row reaches ``min_importance``.
+    """
+    groups: dict[datetime, list[Any]] = {}
+    for item in events:
+        at = getattr(item, "scheduled_at", None)
+        if at is None or not (start <= at < end):
+            continue
+        if getattr(item, "country", "US") != "US" or _value(item, "status") == "cancelled":
+            continue
+        groups.setdefault(at, []).append(item)
+
+    slots: list[ReleaseSlot] = []
+    for at, rows in sorted(groups.items()):
+        rows.sort(key=lambda r: -_RANK.get(_value(r, "importance"), 0))
+        importance = _value(rows[0], "importance")
+        if _RANK.get(importance, 0) < _RANK[min_importance]:
+            continue
+        codes: list[str] = []
+        for row in rows:
+            if row.event_code not in codes:
+                codes.append(row.event_code)
+        merged: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            if row.unit == "release" or (
+                row.actual is None and row.consensus is None and row.previous is None
+            ):
+                continue
+            slot = merged.setdefault(
+                row.name.casefold(),
+                {"name": row.name, "unit": row.unit, "actual": None,
+                 "forecast": None, "previous": None,
+                 "rank": _RANK.get(_value(row, "importance"), 0)},
+            )
+            for target, source in (("actual", "actual"), ("forecast", "consensus"),
+                                   ("previous", "previous")):
+                if slot[target] is None and getattr(row, source) is not None:
+                    slot[target] = getattr(row, source)
+        figures = [
+            build_figure(m["name"], m["unit"], m["actual"], m["forecast"], m["previous"])
+            for m in sorted(merged.values(), key=lambda m: -m["rank"])
+        ]
+        names: list[str] = []
+        for code in codes:
+            name = friendly_name(code, next(r.name for r in rows if r.event_code == code))
+            if name not in names:
+                names.append(name)
+        venue = next((note.removeprefix("Venue: ") for row in rows
+                      for note in (getattr(row, "notes", None) or [])
+                      if isinstance(note, str) and note.startswith("Venue: ")), "")
+        slots.append(ReleaseSlot(
+            at=at, codes=codes, title=" & ".join(names[:3]),
+            importance=importance, figures=figures, venue=venue,
+        ))
+    return slots
+
+
+def economic_upcoming(
+    events: Iterable[Any], *, now: datetime, until: datetime
+) -> list[UpcomingItem]:
+    items: list[UpcomingItem] = []
+    for slot in release_slots(events, start=now, end=until, min_importance="medium"):
+        detail = ", ".join(
+            f"{f.name}: forecast {f.forecast_text}" for f in slot.figures if f.forecast is not None
+        ) or None
+        if slot.speakers_only:
+            detail = slot.venue or None
+        items.append(UpcomingItem(
+            kind="fed" if slot.is_fed or slot.speakers_only else "economic",
+            title=slot.title,
+            at=slot.at,
+            when_text="",
+            importance=slot.importance if slot.importance in {"critical", "high"} else "medium",
+            detail=detail,
+            explainer=explainer("FED_SPEECH" if slot.speakers_only else slot.primary_code),
+        ))
+    return items
+
+
+# --------------------------------------------------------------------------- moves
+
+HistoryFn = Callable[..., Sequence[Any]]
+
+
+def last_quote(history: HistoryFn, symbol: str, *, start: datetime, end: datetime):
+    """The last stored quote between ``start`` and ``end``, or ``None``.
+
+    Asks for one row: the store returns the newest rows in the range, so a long
+    window never pushes the wanted quote past the row limit.
+    """
+    rows = sorted(history(symbol, start=start, end=end, limit=1), key=lambda o: o.timestamp)
+    return rows[-1] if rows else None
+
+
+def change_between(symbol: str, start_value: float, end_value: float) -> tuple[float, str]:
+    if symbol in YIELD_SYMBOLS:
+        return round((end_value - start_value) * 100.0, 1), "bp"
+    if start_value == 0:
+        return 0.0, "%"
+    return round((end_value - start_value) / start_value * 100.0, 2), "%"
+
+
+def measure_moves(
+    history: HistoryFn,
+    *,
+    start: datetime,
+    end: datetime,
+    delayed: frozenset[str] = frozenset(),
+    symbols: Sequence[str] = REACTION_SYMBOLS,
+    min_window: timedelta = timedelta(minutes=2),
+) -> list[Move]:
+    """Change in each market from the last quote at ``start`` to the last quote by ``end``.
+
+    A market is omitted, never estimated, when either quote is missing or the
+    observed window is shorter than ``min_window``.
+    """
+    moves: list[Move] = []
+    for symbol in symbols:
+        try:
+            before = last_quote(history, symbol, start=start - timedelta(minutes=30), end=start)
+            after = last_quote(history, symbol, start=start - timedelta(minutes=30), end=end)
+        except Exception:  # noqa: BLE001 - storage isolation; omit the market
+            continue
+        if before is None or after is None or after.timestamp - start < min_window:
+            continue
+        change, unit = change_between(symbol, before.value, after.value)
+        moves.append(Move(
+            symbol=symbol,
+            label=LABELS.get(symbol, symbol),
+            start_value=before.value,
+            end_value=after.value,
+            start_at=before.timestamp,
+            end_at=after.timestamp,
+            change=change,
+            change_unit=unit,
+            delayed=symbol in delayed,
+            text=signed(change, unit),
+        ))
+    return moves
+
+
+# --------------------------------------------------------------------------- quotes
+
+
+def _value_text(symbol: str, value: float | None) -> str:
+    if value is None:
+        return "—"
+    if symbol in YIELD_SYMBOLS:
+        return f"{value:.3f}%"
+    if symbol in {"WTI", "GOLD", "BTC"}:
+        return f"${value:,.2f}"
+    return f"{value:,.2f}"
+
+
+def quote_strip(state: Any, symbols: Sequence[str] = STRIP_SYMBOLS) -> list[Quote]:
+    now = getattr(state, "generated_at", None)
+    index_closed = now is not None and not volatility_index_open(now)
+    quotes: list[Quote] = []
+    for symbol in symbols:
+        inst = state.instruments.get(symbol)
+        if inst is None:
+            continue
+        status = _value(inst, "status")
+        feed = _value(inst, "feed_status")
+        change_text = None
+        direction = "unknown"
+        if symbol in YIELD_SYMBOLS and inst.change is not None:
+            bp = round(inst.change * 100.0, 1)
+            change_text = signed(bp, "bp")
+            direction = "up" if bp > 0 else "down" if bp < 0 else "flat"
+        elif inst.change_pct is not None:
+            change_text = signed(inst.change_pct, "%")
+            direction = ("up" if inst.change_pct > 0 else "down" if inst.change_pct < 0
+                         else "flat")
+        cash_closed = (symbol in CASH_INDEXES and index_closed and status == "stale"
+                       and inst.value is not None)
+        market_closed = bool(getattr(inst, "market_closed", False)) and inst.value is not None
+        closed = market_closed or cash_closed
+        quotes.append(Quote(
+            symbol=symbol,
+            label=LABELS.get(symbol, inst.display_name),
+            value=inst.value,
+            value_text=_value_text(symbol, inst.value),
+            change_text=change_text,
+            direction=direction,
+            as_of=inst.timestamp,
+            delayed=feed == "delayed",
+            stale=status in {"stale", "unavailable"} and not closed,
+            closed=closed,
+            closed_text=("Markets closed" if market_closed else "cash closed" if closed
+                         else None),
+            explainer=entry.text if (entry := X.instrument(symbol)) else None,
+        ))
+    return quotes
+
+
+# --------------------------------------------------------------------------- rates
+
+
+def _bp_text(value: float | None) -> str:
+    return "—" if value is None else signed(value, "bp")
+
+
+def rates_view(state: Any, history: HistoryFn, *, now: datetime) -> RatesView:
+    """2-year, 10-year and the 10y-2y curve with day and one-week changes."""
+    lines: list[YieldLine] = []
+    current: dict[str, float] = {}
+    week_ago: dict[str, float] = {}
+    as_of = None
+    for symbol in ("US2Y", "US10Y"):
+        inst = state.instruments.get(symbol)
+        value = getattr(inst, "value", None)
+        day = round(inst.change * 100.0, 1) if inst is not None and inst.change is not None \
+            else None
+        week = None
+        if value is not None:
+            current[symbol] = value
+            as_of = max(filter(None, [as_of, inst.timestamp]), default=None)
+            try:
+                past = list(history(symbol, start=now - timedelta(days=10),
+                                    end=now - timedelta(days=7), limit=1))
+            except Exception:  # noqa: BLE001 - storage isolation
+                past = []
+            if past:
+                week_ago[symbol] = past[-1].value
+                week = round((value - past[-1].value) * 100.0, 1)
+        lines.append(YieldLine(
+            symbol=symbol, label=LABELS[symbol], value=value,
+            value_text=_value_text(symbol, value),
+            day_change_bp=day, week_change_bp=week,
+            day_text=_bp_text(day), week_text=_bp_text(week),
+        ))
+    curve = None
+    curve_text = "unavailable"
+    if {"US2Y", "US10Y"} <= current.keys():
+        curve = round((current["US10Y"] - current["US2Y"]) * 100.0, 1)
+        shape = "inverted (10-year below 2-year)" if curve < 0 else "normal (10-year above 2-year)"
+        curve_text = f"{curve:+.0f}bp, {shape}"
+        day_curve = None
+        day_lines = {line.symbol: line.day_change_bp for line in lines}
+        if None not in day_lines.values():
+            day_curve = round(day_lines["US10Y"] - day_lines["US2Y"], 1)
+        week_curve = None
+        if {"US2Y", "US10Y"} <= week_ago.keys():
+            week_curve = round(curve - (week_ago["US10Y"] - week_ago["US2Y"]) * 100.0, 1)
+        lines.append(YieldLine(
+            symbol="CURVE", label="Curve (10y minus 2y)", value=curve,
+            value_text=f"{curve:+.0f}bp",
+            day_change_bp=day_curve, week_change_bp=week_curve,
+            day_text=_bp_text(day_curve), week_text=_bp_text(week_curve),
+        ))
+    return RatesView(as_of=as_of, lines=lines, curve_bp=curve, curve_text=curve_text,
+                     explainer=X.topic("rates").text)

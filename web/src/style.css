@@ -1,0 +1,136 @@
+/*
+ * Theme. The --os-* values are the active Omarchy palette, written onto
+ * <html> at runtime from /api/v1/theme (src/theme/omarchy.ts) and updated live
+ * on every `omarchy theme set`. The values below are the fallback used when
+ * Omarchy is not available. Every colour in the app derives from the tokens in
+ * the second block; do not add literal colours elsewhere.
+ */
+:root {
+  --os-background: #090f18;
+  --os-foreground: #dbe5f1;
+  --os-bright-foreground: #ffffff;
+  --os-accent: #71d6ff;
+  --os-selection: #1d3a55;
+  --os-muted: #8396ab;
+  --os-red: #ff6b6b;
+  --os-green: #4fd18b;
+  --os-yellow: #f2c14e;
+  --os-orange: #e0a050;
+  --os-blue: #7aa2f7;
+  --os-cyan: #62c9ed;
+  --os-magenta: #cdb8f0;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme-source="omarchy"]) {
+    --os-background: #f7f8fa;
+    --os-foreground: #1f2a37;
+    --os-bright-foreground: #0b1220;
+    --os-accent: #0b6bcb;
+    --os-selection: #cfe0f5;
+    --os-muted: #6b7a8c;
+    --os-red: #c62828;
+    --os-green: #1b7f4b;
+    --os-yellow: #a66a00;
+    --os-orange: #b45309;
+    --os-blue: #2f5bd3;
+    --os-cyan: #0e7490;
+    --os-magenta: #7c3aed;
+    color-scheme: light;
+  }
+}
+
+:root {
+  --bg: var(--os-background);
+  --text: var(--os-foreground);
+  --text-strong: var(--os-bright-foreground);
+  --text-soft: color-mix(in srgb, var(--text) 86%, var(--bg));
+  --text-muted: color-mix(in srgb, var(--text) 64%, var(--bg));
+  --surface: color-mix(in srgb, var(--text) 4%, var(--bg));
+  --surface-2: color-mix(in srgb, var(--text) 8%, var(--bg));
+  --line: color-mix(in srgb, var(--text) 15%, var(--bg));
+  --accent: var(--os-accent);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  --on-accent: var(--os-background);
+  --link: color-mix(in srgb, var(--accent) 55%, var(--text));
+  --selection: var(--os-selection);
+  --up: var(--os-green);
+  --down: var(--os-red);
+  --warn: var(--os-orange);
+  --warn-soft: color-mix(in srgb, var(--warn) 14%, var(--bg));
+  --info: var(--os-blue);
+  --magenta: var(--os-magenta);
+
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  font-size: 13px;
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--text-strong);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--text) 92%, var(--bg));
+  background: color-mix(in srgb, var(--text) 9%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--text) 22%, var(--bg));
+  border-radius: 4px;
+  padding: 6px 11px;
+}
+
+button:hover {
+  background: color-mix(in srgb, var(--text) 18%, var(--bg));
+  color: var(--text-strong);
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 3px;
+}
+
+summary {
+  cursor: pointer;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Tables start plain; each page styles its own (no monospace, wrapping on). */
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+}

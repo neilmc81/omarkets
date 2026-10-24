@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+# Install the Omarkets native Omarchy integration.
+#
+# Idempotent and non-destructive. It:
+#   1. links the shell plugin into ~/.config/omarchy/plugins/omarkets
+#   2. adds the bar widget (if missing) and sets its API port
+#   3. installs a systemd --user service for the backend
+#   4. registers a web-app launcher (best effort)
+#   5. optionally adds hotkeys, appending a marked block once
+#
+# It never overwrites an unrelated directory/symlink, only migrates its own legacy popup
+# hotkey, and backs up any file it does modify.
+#
+# It also migrates a pre-rename MarketOS install (stage 0): the old `marketos`
+# plugin link, marketos.service and its drop-in directory, and the MarketOS
+# hotkey block. Everything it changes is backed up first; running it again is
+# a no-op.
+#
+# Usage: install-plugin [--port N] [--bindings] [--no-service] [--dry-run]
+#   --bindings     also add the Omarkets hotkeys (marked block, added once)
+#   --no-service   skip installing/starting the user service
+#   --dry-run      print what would change and change nothing
+set -euo pipefail
+
+repo="$(cd -- "$(dirname -- "$(realpath -- "$0")")/.." && pwd)"
+plugin_src="$repo/omarchy/omarkets"
+port=8765
+bindings=0
+install_service=1
+dry_run=0
+
+help() {
+    printf '%s\n' \
+        'Usage: install-plugin [--port N] [--bindings] [--no-service] [--dry-run]' \
+        'Installs the Omarkets bar widget, popup, launcher and user service.' \
+        '--bindings    add Omarkets hotkeys (SUPER+M open, SUPER+CTRL+M popup, SUPER+ALT+M calendar)' \
+        '--no-service  do not install the systemd --user service' \
+        '--dry-run     print what would change and change nothing'
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --help|-h) help; exit 0 ;;
+        --bindings) bindings=1; shift ;;
+        --no-service) install_service=0; shift ;;
+        --dry-run) dry_run=1; shift ;;
+        --port)
+            [[ $# -ge 2 ]] || { printf 'install-plugin: --port needs a value\n' >&2; exit 2; }
+            port=$2; shift 2 ;;
+        *) printf 'install-plugin: unknown argument: %s\n' "$1" >&2; exit 2 ;;
+    esac
+done
+if ! [[ $port =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    printf 'install-plugin: port must be 1..65535\n' >&2
+    exit 2
+fi
+
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+
+stamp=$(date +%Y%m%d%H%M%S)
+
+backup() {
+    local file=$1
+    [[ -f $file ]] || return 0
+    cp -a -- "$file" "$file.bak-$stamp"
+}
+
+# Run a changing command, or only print it under --dry-run.
+run() {
+    if (( dry_run )); then
+        printf 'would run:'
+        printf ' %q' "$@"
+        printf '\n'
+    else
+        "$@"
+    fi
+}
+
+# --- 0. migrate a pre-rename MarketOS install ----------------------------
+old_target="$config_home/omarchy/plugins/marketos"
+if [[ -L $old_target ]]; then
+    printf 'Migrating old plugin link %s -> %s\n' "$old_target" "$(readlink -- "$old_target")"
+    run cp -P -- "$old_target" "$old_target.bak-$stamp"
+    run rm -- "$old_target"
+elif [[ -e $old_target ]]; then
+    printf 'Note: %s is not a symlink; leaving it alone\n' "$old_target" >&2
+fi
+
+old_unit_dir="$config_home/systemd/user"
+old_unit="$old_unit_dir/marketos.service"
+if [[ -f $old_unit ]]; then
+    printf 'Migrating marketos.service to omarkets.service\n'
+    if command -v systemctl >/dev/null 2>&1; then
+        run systemctl --user disable --now marketos.service
+    fi
+    run cp -a -- "$old_unit" "$old_unit.bak-$stamp"
+    run rm -- "$old_unit"
+fi
+old_dropins="$old_unit_dir/marketos.service.d"
+new_dropins="$old_unit_dir/omarkets.service.d"
+if [[ -d $old_dropins ]]; then
+    if [[ -e $new_dropins ]]; then
+        printf 'Drop-ins already copied: %s\n' "$new_dropins"
+    else
+        printf 'Copying drop-ins %s -> %s\n' "$old_dropins" "$new_dropins"
+        run cp -a -- "$old_dropins" "$old_dropins.bak-$stamp"
+        run cp -a -- "$old_dropins" "$new_dropins"
+    fi
+fi
+
+# No time-zone drop-in: the desk zone now follows the system unless set.
+
+# The bar layout names widgets by id; rename ours in place so it keeps its slot.
+bar_layout="$config_home/omarchy/shell.json"
+if [[ -f $bar_layout ]] && grep -qE '"id": *"marketos"' -- "$bar_layout"; then
+    if grep -qE '"id": *"omarkets"' -- "$bar_layout"; then
+        printf 'Note: %s has both marketos and omarkets bar entries; remove the marketos one by hand\n' "$bar_layout" >&2
+    else
+        printf 'Renaming the marketos bar widget to omarkets in %s\n' "$bar_layout"
+        run cp -a -- "$bar_layout" "$bar_layout.bak-$stamp"
+        run sed -i -E 's/("id": *)"marketos"/\1"omarkets"/' "$bar_layout"
+    fi
+fi
+
+# Theme hook: Omarchy runs every file in theme-set.d, so the backup goes
+# outside that directory.
+hook_dir="$config_home/omarchy/hooks/theme-set.d"
+if [[ -e $hook_dir/theme-set-marketos ]]; then
+    printf 'Replacing the theme hook theme-set-marketos with theme-set-omarkets\n'
+    run mkdir -p -- "$config_home/omarchy/hooks/omarkets-migration-backup"
+    run mv -- "$hook_dir/theme-set-marketos" \
+        "$config_home/omarchy/hooks/omarkets-migration-backup/theme-set-marketos.bak-$stamp"
+    if [[ ! -e $hook_dir/theme-set-omarkets ]]; then
+        run install -m 755 -- "$repo/omarchy/hooks/theme-set-omarkets" "$hook_dir/theme-set-omarkets"
+    fi
+fi
+
+old_entry="$data_home/applications/marketos.desktop"
+if [[ -f $old_entry ]]; then
+    run mv -- "$old_entry" "$old_entry.bak-$stamp"
+fi
+
+old_bindings="$config_home/hypr/bindings.lua"
+if [[ -f $old_bindings ]] && grep -qF -- "-- [MarketOS]" "$old_bindings"; then
+    printf 'Renaming the MarketOS hotkey block in %s\n' "$old_bindings"
+    run cp -a -- "$old_bindings" "$old_bindings.bak-$stamp"
+    run sed -i \
+        -e 's/^-- \[MarketOS\]/-- [Omarkets]/' \
+        -e '/^o\.bind(.*"MarketOS/{s/"MarketOS/"Omarkets/;s/shell toggle marketos/shell toggle omarkets/;s#/omarchy/marketos-launch#/omarchy/omarkets-launch#g}' \
+        "$old_bindings"
+fi
+
+if (( dry_run )); then
+    printf 'Dry run: stopping before the install stages.\n'
+    printf 'Would link %s, install omarkets.service for %s and enable it.\n' \
+        "$config_home/omarchy/plugins/omarkets" "$repo"
+    exit 0
+fi
+
+# --- 1. shell plugin ------------------------------------------------------
+[[ -f $plugin_src/manifest.json ]] || { printf 'install-plugin: manifest missing at %s\n' "$plugin_src" >&2; exit 1; }
+chmod +x "$plugin_src/update.py"
+mkdir -p -- "$config_home/omarchy/plugins"
+target="$config_home/omarchy/plugins/omarkets"
+if [[ -L $target ]]; then
+    current=$(readlink -- "$target")
+    [[ $current == "$plugin_src" ]] || { printf 'Refusing to replace symlink %s -> %s\n' "$target" "$current" >&2; exit 1; }
+    printf 'Plugin already linked: %s\n' "$target"
+elif [[ -e $target ]]; then
+    printf 'Refusing to overwrite existing %s (not a Omarkets link)\n' "$target" >&2
+    exit 1
+else
+    ln -s -- "$plugin_src" "$target"
+    printf 'Linked %s -> %s\n' "$target" "$plugin_src"
+fi
+
+# --- 2. bar widget --------------------------------------------------------
+if command -v omarchy >/dev/null 2>&1; then
+    omarchy bar put omarkets --section right >/dev/null 2>&1 || true
+    omarchy bar set omarkets apiPort "$port" >/dev/null 2>&1 || true
+fi
+
+# --- 3. systemd --user service -------------------------------------------
+if (( install_service )); then
+    unit_dir="$config_home/systemd/user"
+    mkdir -p -- "$unit_dir"
+    unit="$unit_dir/omarkets.service"
+    generated=$(sed "s#@REPO@#$repo#g" "$repo/omarchy/omarkets.service")
+    if [[ -f $unit ]] && ! diff -q <(printf '%s\n' "$generated") "$unit" >/dev/null 2>&1; then
+        backup "$unit"
+        printf '%s\n' "$generated" > "$unit"
+        printf 'Updated %s (backup kept)\n' "$unit"
+    elif [[ ! -f $unit ]]; then
+        printf '%s\n' "$generated" > "$unit"
+        printf 'Installed %s\n' "$unit"
+    else
+        printf 'Service already current: %s\n' "$unit"
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user daemon-reload || true
+        if systemctl --user enable --now omarkets.service >/dev/null 2>&1; then
+            printf 'Started omarkets.service\n'
+        else
+            printf 'Note: could not start omarkets.service; check: systemctl --user status omarkets\n' >&2
+        fi
+    fi
+fi
+
+# --- 4. launcher (desktop entry) -----------------------------------------
+if [[ -x $repo/omarchy/install-desktop ]]; then
+    "$repo/omarchy/install-desktop" "$port" >/dev/null 2>&1 \
+        && printf 'Launcher installed\n' \
+        || printf 'Launcher already present or skipped\n'
+fi
+
+# --- 5. hotkeys -----------------------------------------------------------
+if (( bindings )); then
+    bindings_file="$config_home/hypr/bindings.lua"
+    marker="-- [Omarkets] native integration"
+    if [[ -f $bindings_file ]] && grep -qF -- "$marker" "$bindings_file"; then
+        # Migrate only the exact popup binding emitted by our older installer.
+        # SUPER+SHIFT+M belongs to Omarchy Music; do not unbind that shortcut.
+        python3 - "$bindings_file" <<'PYBIND'
+import re
+import shutil
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+path = Path(sys.argv[1])
+source = path.read_text()
+lines = source.splitlines(keepends=True)
+legacy = 'o.bind("SUPER + SHIFT + M", "Omarkets popup", "omarchy-shell shell toggle omarkets")'
+replacement = legacy.replace("SUPER + SHIFT + M", "SUPER + CTRL + M")
+in_block = False
+indices = []
+for index, line in enumerate(lines):
+    if line.strip() == "-- [Omarkets] native integration":
+        in_block = True
+        continue
+    if in_block and line.strip() == legacy:
+        indices.append(index)
+    elif in_block and line.strip() and not line.startswith("--") and not (
+        line.lstrip().startswith("o.bind(") and '"Omarkets' in line
+    ):
+        in_block = False
+
+if indices:
+    # Refuse to add a second action, including reordered modifier spellings.
+    keys = re.findall(r'^\s*o\.bind\(\s*["\']([^"\']+)["\']', source, re.MULTILINE)
+    if any({part.strip().upper() for part in key.split("+")} == {"SUPER", "CTRL", "M"} for key in keys):
+        sys.exit("SUPER+CTRL+M is already bound; leaving Omarkets hotkeys unchanged")
+    if len(indices) != 1:
+        sys.exit("Multiple legacy Omarkets popup bindings; leaving hotkeys unchanged")
+    backup = str(path) + ".bak-" + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    shutil.copy2(path, backup)
+    index = indices[0]
+    lines[index] = lines[index].replace(legacy, replacement)
+    for index in range(max(0, index - 3), index):
+        line = lines[index]
+        if line == "-- SUPER+M opens/focuses the workstation; SUPER+SHIFT+M toggles the popup;\n":
+            lines[index] = line.replace("SUPER+SHIFT+M", "SUPER+CTRL+M")
+    path.write_text("".join(lines))
+    print("Migrated Omarkets popup to SUPER+CTRL+M (backup kept)")
+PYBIND
+        count=$(grep -c 'Omarkets' "$bindings_file" || true)
+        if (( count <= 4 )); then
+            printf 'Hotkeys already present in %s\n' "$bindings_file"
+            command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
+        else
+            printf 'Existing Omarkets bindings found; run uninstall-plugin first to avoid duplicates\n' >&2
+        fi
+    elif [[ -f $bindings_file ]] && python3 - "$bindings_file" <<'PYCONFLICT'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text()
+keys = re.findall(r'^\s*o\.bind\(\s*["\']([^"\']+)["\']', source, re.MULTILINE)
+reserved = ({"SUPER", "M"}, {"SUPER", "ALT", "M"}, {"SUPER", "CTRL", "M"})
+sys.exit(0 if any({part.strip().upper() for part in key.split("+")} in reserved for key in keys) else 1)
+PYCONFLICT
+    then
+        # A Omarkets-style binding exists outside our marker (for example from an
+        # older install). Refuse to add a conflicting duplicate and say so.
+        printf 'A Omarkets shortcut is already bound in %s; not adding hotkeys.\n' "$bindings_file" >&2
+        printf 'Remove the old Omarkets block or rebind it, then re-run with --bindings.\n' >&2
+    elif [[ -d $(dirname -- "$bindings_file") ]]; then
+        backup "$bindings_file"
+        cat >>"$bindings_file" <<LUA
+
+$marker
+-- SUPER+M opens/focuses the workstation; SUPER+CTRL+M toggles the popup;
+-- SUPER+ALT+M opens the economic calendar. Add --section to deep-link.
+LUA
+        printf '%s\n' \
+            "o.bind(\"SUPER + CTRL + M\", \"Omarkets popup\", \"omarchy-shell shell toggle omarkets\")" \
+            "o.bind(\"SUPER + M\", \"Omarkets\", \"$repo/omarchy/omarkets-launch $port\")" \
+            "o.bind(\"SUPER + ALT + M\", \"Omarkets calendar\", \"$repo/omarchy/omarkets-launch $port --section calendar\")" \
+            >>"$bindings_file"
+        printf 'Added Omarkets hotkeys to %s\n' "$bindings_file"
+        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
+    else
+        printf 'Note: %s not found; skipping hotkeys\n' "$bindings_file" >&2
+    fi
+fi
+
+# Ask the running shell to rescan plugins. Best-effort.
+command -v omarchy-shell >/dev/null 2>&1 && omarchy-shell -q shell rescanPlugins || true
+
+printf 'Omarkets native integration installed.\n'
+printf 'If the bar does not update, run: omarchy restart shell\n'

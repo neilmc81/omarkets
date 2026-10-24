@@ -1,0 +1,8 @@
+#!/bin/bash
+# Omarchy theme-set hook: tell Omarkets the desktop theme changed so open
+# Omarkets windows retint at once. Install with:
+#   omarchy hook install theme-set omarchy/hooks/theme-set-omarkets
+# Harmless when Omarkets is not running; Omarkets also notices the change by
+# itself within about a second.
+curl -fsS --max-time 2 -X POST \
+  "http://127.0.0.1:${OMARKETS_API_PORT:-${MARKETOS_API_PORT:-8765}}/api/v1/theme/reload" >/dev/null 2>&1 || true

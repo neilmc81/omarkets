@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Remove the Omarkets native Omarchy integration without touching Omarkets data.
+#
+# It removes the shell plugin link, the launcher, the user service, and the
+# marked hotkey block. It never deletes databases, configuration, or the repo.
+#
+# Usage: uninstall-plugin [--keep-service]
+set -euo pipefail
+
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+keep_service=0
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --help|-h)
+            printf '%s\n' 'Usage: uninstall-plugin [--keep-service]' \
+                'Removes the Omarkets bar widget, launcher, user service and hotkeys.' \
+                'Omarkets data and the repository are left intact.'
+            exit 0 ;;
+        --keep-service) keep_service=1; shift ;;
+        *) printf 'uninstall-plugin: unknown argument: %s\n' "$1" >&2; exit 2 ;;
+    esac
+done
+
+# Close the popup if the shell is running.
+command -v omarchy-shell >/dev/null 2>&1 && omarchy-shell -q shell toggle omarkets || true
+
+# Both the current name and the pre-rename MarketOS name are removed.
+for name in omarkets marketos; do
+    # 1. shell plugin link
+    target="$config_home/omarchy/plugins/$name"
+    if [[ -L $target ]]; then
+        rm -- "$target"
+        printf 'Removed plugin link %s\n' "$target"
+    elif [[ -e $target ]]; then
+        printf 'Left %s in place (not a symlink)\n' "$target" >&2
+    fi
+
+    # 2. launcher
+    entry="$data_home/applications/$name.desktop"
+    [[ -e $entry ]] && rm -- "$entry" && printf 'Removed launcher %s\n' "$entry"
+
+    # 3. user service (drop-in directories hold the user's settings; kept)
+    if (( ! keep_service )); then
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl --user disable --now "$name.service" >/dev/null 2>&1 || true
+        fi
+        unit="$config_home/systemd/user/$name.service"
+        [[ -e $unit ]] && rm -- "$unit" && printf 'Removed service %s\n' "$unit"
+    fi
+done
+(( keep_service )) || { command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload || true; }
+
+# 4. hotkey blocks (both the original popup block and the native-integration
+#    block, so an upgrade cannot leave duplicates behind)
+bindings_file="$config_home/hypr/bindings.lua"
+if [[ -f $bindings_file ]] && grep -qE -- "-- \[(Omarkets|MarketOS)\]" "$bindings_file"; then
+    cp -a -- "$bindings_file" "$bindings_file.bak-$(date +%Y%m%d%H%M%S)"
+    python3 - "$bindings_file" <<'PY'
+import sys
+
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").read().splitlines(keepends=True)
+out = []
+skipping = False
+depth = 0  # track an in-progress multi-line o.bind(...)
+
+for line in lines:
+    # Any Omarkets marker comment starts a block to drop.
+    if line.startswith(("-- [Omarkets]", "-- [MarketOS]")):
+        skipping = True
+        depth = 0
+        continue
+    if skipping:
+        # Descriptive comments and blank lines belong to the block.
+        if line.startswith("-- ") or line.strip() == "":
+            continue
+        stripped = line.lstrip()
+        # A Omarkets bind line: drop it, and if it does not close on the same
+        # line, keep dropping its continuation lines until parentheses balance.
+        if stripped.startswith("o.bind(") and ("Omarkets" in line or "MarketOS" in line):
+            depth = line.count("(") - line.count(")")
+            if depth <= 0:
+                depth = 0
+                continue
+            continue
+        if depth > 0:
+            depth += line.count("(") - line.count(")")
+            if depth <= 0:
+                depth = 0
+            continue
+        # A continuation-only line left after an earlier partial removal.
+        if stripped.endswith('")') and ("omarkets" in line.lower() or "marketos" in line.lower()):
+            continue
+        skipping = False
+    out.append(line)
+
+# Collapse any run of resulting blank lines to at most one.
+compact = []
+for line in out:
+    if line.strip() == "" and compact and compact[-1].strip() == "":
+        continue
+    compact.append(line)
+open(path, "w", encoding="utf-8").writelines(compact)
+PY
+    printf 'Removed Omarkets hotkeys from %s\n' "$bindings_file"
+    command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 || true
+fi
+
+printf 'Omarkets native integration removed. Data and the repository were not touched.\n'

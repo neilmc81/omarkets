@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "omarkets",
+  "name": "Omarkets",
+  "version": "0.1.0",
+  "author": "Neil McGrath",
+  "description": "Omarkets workstation in the bar: a compact launcher icon and a market popup with cross-asset context, the next economic-event countdown and feed quality. Reads the local Omarkets API only.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Omarkets",
+    "description": "Compact Omarkets launcher; click for a market popup with cross-asset context and the next economic-event countdown.",
+    "category": "Finance",
+    "aliases": [
+      "omarkets",
+      "nq",
+      "nasdaq",
+      "market"
+    ],
+    "allowMultiple": false
+  }
+}

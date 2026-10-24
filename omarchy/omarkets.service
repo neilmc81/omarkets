@@ -1,0 +1,29 @@
+# Template: install-plugin replaces @REPO@ with the checkout path.
+[Unit]
+Description=Omarkets core (deterministic market analysis + native analyst layer) on 127.0.0.1:8765
+Documentation=https://github.com/neilmc81/omarkets
+# Start-limit keys belong in [Unit] (systemd >= 230); in [Service] they are
+# ignored, which would let a persistent fault restart forever.
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+# The backend also serves the built web workstation, so one process covers both.
+# Environment (including secrets) is loaded from the project .env by the app.
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/.venv/bin/omarkets
+# Bounded restarts: a genuine crash recovers, but a persistent fault does not
+# spin forever.
+Restart=on-failure
+RestartSec=5
+# Uvicorn may spend 10 seconds draining connections before lifespan cleanup;
+# give the feed/analyst workers time to close after that, but keep a hard bound.
+TimeoutStopSec=45
+# Never allow secret material into the journal.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=omarkets
+
+[Install]
+WantedBy=default.target

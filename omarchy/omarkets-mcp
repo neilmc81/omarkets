@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Launcher for the Omarkets stdio MCP server (Phase 9).
+#
+# The Qwen voice frontend spawns this as its stdio transport. It must run with a
+# plain python3 (the MCP server is stdlib-only) and must not depend on the
+# Omarkets virtualenv, so a Qwen restart cannot break when the venv moves.
+#
+# OMARKETS_API_URL may override the loopback API base; it is validated again in
+# code and only 127.0.0.1/localhost/::1 are accepted.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
+export OMARKETS_API_URL="${OMARKETS_API_URL:-${MARKETOS_API_URL:-http://127.0.0.1:8765}}"
+
+exec "${OMARKETS_MCP_PY:-${MARKETOS_MCP_PY:-python3}}" -m core.interfaces.mcp "$@"

@@ -1,0 +1,360 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Synthetic test fixture: shaped like the Bank of Japan What's New RSS feed, written for Omarkets tests. -->
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+<title>Bank of Japan：RSS</title>
+<link>http://www.boj.or.jp/en/rss/whatsnew.xml?id=1002</link>
+<atom:link href="http://www.boj.or.jp/en/rss/whatsnew.xml?id=1002" rel="self" type="application/rss+xml" />
+<description></description>
+<item>
+<title>Japanese Government Bonds Held by the Bank of Japan</title>
+<description></description>
+<pubDate>Thu, 22 Oct 2026 17:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-00.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-00.htm</guid>
+</item>
+<item>
+<title>Synthetic release 01</title>
+<description></description>
+<pubDate>Thu, 22 Oct 2026 16:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-01.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-01.htm</guid>
+</item>
+<item>
+<title>Synthetic release 02</title>
+<description></description>
+<pubDate>Thu, 22 Oct 2026 09:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-02.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-02.htm</guid>
+</item>
+<item>
+<title>Synthetic release 03</title>
+<description></description>
+<pubDate>Thu, 22 Oct 2026 02:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-03.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-03.htm</guid>
+</item>
+<item>
+<title>Synthetic release 04</title>
+<description></description>
+<pubDate>Wed, 21 Oct 2026 19:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-04.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-04.htm</guid>
+</item>
+<item>
+<title>Synthetic release 05</title>
+<description></description>
+<pubDate>Wed, 21 Oct 2026 12:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-05.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-05.htm</guid>
+</item>
+<item>
+<title>Synthetic release 06</title>
+<description></description>
+<pubDate>Wed, 21 Oct 2026 05:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-06.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-06.htm</guid>
+</item>
+<item>
+<title>Synthetic release 07</title>
+<description></description>
+<pubDate>Tue, 20 Oct 2026 22:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-07.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-07.htm</guid>
+</item>
+<item>
+<title>Synthetic release 08</title>
+<description></description>
+<pubDate>Tue, 20 Oct 2026 15:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-08.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-08.htm</guid>
+</item>
+<item>
+<title>Synthetic release 09</title>
+<description></description>
+<pubDate>Tue, 20 Oct 2026 08:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-09.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-09.htm</guid>
+</item>
+<item>
+<title>Synthetic release 10</title>
+<description></description>
+<pubDate>Tue, 20 Oct 2026 01:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-10.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-10.htm</guid>
+</item>
+<item>
+<title>Synthetic release 11</title>
+<description></description>
+<pubDate>Mon, 19 Oct 2026 18:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-11.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-11.htm</guid>
+</item>
+<item>
+<title>Synthetic release 12</title>
+<description></description>
+<pubDate>Mon, 19 Oct 2026 11:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-12.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-12.htm</guid>
+</item>
+<item>
+<title>Synthetic release 13</title>
+<description></description>
+<pubDate>Mon, 19 Oct 2026 04:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-13.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-13.htm</guid>
+</item>
+<item>
+<title>Synthetic release 14</title>
+<description></description>
+<pubDate>Sun, 18 Oct 2026 21:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-14.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-14.htm</guid>
+</item>
+<item>
+<title>Synthetic release 15</title>
+<description></description>
+<pubDate>Sun, 18 Oct 2026 14:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-15.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-15.htm</guid>
+</item>
+<item>
+<title>Synthetic release 16</title>
+<description></description>
+<pubDate>Sun, 18 Oct 2026 07:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-16.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-16.htm</guid>
+</item>
+<item>
+<title>Synthetic release 17</title>
+<description></description>
+<pubDate>Sun, 18 Oct 2026 00:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-17.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-17.htm</guid>
+</item>
+<item>
+<title>Synthetic release 18</title>
+<description></description>
+<pubDate>Sat, 17 Oct 2026 17:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-18.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-18.htm</guid>
+</item>
+<item>
+<title>Synthetic release 19</title>
+<description></description>
+<pubDate>Sat, 17 Oct 2026 10:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-19.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-19.htm</guid>
+</item>
+<item>
+<title>Synthetic release 20</title>
+<description></description>
+<pubDate>Sat, 17 Oct 2026 03:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-20.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-20.htm</guid>
+</item>
+<item>
+<title>Synthetic release 21</title>
+<description></description>
+<pubDate>Fri, 16 Oct 2026 20:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-21.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-21.htm</guid>
+</item>
+<item>
+<title>Synthetic release 22</title>
+<description></description>
+<pubDate>Fri, 16 Oct 2026 13:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-22.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-22.htm</guid>
+</item>
+<item>
+<title>Synthetic release 23</title>
+<description></description>
+<pubDate>Fri, 16 Oct 2026 06:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-23.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-23.htm</guid>
+</item>
+<item>
+<title>Synthetic release 24</title>
+<description></description>
+<pubDate>Thu, 15 Oct 2026 23:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-24.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-24.htm</guid>
+</item>
+<item>
+<title>Synthetic release 25</title>
+<description></description>
+<pubDate>Thu, 15 Oct 2026 16:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-25.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-25.htm</guid>
+</item>
+<item>
+<title>Synthetic release 26</title>
+<description></description>
+<pubDate>Thu, 15 Oct 2026 09:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-26.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-26.htm</guid>
+</item>
+<item>
+<title>Synthetic release 27</title>
+<description></description>
+<pubDate>Thu, 15 Oct 2026 02:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-27.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-27.htm</guid>
+</item>
+<item>
+<title>Synthetic release 28</title>
+<description></description>
+<pubDate>Wed, 14 Oct 2026 19:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-28.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-28.htm</guid>
+</item>
+<item>
+<title>Synthetic release 29</title>
+<description></description>
+<pubDate>Wed, 14 Oct 2026 12:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-29.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-29.htm</guid>
+</item>
+<item>
+<title>Synthetic release 30</title>
+<description></description>
+<pubDate>Wed, 14 Oct 2026 05:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-30.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-30.htm</guid>
+</item>
+<item>
+<title>Synthetic release 31</title>
+<description></description>
+<pubDate>Tue, 13 Oct 2026 22:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-31.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-31.htm</guid>
+</item>
+<item>
+<title>Synthetic release 32</title>
+<description></description>
+<pubDate>Tue, 13 Oct 2026 15:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-32.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-32.htm</guid>
+</item>
+<item>
+<title>Synthetic release 33</title>
+<description></description>
+<pubDate>Tue, 13 Oct 2026 08:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-33.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-33.htm</guid>
+</item>
+<item>
+<title>Synthetic release 34</title>
+<description></description>
+<pubDate>Tue, 13 Oct 2026 01:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-34.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-34.htm</guid>
+</item>
+<item>
+<title>Synthetic release 35</title>
+<description></description>
+<pubDate>Mon, 12 Oct 2026 18:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-35.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-35.htm</guid>
+</item>
+<item>
+<title>Synthetic release 36</title>
+<description></description>
+<pubDate>Mon, 12 Oct 2026 11:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-36.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-36.htm</guid>
+</item>
+<item>
+<title>Synthetic release 37</title>
+<description></description>
+<pubDate>Mon, 12 Oct 2026 04:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-37.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-37.htm</guid>
+</item>
+<item>
+<title>Synthetic release 38</title>
+<description></description>
+<pubDate>Sun, 11 Oct 2026 21:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-38.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-38.htm</guid>
+</item>
+<item>
+<title>Synthetic release 39</title>
+<description></description>
+<pubDate>Sun, 11 Oct 2026 14:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-39.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-39.htm</guid>
+</item>
+<item>
+<title>Synthetic release 40</title>
+<description></description>
+<pubDate>Sun, 11 Oct 2026 07:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-40.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-40.htm</guid>
+</item>
+<item>
+<title>Synthetic release 41</title>
+<description></description>
+<pubDate>Sun, 11 Oct 2026 00:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-41.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-41.htm</guid>
+</item>
+<item>
+<title>Synthetic release 42</title>
+<description></description>
+<pubDate>Sat, 10 Oct 2026 17:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-42.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-42.htm</guid>
+</item>
+<item>
+<title>Synthetic release 43</title>
+<description></description>
+<pubDate>Sat, 10 Oct 2026 10:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-43.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-43.htm</guid>
+</item>
+<item>
+<title>Synthetic release 44</title>
+<description></description>
+<pubDate>Sat, 10 Oct 2026 03:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-44.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-44.htm</guid>
+</item>
+<item>
+<title>Synthetic release 45</title>
+<description></description>
+<pubDate>Fri, 09 Oct 2026 20:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-45.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-45.htm</guid>
+</item>
+<item>
+<title>Synthetic release 46</title>
+<description></description>
+<pubDate>Fri, 09 Oct 2026 13:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-46.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-46.htm</guid>
+</item>
+<item>
+<title>Synthetic release 47</title>
+<description></description>
+<pubDate>Fri, 09 Oct 2026 06:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-47.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-47.htm</guid>
+</item>
+<item>
+<title>Synthetic release 48</title>
+<description></description>
+<pubDate>Thu, 08 Oct 2026 23:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-48.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-48.htm</guid>
+</item>
+<item>
+<title>Synthetic release 49</title>
+<description></description>
+<pubDate>Thu, 08 Oct 2026 16:00:00 +0900</pubDate>
+<link>http://www.boj.or.jp/en/synthetic/release-49.htm</link>
+<guid>http://www.boj.or.jp/en/synthetic/release-49.htm</guid>
+</item>
+</channel>
+</rss>

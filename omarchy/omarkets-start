@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Start the Omarkets core (which also serves the built web workstation).
+#
+# Prefers the systemd --user service when it is installed, so there is a single
+# owner of the process and no duplicate backends. Falls back to a detached
+# process otherwise. Safe to run repeatedly.
+#
+# Usage: omarkets-start [port]
+set -euo pipefail
+
+port=8765
+if [[ $# -gt 0 ]]; then
+    case $1 in
+        --help|-h)
+            printf '%s\n' 'Usage: omarkets-start [port]' \
+                'Starts the Omarkets core (default 127.0.0.1:8765).' \
+                'Uses the omarkets.service user unit when installed.'
+            exit 0 ;;
+        ''|*[!0-9]*) printf 'omarkets-start: port must be numeric\n' >&2; exit 2 ;;
+        *) port=$1 ;;
+    esac
+fi
+
+repo="$(cd -- "$(dirname -- "$(realpath -- "$0")")/.." && pwd)"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarkets"
+mkdir -p -- "$state_dir"
+
+port_open() {
+    ss -ltnH "sport = :$port" 2>/dev/null | grep -q .
+}
+
+if port_open; then
+    printf 'Omarkets already listening on %d\n' "$port"
+    exit 0
+fi
+
+# Prefer the managed service so the process has a single owner.
+if command -v systemctl >/dev/null 2>&1 \
+    && systemctl --user list-unit-files omarkets.service >/dev/null 2>&1 \
+    && systemctl --user cat omarkets.service >/dev/null 2>&1; then
+    if systemctl --user start omarkets.service; then
+        for _ in $(seq 1 60); do
+            port_open && { printf 'Omarkets started via omarkets.service\n'; exit 0; }
+            sleep 1
+        done
+        printf 'omarkets.service did not become ready; see: journalctl --user -u omarkets\n' >&2
+        exit 1
+    fi
+fi
+
+# Fallback: detached process. Setsid + nohup so it survives the launching shell.
+if [[ ! -x $repo/.venv/bin/omarkets ]]; then
+    printf 'omarkets-start: launcher missing: %s/.venv/bin/omarkets\n' "$repo" >&2
+    exit 1
+fi
+(cd -- "$repo" && setsid nohup .venv/bin/omarkets \
+    >"$state_dir/backend.log" 2>&1 < /dev/null &)
+for _ in $(seq 1 120); do
+    port_open && { printf 'Omarkets started on %d\n' "$port"; exit 0; }
+    sleep 1
+done
+printf 'Omarkets did not become ready; see %s/backend.log\n' "$state_dir" >&2
+exit 1
