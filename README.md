@@ -82,6 +82,11 @@ Then open <http://127.0.0.1:8765> or click the bar icon. Add `--bindings` to
 
 To remove it: `./omarchy/uninstall-plugin`. Your data in `data/` is kept.
 
+The bar widget is also published on its own as an Omarchy plugin,
+[omarchy-omarkets](https://github.com/neilmc81/omarchy-omarkets). It still
+needs this app running. `install-plugin` already adds the same widget, so you
+only need one of the two.
+
 ## Configuration
 
 Settings live in `.env` (see [`.env.example`](.env.example)). The main ones:
