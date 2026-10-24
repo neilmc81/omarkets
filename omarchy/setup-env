@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Create .env from .env.example if it is missing, and ask for the OpenRouter
+# API key when none is set. The key is read without echo, never printed or
+# logged, and written to .env with mode 600.
+#
+# Usage: setup-env [--no-prompt]
+#   --no-prompt   never ask; just create .env and say how to add the key later
+#
+# A key in the OPENROUTER_API_KEY environment variable is used instead of
+# asking. Without a terminal the prompt is skipped. OMARKETS_ENV_FILE
+# overrides the .env path (used by the tests).
+set -euo pipefail
+
+repo="$(cd -- "$(dirname -- "$(realpath -- "$0")")/.." && pwd)"
+env_file=${OMARKETS_ENV_FILE:-$repo/.env}
+example=${OMARKETS_ENV_EXAMPLE:-$repo/.env.example}
+prompt=1
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-prompt) prompt=0; shift ;;
+        --help|-h) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) printf 'setup-env: unknown argument: %s\n' "$1" >&2; exit 2 ;;
+    esac
+done
+
+later="To add it later, put your key after OPENROUTER_API_KEY= in $env_file and run: systemctl --user restart omarkets.service"
+
+if [[ ! -e $env_file ]]; then
+    [[ -f $example ]] || { printf 'setup-env: %s is missing\n' "$example" >&2; exit 1; }
+    (umask 077 && cp -- "$example" "$env_file")
+    printf 'Created %s from .env.example\n' "$env_file"
+fi
+chmod 600 -- "$env_file"
+
+# Current value of the first uncommented OPENROUTER_API_KEY= line, if any.
+current=$(awk -F= '/^[[:space:]]*OPENROUTER_API_KEY[[:space:]]*=/ { sub(/^[^=]*=/, ""); gsub(/^[[:space:]"'\'']+|[[:space:]"'\'']+$/, ""); print; exit }' "$env_file")
+if [[ -n $current ]]; then
+    printf 'OpenRouter API key already set in %s\n' "$env_file"
+    exit 0
+fi
+
+key=${OPENROUTER_API_KEY:-}
+if [[ -z $key ]]; then
+    interactive=0
+    [[ -t 0 ]] && interactive=1
+    [[ ${OMARKETS_SETUP_ENV_FORCE_PROMPT:-} == 1 ]] && interactive=1  # tests only
+    if (( ! prompt || ! interactive )); then
+        printf 'No OpenRouter API key set; AI notes stay off until you add one.\n%s\n' "$later"
+        exit 0
+    fi
+    printf 'Paste your OpenRouter API key (press Enter to skip, AI notes stay off until you add one): ' >&2
+    IFS= read -rs key || key=""
+    printf '\n' >&2
+fi
+
+key=${key//[[:space:]]/}
+if [[ -z $key ]]; then
+    printf 'Skipped. %s\n' "$later"
+    exit 0
+fi
+if ! [[ $key =~ ^[A-Za-z0-9._-]+$ ]]; then
+    printf 'That does not look like an API key (unexpected characters); not saved.\n%s\n' "$later" >&2
+    exit 0
+fi
+if [[ $key != sk-or-* ]]; then
+    printf 'Warning: OpenRouter keys usually start with "sk-or-"; saving it anyway.\n' >&2
+fi
+
+# Replace the first OPENROUTER_API_KEY= line, drop any duplicates, or append.
+# The key goes through the environment, not argv, so it never shows in ps.
+tmp=$(mktemp "$env_file.XXXXXX")
+trap 'rm -f -- "$tmp"' EXIT
+OMK_KEY=$key awk '
+    /^[[:space:]]*OPENROUTER_API_KEY[[:space:]]*=/ { if (!done) { print "OPENROUTER_API_KEY=" ENVIRON["OMK_KEY"]; done = 1 } ; next }
+    { print }
+    END { if (!done) print "OPENROUTER_API_KEY=" ENVIRON["OMK_KEY"] }
+' "$env_file" > "$tmp"
+chmod 600 -- "$tmp"
+mv -f -- "$tmp" "$env_file"
+trap - EXIT
+printf 'Saved your OpenRouter API key to %s (readable only by you).\n' "$env_file"

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omarkets",
   "name": "Omarkets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Neil McGrath",
   "description": "Omarkets workstation in the bar: a compact launcher icon and a market popup with cross-asset context, the next economic-event countdown and feed quality. Reads the local Omarkets API only.",
   "kinds": [
