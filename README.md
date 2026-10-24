@@ -29,6 +29,8 @@ Version 0.1.0 covers NQ only.
 - **Learn**: a library of the ideas the notes explain.
 - **Bar widget**: an icon in the Omarchy bar with a small market popup.
 - **Notifications**: a desktop alert when a new note is ready.
+- **Your theme**: the app and bar widget use your current Omarchy theme
+  colours and switch instantly when you change themes.
 
 Every quote is labelled **live**, **delayed** or **stale**.
 
