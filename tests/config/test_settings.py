@@ -8,7 +8,9 @@ from pydantic import ValidationError
 from core.config.settings import Settings
 
 
-def test_defaults_are_sane(monkeypatch):
+def test_defaults_are_sane(monkeypatch, tmp_path):
+    # Relative defaults resolve against the cwd; keep a real ./data out of it.
+    monkeypatch.chdir(tmp_path)
     for key in list(__import__("os").environ):
         if key.startswith(("OMARKETS_", "MARKETOS_")):
             monkeypatch.delenv(key, raising=False)

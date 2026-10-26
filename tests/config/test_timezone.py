@@ -28,7 +28,9 @@ def test_tz_env_wins(system: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("value", ["", "EST5EDT,M3.2.0,M11.1.0", "Not/AZone", ":/etc/localtime"])
-def test_invalid_tz_env_falls_through(system: Path, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+def test_invalid_tz_env_falls_through(
+    system: Path, monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
     _zoneinfo_link(system, "Europe/London")
     monkeypatch.setenv("TZ", value)
     assert timezone.system_timezone() == "Europe/London"

@@ -39,7 +39,10 @@ so a restart cannot produce a duplicate note or notification.
   one-week changes). Missing data is omitted or shown as unavailable, never zero.
 - `core/desk/followup.py` measures "did it hold?" (below); `core/desk/review.py`
   works out the week for the weekly review.
-- `core/desk/writer.py` makes one OpenRouter call per note with the facts as JSON
+- `core/desk/writer.py` makes one OpenRouter call per note (up to three: one
+  retry on `desk_fallback_model` if that fails, and one regeneration on the
+  writing model if the note contains numbers not in the facts; each call is
+  reserved separately) with the facts as JSON
   and the beginner-focused prompt in `core/desk/prompts.py`. Every call is
   reserved and settled through the existing `AICostGuard` (weekly cap from
   `OMARKETS_AI_WEEKLY_BUDGET_USD`). The guard sends one desktop alert per week

@@ -1,17 +1,21 @@
 """``omarketsctl`` — a minimal operator CLI for Omarkets.
 
-Phase 1 scope: ``status`` and ``state`` against a running local API. This is a
-convenience wrapper; it contains no market logic and reads only the public API.
+Most commands read the running local API. ``config`` and ``note-costs`` read
+the service's environment and the desk DB directly (read-only), so they work
+even when the API is down. It contains no market logic.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
+from core.config import effective
 from core.config.settings import Settings
 
 
@@ -231,6 +235,57 @@ def _cmd_cross_market(settings: Settings) -> int:
     return 0
 
 
+def _service_settings() -> tuple[Settings, list[effective.SettingSource], str, Path]:
+    """Settings as the running service sees them, else as this shell would."""
+    process = effective.service_process()
+    if process is None:
+        environ, project_dir, origin = dict(os.environ), Path.cwd(), "this shell"
+        print(f"{effective.SERVICE_UNIT} is not running; using this shell's environment.")
+    else:
+        (environ, project_dir), origin = process, effective.SERVICE_UNIT
+    settings, rows = effective.effective_settings(environ, project_dir / ".env")
+    return settings, rows, origin, project_dir
+
+
+def _cmd_config(show_all: bool) -> int:
+    settings, rows, origin, _ = _service_settings()
+    print(f"Effective settings from {origin} (secrets show only set/not set)")
+    for row in rows:
+        if show_all or row.source != "default" or row.name in _KEY_SETTINGS:
+            print(f"  {row.name:<40} {row.value:<28} {row.source}")
+    print("Desk note routing")
+    for kind, model in effective.desk_routing(settings).items():
+        print(f"  {kind:<12} {model}")
+    return 0
+
+
+#: Always shown by ``config``, even at their defaults.
+_KEY_SETTINGS = {
+    "ai_weekly_budget_usd",
+    "ai_monthly_budget_usd",
+    "ai_daily_budget_usd",
+    "desk_enabled",
+    "desk_fallback_model",
+    "desk_move_threshold_pct",
+    "openrouter_api_key",
+}
+
+
+def _cmd_note_costs() -> int:
+    settings, _, _, project_dir = _service_settings()
+    rows = effective.note_costs(project_dir / settings.resolved_desk_db_path)
+    if not rows:
+        print("no stored desk notes")
+        return 0
+    print(f"{'model · prompt version':<52} {'notes':>5} {'total $':>9} {'mean $':>9}  first → last")
+    for row in rows:
+        print(
+            f"{row.setup:<52} {row.notes:>5} {row.total_usd:>9.4f} {row.mean_usd:>9.4f}  "
+            f"{row.first_at[:10]} → {row.last_at[:10]}"
+        )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="omarketsctl", description="Omarkets operator CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -251,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("contracts", help="show active futures contracts")
     sub.add_parser("market-providers", help="show market-data provider routing")
     sub.add_parser("cross-market", help="show NQ cross-market context")
+    config = sub.add_parser(
+        "config", help="show the running service's effective settings and where each came from"
+    )
+    config.add_argument("--all", action="store_true", help="include settings left at defaults")
+    sub.add_parser("note-costs", help="show stored desk-note costs by model and prompt version")
     return parser
 
 
@@ -269,6 +329,8 @@ def main(argv: list[str] | None = None) -> int:
         "contracts": lambda: _cmd_contracts(settings),
         "market-providers": lambda: _cmd_market_providers(settings),
         "cross-market": lambda: _cmd_cross_market(settings),
+        "config": lambda: _cmd_config(args.all),
+        "note-costs": _cmd_note_costs,
     }
     return commands[args.command]()
 
