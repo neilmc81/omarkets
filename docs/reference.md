@@ -71,6 +71,11 @@ python3 -m venv .venv
 .venv/bin/omarketsctl status
 .venv/bin/omarketsctl state
 .venv/bin/omarketsctl state NQ
+# Settings the running service really uses, and where each came from
+# (code default, .env or systemd drop-in). Secrets show only set/not set.
+.venv/bin/omarketsctl config          # add --all for every setting
+# Stored desk-note costs by model and prompt version (read-only)
+.venv/bin/omarketsctl note-costs
 
 # 4. Run the backend tests
 .venv/bin/pytest
@@ -556,7 +561,7 @@ single owner and no duplicate backend), and falls back to a detached process.
 ```
 
 The uninstaller never deletes databases or the repository. See
-[`omarchy/omarkets/README.md`](omarchy/omarkets/README.md) for the full detail.
+[`omarchy/omarkets/README.md`](../omarchy/omarkets/README.md) for the full detail.
 
 ## Qwen voice interface
 

@@ -62,10 +62,11 @@ async def run(args):
     )
     import httpx
     import uvicorn
+    from core.domain.briefings import Briefing, BriefingType
+    from core.services.technical import TechnicalService
 
     from core.api.app import create_app
     from core.config.settings import Settings
-    from core.domain.briefings import Briefing, BriefingType
     from core.domain.economics import (
         EconomicEvent,
         MacroObservation,
@@ -78,7 +79,6 @@ async def run(args):
     from core.services.ai_budget import AICostGuard
     from core.services.economics import EconomicService
     from core.services.market_state import MarketStateService
-    from core.services.technical import TechnicalService
     from core.storage.duckdb_repo import DuckDBObservationRepository
     from core.storage.economics import SQLiteEconomicRepository
 

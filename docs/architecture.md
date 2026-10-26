@@ -7,8 +7,11 @@ The Phase 6 (Jev decisions/escalation), Phase 7 (analyst service), Phase 10
 similarity) and retired technical-analysis code described in the sections below
 was removed. The live path is now: deterministic ingestion and storage →
 deterministic desk facts (`core/desk/facts.py`) → one OpenRouter writer call per
-note through the AI cost guard → Today screen, Omarchy popup and notifications.
-See [the desk design](desk.md). The sections below are kept as history.
+note (up to three calls: primary, fallback, one regeneration) through the AI cost guard → Today screen, Omarchy popup and notifications.
+See [the desk design](desk.md). The sections below are kept as history: they
+describe removed code (for example the analyst chain, Jev and the
+`*_ANALYST_*` settings in §6) and are **not** the current design. For values in
+force, run `omarketsctl config`; code defaults and old docs can differ from it.
 
 ## October 10 scope revision: technical analysis retired
 
@@ -19,8 +22,8 @@ cross-asset context remain: `/api/v1/cross-market` derives its existing typed
 response directly from market state. Legacy technical configuration and persisted
 schemas remain readable, but do not enable new technical work. No historical
 records or accounting are deleted. Web/QML removal and deployment acceptance are
-tracked in [the active plan](history/omarkets-active-repair-plan.md) and
-[ledger](history/omarkets-repair-ledger.md).
+tracked in [the active plan](plans/archive/marketos-active-repair-plan.md) and
+[ledger](plans/archive/marketos-repair-ledger.md).
 
 The phase descriptions below are historical architecture documentation where
 they describe technical calculations; they do not override the revised scope.
@@ -114,7 +117,7 @@ Each stage has a single owner and a clear responsibility.
 | Storage | `core/storage` | DuckDB (analytical/time series), SQLite (small relational state). The market observation database is namespaced per data mode (`omarkets-<mode>.duckdb`) so synthetic demo observations can never win a latest-wins comparison against real live quotes; a one-time, non-destructive migration copies real rows from the pre-namespacing database. |
 | Deterministic analytics | `core/analysis` | Indicators, cross-asset relationships, materiality scoring. |
 | Market state | `core/services` (Phase 1) / `core/analysis` (future) | A single structured snapshot of "what is true now". |
-| AI interpretation | `core/desk/writer.py` (one OpenRouter call per note, via the AI cost guard) | Explain deterministic facts in plain English. Never compute basics or fetch raw data. |
+| AI interpretation | `core/desk/writer.py` (one OpenRouter call per note (up to three: primary, one fallback, one regeneration if it invents numbers), via the AI cost guard) | Explain deterministic facts in plain English. Never compute basics or fetch raw data. |
 | Omarchy UI + notifications | `omarchy/`, `core/notifications` | Display and alert. No market logic. |
 | Local API / WebSocket | `core/api` | FastAPI. The only interface the UI uses. |
 

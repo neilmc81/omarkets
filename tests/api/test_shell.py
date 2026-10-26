@@ -14,9 +14,9 @@ from core.api.shell_view import (
     build_context,
     build_cross_quotes,
     build_session,
-    fmt_local_short,
     build_status,
     build_strip,
+    fmt_local_short,
     pick_next_event,
 )
 from core.domain.cross_market import CrossAssetChange, CrossMarketState, Value
@@ -141,7 +141,8 @@ def test_session_flags_maintenance_distinctly():
     closed = build_session(datetime(2026, 9, 19, 12, tzinfo=UTC))
     assert closed.next_open_at == datetime(2026, 9, 20, 22, tzinfo=UTC)
     assert closed.next_open_local is not None
-    assert build_session(datetime(2026, 9, 19, 12, tzinfo=UTC), ZoneInfo("Asia/Dubai")).next_open_local == "Mon 02:00 UTC+4"
+    dubai = build_session(datetime(2026, 9, 19, 12, tzinfo=UTC), ZoneInfo("Asia/Dubai"))
+    assert dubai.next_open_local == "Mon 02:00 UTC+4"
     if session.next_open_at is None:
         assert session.next_open_local is None
 
