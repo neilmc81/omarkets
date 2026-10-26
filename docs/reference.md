@@ -337,7 +337,8 @@ There is no back-adjusted continuous series. Override with
 Feed quality is computed from the exchange timestamp versus receipt:
 if the exchange timestamp lags receipt by more than `OMARKETS_MARKET_LIVE_LAG_SECONDS`
 (default 60) during a session, the feed is `DELAYED`; a session-only date with no
-intraday time is `STALE`; an out-of-session last value is `STALE`; a live feed
+intraday time is `STALE`; an out-of-session last value is `STALE` (the UI says
+"Markets closed" for it, not stale); a live feed
 older than its asset-class threshold is `STALE`; demo data is `DEMO`. Delayed
 data is never displayed as live, and a missing value is `UNAVAILABLE`, never `0`.
 Live-mode staleness thresholds (`OMARKETS_MARKET_STALE_OVERRIDES`) are realistic
@@ -988,8 +989,8 @@ Full detail: [`docs/architecture.md`](architecture.md).
   replacement for the web app.
 - **Authentication.** None; the service is loopback-only.
 - **Market sessions/holidays.** The desk uses rule-based US holidays and New
-  York session times; a known delayed feed is labelled `DELAYED` and an
-  out-of-session value `STALE`.
+  York session times; a known delayed feed is labelled `DELAYED` and a shut
+  market's last value is shown as "Markets closed", not as a stale quote.
 - **Infrastructure.** No Redis, Kafka, Kubernetes, microservices, or Docker.
 - **Forecasting.** Not implemented.
 
