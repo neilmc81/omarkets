@@ -64,6 +64,11 @@ class Figure(BaseModel):
     actual_text: str
     forecast_text: str
     previous_text: str
+    #: Previous value as revised in this release; None when it was not revised.
+    revised_previous: float | None = None
+    revised_previous_text: str | None = None
+    #: Size and direction of the revision, e.g. "revised down by 45K".
+    revision_text: str | None = None
     surprise: Surprise | None = None
 
 

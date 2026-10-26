@@ -629,6 +629,9 @@ class DeskService:
         return [
             {"name": f.name, "actual": f.actual_text, "forecast": f.forecast_text,
              "previous": f.previous_text, "versus_forecast": f.verdict,
+             **({"previous_revised_to": f.revised_previous_text}
+                if f.revised_previous_text else {}),
+             **({"revision": f.revision_text} if f.revision_text else {}),
              **({"surprise": f.surprise.value_text, "surprise_size": f.surprise.text}
                 if f.surprise else {})}
             for f in figures
