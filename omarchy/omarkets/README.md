@@ -17,8 +17,8 @@ The plugin holds **no market logic**. It reads
 Omarkets API (`127.0.0.1:8765`). Every value and every feed status is copied
 verbatim from the core; nothing is calculated, inferred, or invented here.
 
-The feed marker is deliberate: a delayed or stale quote is shown as such and
-never coloured as a live tick.
+The status label is deliberate: a delayed or stale quote is shown as such, a
+shut market shows CLOSED, and nothing is coloured as a live tick.
 
 The collector retains the last successful status and its `updatedAt` timestamp
 when a request fails. It writes the failure count separately, so the popup can
@@ -46,13 +46,16 @@ otherwise source edits can hot-reload independently of the backend. QML does not
 assemble notes or call a model. See the current repair ledger for the
 actual installed release and its live acceptance.
 
-| Marker | Meaning |
+Each quote in the popup strip shows its status as text:
+
+| Status | Meaning |
 | --- | --- |
-| (none) | live |
-| ◐ | delayed source |
-| ○ | stale / out of session |
-| ◇ | synthetic (demo) |
-| ⚠ | unavailable / API unreachable |
+| LIVE | live feed |
+| DELAYED | delayed source |
+| CLOSED | shut market; the last value from the latest session |
+| STALE | no fresh quote recently |
+| DEMO | synthetic (demo) |
+| UNAVAILABLE | unavailable / API unreachable |
 
 ## Install
 
