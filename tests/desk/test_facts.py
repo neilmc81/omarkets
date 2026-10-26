@@ -335,3 +335,28 @@ def test_release_slot_carries_revision():
     [slot] = F.release_slots(rows, start=T - timedelta(minutes=1), end=T + timedelta(minutes=1),
                              min_importance="high")
     assert slot.figures[0].revision_text == "revised down by 2K"
+
+
+def test_revision_does_not_change_the_current_figure_rounding():
+    figure = F.build_figure("CPI m/m", "percent", 0.6485480245771867, 0.6, 0.4, 0.35)
+    assert (figure.actual_text, figure.verdict) == ("0.6%", "in_line")
+
+
+def test_million_revision_size_matches_shown_values():
+    figure = F.build_figure("Homes", "homes/year", 2_000_000.0, None, 1_985_000.0, 1_995_000.0)
+    shown = (figure.previous_text, figure.revised_previous_text, figure.revision_text)
+    assert shown == ("1.99M", "2.00M", "revised up by 10K")
+
+
+def test_revision_paired_with_its_own_sources_first_report():
+    consensus = row("INITIAL_CLAIMS", "Unemployment Claims", consensus=228_000.0,
+                    previous=231_000.0, unit="value")
+    consensus.revised_previous = None
+    dol = row("INITIAL_CLAIMS", "Unemployment Claims", actual=230_000.0, previous=229_000.0,
+              unit="value")
+    dol.revised_previous = 231_000.0
+    for rows in ([consensus, dol], [dol, consensus]):
+        [slot] = F.release_slots(rows, start=T - timedelta(minutes=1),
+                                 end=T + timedelta(minutes=1), min_importance="high")
+        assert slot.figures[0].previous_text == "229K"
+        assert slot.figures[0].revision_text == "revised up by 2K"

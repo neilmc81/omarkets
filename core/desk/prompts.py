@@ -44,10 +44,11 @@ big or ordinary; if it says there is not enough history, do not guess.
 9. "breaking_alerts" are headlines that matched simple keyword rules in the last \
 few hours. Mention one only if it is relevant to the note, and treat it as a \
 headline, not a confirmed fact.
-10. A figure may carry "previous_revised_to" and "revision" ("revised up/down \
-by" an amount): the previous period's number was changed in this release. Mention it, in \
-plain words, when it changes the picture (for example a strong new number after \
-the earlier one was cut). If there is no revision field, do not mention revisions.
+10. A figure may carry "previous_revised_to" (the previous period's number as it \
+stands now, after revision) and "revision" (how far it moved, when known). \
+Mention a revision in plain words when it changes the picture (for example a \
+strong new number after the earlier one was cut). If neither field is present, \
+do not mention revisions.
 
 Return a single JSON object with exactly these fields:
 - headline: under 90 characters, the plain-English verdict (e.g. "Inflation ran \

@@ -112,7 +112,7 @@ def build_figure(
     previous: float | None,
     revised_previous: float | None = None,
 ) -> Figure:
-    decimals = reporting_decimals(unit, forecast, previous, revised_previous)
+    decimals = reporting_decimals(unit, forecast, previous)
     shown = None if actual is None else _compare_round(actual, decimals)
     if shown is None:
         verdict = "not_reported"
@@ -139,6 +139,15 @@ def build_figure(
     )
 
 
+def _shown(value: float, unit: str, decimals: int) -> float:
+    """``value`` rounded exactly as ``format_value`` displays it."""
+    if unit != "percent" and abs(value) >= 1_000_000:
+        return round(value / 1_000_000, 2) * 1_000_000
+    if unit != "percent" and abs(value) >= 1_000:
+        return round(value / 1_000) * 1_000.0
+    return round(value, decimals)
+
+
 def _revision(unit: str, decimals: int, previous: float | None,
               revised: float | None) -> tuple[float | None, str | None]:
     """The revised previous value and "revised up/down by X", at official rounding.
@@ -150,10 +159,10 @@ def _revision(unit: str, decimals: int, previous: float | None,
         return None, None
     if previous is None or not isfinite(previous):
         return revised, None
-    change = round(_compare_round(revised, decimals) - _compare_round(previous, decimals), decimals)
+    change = _shown(revised, unit, decimals) - _shown(previous, unit, decimals)
     if change == 0:
         return None, None
-    size = abs(change)
+    size = abs(round(change, decimals))
     size_text = (f"{size:.{decimals}f} percentage points" if unit == "percent"
                  else format_value(size, unit, decimals))
     return revised, f"revised {'up' if change > 0 else 'down'} by {size_text}"
@@ -319,10 +328,15 @@ def release_slots(
                  "rank": _RANK.get(_value(row, "importance"), 0)},
             )
             for target, source in (("actual", "actual"), ("forecast", "consensus"),
-                                   ("previous", "previous"),
-                                   ("revised_previous", "revised_previous")):
-                if slot[target] is None and getattr(row, source, None) is not None:
+                                   ("previous", "previous")):
+                if slot[target] is None and getattr(row, source) is not None:
                     slot[target] = getattr(row, source)
+            # A revision is only meaningful against the same source's first report.
+            revised = getattr(row, "revised_previous", None)
+            if slot["revised_previous"] is None and revised is not None:
+                slot["revised_previous"] = revised
+                if row.previous is not None:
+                    slot["previous"] = row.previous
         figures = [
             build_figure(m["name"], m["unit"], m["actual"], m["forecast"], m["previous"],
                          m["revised_previous"])

@@ -203,6 +203,9 @@ def _adp_actuals(events: list[EconomicEvent], now: datetime | None) -> list[Econ
             released_at=issuer.released_at,
             received_at=max(schedule.received_at, issuer.received_at),
             revised_previous=issuer.revised_previous,
+            # Keep the revision's own baseline: the issuer's first-reported prior.
+            **({"previous": issuer.previous}
+               if issuer.revised_previous is not None and issuer.previous is not None else {}),
             raw_surprise=None,
             occurrence_aliases=sorted(set(schedule.occurrence_aliases + [schedule.id, issuer.id])),
             occurrence_sources=[

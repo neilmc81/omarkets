@@ -204,3 +204,16 @@ def test_old_ism_issuer_without_retained_observation_does_not_invent_member():
     assert projected.occurrence_aliases == ["issuer"]
     assert len(projected.occurrence_sources) == 1
     assert service.calendar_occurrence("observed:ISM_MFG:2026-08") is None
+
+
+def test_adp_issuer_revision_keeps_its_own_first_reported_previous():
+    schedule = event(id="adp-cal", source_event_id="adp-cal", provider="consensus",
+                     event_code="ADP", name="ADP Non-Farm Employment Change",
+                     scheduled_at=T0, received_at=T0, unit="jobs", previous=36_000)
+    issuer = event(id="adp-issuer", source_event_id="adp-issuer", provider="adp_releases",
+                   event_code="ADP", name="ADP Non-Farm Employment Change", scheduled_at=None,
+                   released_at=T0, received_at=T0, unit="jobs", frequency="monthly",
+                   status="released", actual=42_000, actual_basis="source_release",
+                   previous=38_000, revised_previous=36_000)
+    [row] = [r for r in project_calendar([schedule, issuer]) if r.actual is not None]
+    assert (row.previous, row.revised_previous) == (38_000, 36_000)
