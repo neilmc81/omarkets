@@ -327,5 +327,48 @@ def board(series: Iterable[Any], events: Iterable[Any], rates: RatesView | None,
     return MacroBoard(generated_at=now, groups=groups)
 
 
+#: Cards the desk writer already gets elsewhere (the yields and the calendar).
+_NOT_FOR_WRITER = frozenset({"us2y", "fed_next"})
+_NQ_SHORT: dict[str, str] = {
+    "bad": "a rise usually weighs on NQ",
+    "good": "a rise usually helps NQ",
+    "mixed": "a rise cuts both ways for NQ",
+}
+
+
+def writer_trends(macro: MacroBoard) -> dict[str, list[dict[str, Any]]]:
+    """The Macro page's cards as ready-made text for the desk writer, by group.
+
+    Cards with no value are left out; a stale card says so.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for group in macro.groups:
+        rows = []
+        for card in group.cards:
+            if card.key in _NOT_FOR_WRITER or card.value is None:
+                continue
+            row: dict[str, Any] = {
+                "name": card.title,
+                "latest": f"{card.value_text} ({card.period_text})" if card.period_text
+                else card.value_text,
+                "trend": card.trend_text,
+                "for_nq": _NQ_SHORT[card.nq_when_rising],
+            }
+            if card.release is not None:
+                # Name the figure and date: it can differ from the card's series
+                # (PPI m/m on the PPI y/y card) or be an older release.
+                release = card.release
+                at = release.at.astimezone(NEW_YORK)
+                row["last_release"] = (f"{release.figure.name} "
+                                       f"{release.text.removeprefix('Last release: ')} "
+                                       f"({at:%b} {at.day})")
+            if card.stale:
+                row["stale"] = True
+            rows.append(row)
+        if rows:
+            out[group.key] = rows
+    return out
+
+
 __all__ = ["FED_AHEAD", "RELEASE_LOOKBACK", "SPECS", "board", "last_release", "nq_effect",
-           "trend"]
+           "trend", "writer_trends"]

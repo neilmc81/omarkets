@@ -236,6 +236,11 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
     def news_events():
         return [] if news_service is None else news_service.latest_events(limit=500)
 
+    def macro_series():
+        if economics is None or economics.mode.value == "disabled":
+            return []
+        return economics.current_state().series
+
     notifier = NotifySendNotifier()
 
     async def notify(summary: str, body: str) -> None:
@@ -258,6 +263,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
             calendar_events=calendar_events,
             news_events=news_events,
             ohlc=market.ohlc,
+            macro_series=macro_series,
         ),
         store=DeskStore(settings.resolved_desk_db_path),
         writer=writer,
