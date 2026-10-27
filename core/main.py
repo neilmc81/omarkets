@@ -257,6 +257,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
             history=market.history,
             calendar_events=calendar_events,
             news_events=news_events,
+            ohlc=market.ohlc,
         ),
         store=DeskStore(settings.resolved_desk_db_path),
         writer=writer,

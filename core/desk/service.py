@@ -16,6 +16,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from core.analysis.levels import key_levels
 from core.desk import auctions as A
 from core.desk import breaking as B
 from core.desk import calendar as CAL
@@ -113,6 +114,8 @@ class DeskSources:
     history: Callable[..., Sequence[Any]]
     calendar_events: Callable[[datetime, datetime], Sequence[Any]]
     news_events: Callable[[], Sequence[Any]]
+    #: Hourly OHLC buckets (``MarketStateService.ohlc``), for NQ's key levels.
+    ohlc: Callable[..., Sequence[Any]] | None = None
 
 
 class DeskService:
@@ -608,6 +611,21 @@ class DeskService:
             },
         }, rates
 
+    def _location(self, now: datetime) -> dict[str, Any]:
+        """NQ against its overnight, prior-day and prior-week levels, if measurable."""
+        if self.sources.ohlc is None:
+            return {}
+        try:
+            nq = self.sources.market_state().instruments.get("NQ")
+            levels = key_levels("NQ", nq, self.sources.ohlc, now=now)
+        except Exception:  # noqa: BLE001 - price location is optional context
+            logger.exception("NQ key levels unavailable")
+            return {}
+        location = F.price_location(levels, getattr(nq, "value", None))
+        if location is None:
+            return {}
+        return {"nq_price_location": {**location, "as_of": et(getattr(nq, "timestamp", None))}}
+
     def _delayed(self) -> frozenset[str]:
         state = self.sources.market_state()
         return frozenset(
@@ -760,7 +778,8 @@ class DeskService:
                 "figures": self._figure_facts(sized),
                 "reaction_after_release": self._moves_facts(moves),
             })
-        facts = {**common, "released_this_morning": released_facts,
+        facts = {**common, **(await asyncio.to_thread(self._location, now)),
+                 "released_this_morning": released_facts,
                  "still_scheduled_today": self._upcoming_facts(upcoming),
                  "overnight_headlines": self._headline_facts(headlines),
                  "us_open": et(session.rth_opens_at)}
@@ -788,6 +807,7 @@ class DeskService:
         figures = self._sized(slot)
         facts = {
             **common,
+            **(await asyncio.to_thread(self._location, now)),
             "event": {"name": slot.title, "released": et(slot.at),
                       "what_it_is": F.explainer(slot.primary_code)},
             "figures": self._figure_facts(figures),
@@ -810,6 +830,7 @@ class DeskService:
         headlines = self._earnings_headlines(row, now)
         facts = {
             **common,
+            **(await asyncio.to_thread(self._location, now)),
             "company": {"name": row.company, "symbol": row.symbol,
                         "reported": f"{row.day:%a %b %d} {row.when_text}",
                         "eps_forecast": (f"${row.eps_forecast:.2f}"
@@ -834,6 +855,7 @@ class DeskService:
         direction = "up" if move.change > 0 else "down"
         facts = {
             **common,
+            **(await asyncio.to_thread(self._location, now)),
             "the_move": {"market": "Nasdaq 100 futures", "change": move.text,
                          "from": et(move.start_at), "to": et(move.end_at)},
             "other_markets_same_window": self._moves_facts(moves),
@@ -866,7 +888,8 @@ class DeskService:
             delayed=self._delayed(), min_window=timedelta(minutes=30),
         )
         headlines = self.headlines(now - timedelta(hours=6), now)
-        facts = {**common, "last_two_hours": self._moves_facts(moves),
+        facts = {**common, **(await asyncio.to_thread(self._location, now)),
+                 "last_two_hours": self._moves_facts(moves),
                  "recent_headlines": self._headline_facts(headlines),
                  "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:5])}
         note_id = f"ask:{now:%Y%m%dT%H%M%S}"

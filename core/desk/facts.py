@@ -496,6 +496,42 @@ def quote_strip(state: Any, symbols: Sequence[str] = STRIP_SYMBOLS) -> list[Quot
     return quotes
 
 
+# --------------------------------------------------------------------------- price location
+
+#: Key levels the writer gets, in this order. The gap is left out: today's
+#: change from the settle is already in ``markets_today``.
+LOCATION_LEVELS: tuple[str, ...] = (
+    "prior_settle", "overnight_high", "overnight_low", "prior_day_high", "prior_day_low",
+    "prior_week_high", "prior_week_low",
+)
+
+
+def price_location(levels: Any, price: float | None) -> dict[str, Any] | None:
+    """Where ``price`` sits against the key levels, as ready-made text.
+
+    Levels that could not be measured are left out; with no price or no
+    measured level there is nothing to say and the result is ``None``.
+    """
+    if price is None or not isfinite(price):
+        return None
+    by_key = {level.key: level for level in levels.levels}
+    rows: list[dict[str, Any]] = []
+    overnight_so_far = False
+    for key in LOCATION_LEVELS:
+        level = by_key.get(key)
+        if level is None or level.value is None:
+            continue
+        gap = round(price - level.value, 2)
+        side = "above" if gap > 0 else "below" if gap < 0 else "at"
+        rows.append({"level": level.label, "value": level.value_text,
+                     "nq_is": side if gap == 0 else f"{abs(gap):,.2f} points {side}"})
+        overnight_so_far = overnight_so_far or (key.startswith("overnight") and level.partial)
+    if not rows:
+        return None
+    return {"nq_price": _value_text(levels.symbol, price), "levels": rows,
+            **({"overnight_so_far": True} if overnight_so_far else {})}
+
+
 # --------------------------------------------------------------------------- rates
 
 
