@@ -43,6 +43,8 @@ unchanged; `tests/test_replay_gate.py` proves it (below).
 - **Chart payload.** `ChartSession.rth_opens_at` / `rth_closes_at` are nullable
   (`null` on the 24×7 calendar, which also has no segments). NQ/ES always fill
   them. The web schema and overnight shading accept a session without them.
+  Back-to-back sessions (24×7 UTC days) are read as one stretch, so a quiet
+  spell across midnight is still shown as a gap; CME sessions never touch.
 - **Expected delay.** CNBC's declared delays now live in the adapter table
   `EXPECTED_DELAY_SECONDS` in `core/providers/cnbc.py` (same values: NQ, ES,
   WTI, GOLD 600 s; VXN 900 s). A symbol listed there reads *delayed* (live
@@ -50,7 +52,8 @@ unchanged; `tests/test_replay_gate.py` proves it (below).
   unlisted symbol whose quotes lag turns *stale*.
 - **Instruments API and table.** `/api/v1/instruments` adds `venue`,
   `currency`, `session_calendar`, `session_calendar_label` and
-  `price_precision`. The status panel shows them in a read-only table.
+  `price_precision`. The status panel shows them in a read-only table that
+  refreshes every 15 seconds while it is open.
 - **Replay gate.** `tests/test_replay_gate.py` replays fixed CNBC/Binance-shaped
   quotes (late September to late November 2026: DST end, Thanksgiving, the
   early close) and compares SHA-256 digests of the state, the quote strip and

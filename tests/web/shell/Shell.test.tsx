@@ -100,6 +100,23 @@ describe("shared shell", () => {
       ["US2Y", "treasury yield", "OTC", "—", "CME Globex (Sun–Fri 18:00–17:00 ET)", "3", "cnbc · real time", "market closed"],
     ]);
     expect(table.querySelector("input, select, button")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "System status" })).toHaveTextContent("As of Oct 22");
+  });
+
+  it("refreshes the Instruments table while the panel is open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const fetcher = serve();
+      render(<Root />);
+      fireEvent.click(await screen.findByRole("button", { name: "All feeds OK" }));
+      await screen.findByRole("table", { name: "Instruments" });
+      const calls = () => fetcher.mock.calls.filter(([url]) => url === "/api/v1/instruments").length;
+      const before = calls();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(calls()).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("switches pages with 1–7 and ignores keys typed into inputs", async () => {

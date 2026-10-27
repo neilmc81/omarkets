@@ -193,3 +193,24 @@ def test_btc_bars_use_24x7_utc_day_sessions_and_never_say_closed(memory_repo):
     assert [s["trade_date"] for s in day["sessions"]] == ["2026-10-25"]
     # NQ on the same Sunday still shows Friday's Globex session.
     assert [s["trade_date"] for s in nq["sessions"]] == ["2026-10-23"]
+
+
+def test_btc_quiet_spell_across_utc_midnight_stays_a_gap(memory_repo):
+    """A 24x7 market trades through midnight: a missing hour there is a gap bar."""
+    from core.analysis import bars as B
+    from core.domain.calendars import ALWAYS_OPEN
+    from core.domain.chart import ChartRange, Interval
+
+    quotes = [MarketObservation(symbol="BTC", timestamp=at, value=80_000.0, unit="USD",
+                                source="binance", received_at=at,
+                                metadata={"feed_status": "live"})
+              for at in (datetime(2026, 10, 22, 23, 0, tzinfo=UTC),
+                         datetime(2026, 10, 23, 1, 0, tzinfo=UTC))]
+    memory_repo.store(quotes)
+    now = datetime(2026, 10, 23, 2, 0, tzinfo=UTC)
+    sessions = B.range_sessions(ChartRange.FIVE_DAYS, now, ALWAYS_OPEN)
+    _, end = B.window(sessions, now)
+    built, _ = B.read_bars(memory_repo.ohlc, "BTC", sessions, Interval.H1, end=end)
+    assert [(b.time.isoformat(), b.count) for b in built] == [
+        ("2026-10-22T23:00:00+00:00", 1), ("2026-10-23T00:00:00+00:00", 0),
+        ("2026-10-23T01:00:00+00:00", 1)]

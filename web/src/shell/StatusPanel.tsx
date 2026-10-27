@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { fetchInstruments } from "../api/client";
 import type { HealthResponse, InstrumentRow } from "../api/schemas";
+import { usePoll } from "../chart/usePoll";
 import type { Desk } from "../today/api";
 import type { FeedsStatus } from "./feeds";
 
@@ -28,22 +29,18 @@ const delayText = (row: InstrumentRow) => row.state.status === "unavailable" ? "
   : row.state.expected_delay_seconds > 0 ? `${Math.round(row.state.expected_delay_seconds / 60)} min delay` : "real time";
 
 // Read-only: every instrument the core knows, where it trades and which
-// calendar decides when its market is open. Nothing here can be edited.
+// calendar decides when its market is open. Nothing here can be edited. It
+// refreshes while the panel is open, so "Now" follows the core.
+const INSTRUMENTS_POLL_MS = 15_000;
+
 function InstrumentsTable() {
-  const [rows, setRows] = useState<InstrumentRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchInstruments(controller.signal)
-      .then((body) => setRows(body.instruments))
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "unavailable");
-      });
-    return () => controller.abort();
-  }, []);
-  if (error) return <p className="t-error" role="status">Instruments unavailable: {error}</p>;
-  if (!rows) return <p className="t-muted">Loading…</p>;
-  return <table className="status-table instruments-table" aria-label="Instruments">
+  const { data, error } = usePoll(fetchInstruments, "instruments", INSTRUMENTS_POLL_MS);
+  if (!data) return error ? <p className="t-error" role="status">Instruments unavailable: {error}</p>
+    : <p className="t-muted">Loading…</p>;
+  const rows = data.instruments;
+  return <>
+  <p className="t-muted">As of {at(data.generated_at)}{error ? ` · refresh failed: ${error}` : ""}</p>
+  <table className="status-table instruments-table" aria-label="Instruments">
     <thead><tr><th>Symbol</th><th>Class</th><th>Venue</th><th>Currency</th><th>Calendar</th><th>Decimals</th><th>Source</th><th>Now</th></tr></thead>
     <tbody>{rows.map((row) => <tr key={row.symbol}>
       <td title={row.display_name}><b>{row.symbol}</b></td>
@@ -55,7 +52,8 @@ function InstrumentsTable() {
       <td>{row.state.source ?? "—"} · {delayText(row)}</td>
       <td>{feedNow(row)}</td>
     </tr>)}</tbody>
-  </table>;
+  </table>
+  </>;
 }
 
 export function StatusPanel({ feeds, health, healthError, desk, deskError, onClose }: {

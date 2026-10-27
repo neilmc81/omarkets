@@ -135,9 +135,19 @@ def read_bars(
     buckets = list(ohlc(symbol, start=within[0][0], end=within[-1][1],
                         bucket_seconds=INTERVAL_SECONDS[interval], within=within))
     # Every bucket starts inside its session: sessions open on whole hours.
-    per_session = [[b for b in buckets if s.opens_at <= b.start < s.closes_at]
-                   for s in sessions]
-    return build_bars(per_session, interval), buckets
+    # Back-to-back sessions (24x7 UTC days) trade straight through midnight, so
+    # they form one group and a quiet spell across the boundary stays a gap.
+    # CME sessions are never back to back (daily break, weekend).
+    groups: list[list[OhlcBucket]] = []
+    previous: TradingSession | None = None
+    for s in sessions:
+        inside = [b for b in buckets if s.opens_at <= b.start < s.closes_at]
+        if previous is not None and previous.closes_at == s.opens_at:
+            groups[-1].extend(inside)
+        else:
+            groups.append(inside)
+        previous = s
+    return build_bars(groups, interval), buckets
 
 
 def build_bars(per_session: Sequence[Sequence[OhlcBucket]], interval: Interval) -> list[Bar]:
