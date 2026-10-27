@@ -160,8 +160,12 @@ Pre-market, release, Fed, earnings, move and on-demand notes get
 `nq_price_location`: NQ's current price against the key levels from
 `core/analysis/levels.py` (the same ones on the chart): prior settle, overnight
 high/low, prior day high/low and prior week high/low. Each line has the level,
-its value and where NQ is, e.g. "45.00 points below" or "at", as ready-made
-text; `overnight_so_far` is set before the cash open. Levels that cannot be
+its value, where NQ is (e.g. "45.00 points below" or "at") and the ET window it
+was measured over, so "prior day" and "prior week" stay clear around weekends
+and holidays. `overnight_so_far` is set before the cash open, and also after it
+while the latest (delayed) NQ quote is still from before 09:30 ET. If the latest
+NQ quote is from before the current session opened (just after the 18:00 ET
+reopen) the block is left out rather than compare it with the new session. Levels that cannot be
 measured (no quotes, contract roll, no settle) are left out, and with no NQ
 price or no level the block is left out. The gap is not repeated: today's change
 from the settle is already in `markets_today`. Prompt `desk:v6` asks the writer

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 from core.analysis.levels import key_levels
@@ -114,3 +115,38 @@ async def test_premarket_note_facts_carry_the_location(memory_repo):
     [(kind, facts)] = writer.calls
     assert kind is NoteKind.PREMARKET
     assert facts["nq_price_location"]["levels"][0]["nq_is"] == "25.00 points above"
+
+
+def test_each_level_carries_its_window_in_et(memory_repo):
+    seed(memory_repo)
+    rows = {r["level"]: r.get("measured") for r in location(memory_repo)["levels"]}
+    assert rows["Prior settle"] is None
+    assert rows["Prior day high"] == "Tue Oct 20 18:00 ET to Wed Oct 21 17:00 ET"
+    assert rows["Prior week low"] == "Sun Oct 11 18:00 ET to Fri Oct 16 17:00 ET"
+    assert rows["Overnight high"] == "Wed Oct 21 18:00 ET to Thu Oct 22 08:00 ET"
+
+
+def test_holiday_monday_dates_show_which_week_is_meant(memory_repo):
+    # Memorial Day 2026: the levels still belong to Friday May 22's session.
+    memory_repo.store([obs(at(2026, 5, 13, 15, 0), 29_000.0)])
+    result = F.price_location(key_levels("NQ", nq(), memory_repo.ohlc,
+                                         now=at(2026, 5, 25, 14, 0)), 29_175.0)
+    [high, low] = result["levels"][1:]
+    assert high["measured"] == "Sun May 10 18:00 ET to Fri May 15 17:00 ET"
+
+
+def test_overnight_stays_so_far_until_delayed_quotes_reach_the_open(memory_repo):
+    seed(memory_repo)
+    after_open = at(2026, 10, 22, 13, 35)
+    levels = key_levels("NQ", nq(), memory_repo.ohlc, now=after_open)
+    late = F.price_location(levels, 29_175.0, after_open - timedelta(minutes=10))
+    assert late["overnight_so_far"] is True
+    current = F.price_location(levels, 29_175.0, after_open - timedelta(minutes=2))
+    assert "overnight_so_far" not in current
+
+
+def test_quote_from_before_the_session_is_not_compared(memory_repo):
+    seed(memory_repo)
+    reopen = at(2026, 10, 22, 22, 5)  # Thu 18:05 ET, Friday's session
+    quote = SimpleNamespace(**vars(nq()), timestamp=at(2026, 10, 22, 20, 59))
+    assert service(memory_repo.ohlc, {"NQ": quote})._location(reopen) == {}

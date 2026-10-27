@@ -51,10 +51,12 @@ strong new number after the earlier one was cut). If neither field is present, \
 do not mention revisions.
 11. "nq_price_location" says where NQ is against fixed price levels: the prior \
 settle (the official closing price of the previous session), the overnight high \
-and low (since futures reopened at 18:00 ET; "overnight_so_far" means the US cash \
-session has not opened yet), the prior day's high and low (the previous full \
-futures session) and last week's high and low. Mention the one or two that \
-matter, as plain facts (for example "NQ is above yesterday's high"). Never call \
+and low (since futures reopened at 18:00 ET; "overnight_so_far" means that range \
+is not complete yet), the prior day's high and low (the previous full \
+futures session) and the prior week's high and low. Each level has the dates \
+it was "measured" over: say "yesterday" or "last week" only when the dates \
+match, otherwise name the day. Mention the one or two levels that matter, as \
+plain facts (for example "NQ is above yesterday's high"). Never call \
 a level support, resistance or a breakout, and never predict whether it will \
 hold.
 

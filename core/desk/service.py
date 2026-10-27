@@ -615,16 +615,21 @@ class DeskService:
         """NQ against its overnight, prior-day and prior-week levels, if measurable."""
         if self.sources.ohlc is None:
             return {}
+        nq = self.sources.market_state().instruments.get("NQ")
+        quote_at = getattr(nq, "timestamp", None)
+        # A quote from before this session (e.g. just after the 18:00 ET reopen)
+        # would be compared with the new session's levels and an old settle.
+        if quote_at is None or quote_at < active_session(now).opens_at:
+            return {}
         try:
-            nq = self.sources.market_state().instruments.get("NQ")
             levels = key_levels("NQ", nq, self.sources.ohlc, now=now)
         except Exception:  # noqa: BLE001 - price location is optional context
             logger.exception("NQ key levels unavailable")
             return {}
-        location = F.price_location(levels, getattr(nq, "value", None))
+        location = F.price_location(levels, getattr(nq, "value", None), quote_at)
         if location is None:
             return {}
-        return {"nq_price_location": {**location, "as_of": et(getattr(nq, "timestamp", None))}}
+        return {"nq_price_location": {**location, "as_of": et(quote_at)}}
 
     def _delayed(self) -> frozenset[str]:
         state = self.sources.market_state()

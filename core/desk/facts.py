@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from math import isfinite
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from core.desk import explainers as X
 from core.desk.models import Figure, Move, Quote, RatesView, Surprise, UpcomingItem, YieldLine
@@ -498,6 +499,8 @@ def quote_strip(state: Any, symbols: Sequence[str] = STRIP_SYMBOLS) -> list[Quot
 
 # --------------------------------------------------------------------------- price location
 
+_NEW_YORK = ZoneInfo("America/New_York")
+
 #: Key levels the writer gets, in this order. The gap is left out: today's
 #: change from the settle is already in ``markets_today``.
 LOCATION_LEVELS: tuple[str, ...] = (
@@ -506,11 +509,20 @@ LOCATION_LEVELS: tuple[str, ...] = (
 )
 
 
-def price_location(levels: Any, price: float | None) -> dict[str, Any] | None:
+def _when(moment: datetime) -> str:
+    return moment.astimezone(_NEW_YORK).strftime("%a %b %d %H:%M ET")
+
+
+def price_location(levels: Any, price: float | None,
+                   quote_at: datetime | None = None) -> dict[str, Any] | None:
     """Where ``price`` sits against the key levels, as ready-made text.
 
-    Levels that could not be measured are left out; with no price or no
-    measured level there is nothing to say and the result is ``None``.
+    Each level carries the window it was measured over, so "prior day" and
+    "prior week" are unambiguous around weekends and holidays. Levels that could
+    not be measured are left out; with no price or no measured level there is
+    nothing to say and the result is ``None``. The overnight range is "so far"
+    while the window is running or the latest quote (``quote_at``, delayed)
+    has not reached its end.
     """
     if price is None or not isfinite(price):
         return None
@@ -523,9 +535,15 @@ def price_location(levels: Any, price: float | None) -> dict[str, Any] | None:
             continue
         gap = round(price - level.value, 2)
         side = "above" if gap > 0 else "below" if gap < 0 else "at"
-        rows.append({"level": level.label, "value": level.value_text,
-                     "nq_is": side if gap == 0 else f"{abs(gap):,.2f} points {side}"})
-        overnight_so_far = overnight_so_far or (key.startswith("overnight") and level.partial)
+        row = {"level": level.label, "value": level.value_text,
+               "nq_is": side if gap == 0 else f"{abs(gap):,.2f} points {side}"}
+        if level.window_start is not None and level.window_end is not None:
+            row["measured"] = f"{_when(level.window_start)} to {_when(level.window_end)}"
+        rows.append(row)
+        if key.startswith("overnight"):
+            overnight_so_far = overnight_so_far or level.partial or (
+                quote_at is not None and level.window_end is not None
+                and quote_at < level.window_end)
     if not rows:
         return None
     return {"nq_price": _value_text(levels.symbol, price), "levels": rows,
