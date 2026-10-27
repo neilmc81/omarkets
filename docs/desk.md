@@ -210,11 +210,13 @@ The primer, pre-market, release, Fed and week-in-review notes get
 the Macro page) as ready-made text, grouped into inflation, jobs, growth and the
 Fed. Each has the latest reading and period, the trend text ("falling: the last
 3 months averaged lower than the 3 before"), what a rise usually means for NQ,
-and the last release against forecast when there is one. Cards with no value
+and the last release against forecast when there is one, naming its figure
+and date ("PPI m/m above forecast (Oct 15)"), since it can be a different
+figure from the card's series or an older release. Cards with no value
 are left out (never zero), a stale card says `stale`, and the 2-year yield and
 next Fed date are left out because the notes already have them. The series come
-from the economic service (`DeskSources.macro_series`); if it is disabled or
-fails, the block is left out. About 750 extra input tokens a note
+from the economic service (`DeskSources.macro_series`), with past calendar
+releases only; if it is disabled, empty or fails, the block is left out. About 750 extra input tokens a note
 (prompt `desk:v8`).
 
 ## Week in review

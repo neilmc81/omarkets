@@ -11,11 +11,11 @@ from tests.desk.test_macro import NOW, series
 from tests.desk.test_service import FakeWriter
 
 
-def desk(macro_series):
+def desk(macro_series, calendar_events=lambda s, e: []):
     writer = FakeWriter()
     service = DeskService(
         sources=DeskSources(market_state=lambda: SimpleNamespace(instruments={}),
-                            history=lambda *a, **k: [], calendar_events=lambda s, e: [],
+                            history=lambda *a, **k: [], calendar_events=calendar_events,
                             news_events=lambda: [], macro_series=macro_series),
         store=DeskStore(":memory:"), writer=writer, clock=lambda: NOW)
     return service, writer
@@ -48,3 +48,20 @@ async def test_on_demand_notes_do_not_get_macro_trends():
     await service.ask()
     [(kind, facts)] = writer.calls
     assert kind is NoteKind.ASK and "macro_trends" not in facts
+
+
+def test_macro_trends_read_past_events_only():
+    cpi = series("CPI_YOY", [2.4, 2.5, 2.6, 3.0, 3.2, 3.7])
+    windows = []
+
+    def calendar(start, end):
+        windows.append((start, end))
+        return []
+
+    service, _ = desk(lambda: [cpi], calendar)
+    service._macro_trends(NOW, None)
+    assert windows and max(end for _, end in windows) == NOW
+    windows.clear()
+    service, _ = desk(lambda: [], calendar)
+    assert service._macro_trends(NOW, None) == {}
+    assert windows == []                              # no series: no calendar read

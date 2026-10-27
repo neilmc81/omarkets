@@ -355,7 +355,13 @@ def writer_trends(macro: MacroBoard) -> dict[str, list[dict[str, Any]]]:
                 "for_nq": _NQ_SHORT[card.nq_when_rising],
             }
             if card.release is not None:
-                row["last_release"] = card.release.text.removeprefix("Last release: ")
+                # Name the figure and date: it can differ from the card's series
+                # (PPI m/m on the PPI y/y card) or be an older release.
+                release = card.release
+                at = release.at.astimezone(NEW_YORK)
+                row["last_release"] = (f"{release.figure.name} "
+                                       f"{release.text.removeprefix('Last release: ')} "
+                                       f"({at:%b} {at.day})")
             if card.stale:
                 row["stale"] = True
             rows.append(row)

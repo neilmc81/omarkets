@@ -623,7 +623,10 @@ class DeskService:
             return {}
         try:
             series = self.sources.macro_series()
-            events = self._events_between(now - M.RELEASE_LOOKBACK, now + M.FED_AHEAD)
+            if not series:
+                return {}
+            # Past releases only: the next-Fed card is not sent to the writer.
+            events = self._events_between(now - M.RELEASE_LOOKBACK, now)
             trends = M.writer_trends(M.board(series, events, rates, now=now))
         except Exception:  # noqa: BLE001 - macro trends are optional context
             logger.exception("macro trends unavailable")

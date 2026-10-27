@@ -131,7 +131,8 @@ def test_writer_trends_are_ready_made_text_by_group():
     assert trends["inflation"] == [{
         "name": "CPI year over year", "latest": "3.7% (Sep 2026)",
         "trend": "rising: the last 3 months averaged higher than the 3 before",
-        "for_nq": "a rise usually weighs on NQ", "last_release": "above forecast"}]
+        "for_nq": "a rise usually weighs on NQ",
+        "last_release": "CPI y/y above forecast (Oct 14)"}]
     [jobless] = trends["jobs"]
     assert jobless["stale"] is True and jobless["for_nq"] == "a rise cuts both ways for NQ"
     assert "last_release" not in jobless
@@ -157,3 +158,16 @@ def test_writer_trend_numbers_pass_the_number_check():
         what_it_means="Unemployment is 4.2%.", market_reaction="Quiet.",
         rates_read="Yields flat.", learn="CPI measures prices.", nq_tone="neutral")
     assert invented_numbers(draft, SYSTEM + message) == []
+
+
+def test_writer_last_release_names_a_different_figure_and_an_older_date():
+    ppi = series("BLS_PPI_YOY", [2.0, 2.0, 2.0, 2.0, 2.0, 2.1])
+    older = CPI_AT - timedelta(days=30)
+    events = [event("PPI", "PPI m/m", CPI_AT, 0.5, 0.2),            # only m/m had a forecast
+              event("CPI", "CPI y/y", older, 3.5, 3.4),
+              event("CPI", "CPI y/y", CPI_AT, 3.7, None)]           # newest: no forecast
+    cpi = series("CPI_YOY", [2.4, 2.5, 2.6, 3.0, 3.2, 3.7])
+    trends = M.writer_trends(M.board([ppi, cpi], events, None, now=NOW))
+    rows = {row["name"]: row["last_release"] for row in trends["inflation"]}
+    assert rows["PPI year over year"] == "PPI m/m above forecast (Oct 14)"
+    assert rows["CPI year over year"] == "CPI y/y above forecast (Sep 14)"
