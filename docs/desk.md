@@ -15,7 +15,7 @@ Nasdaq 100 futures (NQ).
 | Economic release | 26 min after every medium/high/critical release with figures: 15 min of reaction + 10-min feed delay + 1 min margin; waits up to 45 min for a missing actual | `release:<time>:<codes>` |
 | Fed | FOMC decision / minutes +26 min, press conference +71 min (60-min window + feed delay) | `release:<time>:<codes>` |
 | Mega-cap earnings | once results headlines appear, 30 min–4 h after the report | `earnings:<symbol>:<day>` |
-| Big move | NQ moves ≥ 0.8% over about an hour; at most one per 3 hours | `move:<hour>` |
+| Big move | NQ moves at least the scaled trigger (see "Normal move size") over about an hour; at most one per 3 hours | `move:<hour>` |
 | Market now | on request ("Explain the market now"); at most 5 per day; a note from the last 15 minutes is shown again instead of writing a new one | `ask:<time>` |
 | Treasury auction | 26 min after a notably strong or weak 2/5/7/10/20/30-year or TIPS auction (rule below) | `auction:<date>:<cusip>` |
 | Week in review | after the week's last cash close + 15 min (Friday 16:15, or Thursday in a holiday-shortened week), for up to two days | `review:<monday>` |
@@ -76,7 +76,7 @@ so a restart cannot produce a duplicate note or notification.
 | `OMARKETS_DESK_MODEL_PARAMS` | `{}`; JSON map of model to extra request fields, replacing the default per model |
 | `OMARKETS_DESK_MODEL_RATES` | `{}`; JSON map of model to `[input, output]` USD per million tokens |
 | `OMARKETS_DESK_INPUT_RATE` / `_OUTPUT_RATE` | `3.0` / `15.0`, for models with no rates (reservation upper bound) |
-| `OMARKETS_DESK_MOVE_THRESHOLD_PCT` | `0.8` |
+| `OMARKETS_DESK_MOVE_THRESHOLD_PCT` | `0.8`; used only until there are 10 complete sessions to scale the trigger |
 | `OMARKETS_DESK_NOTIFY` | `true` |
 | `OMARKETS_DESK_DAILY_PLAN` | `true` (the 07:00 ET plan notification) |
 | `OMARKETS_DESK_LOCAL_TIMEZONE` | `America/New_York` (times in the daily plan) |
@@ -171,6 +171,31 @@ price or no level the block is left out. The gap is not repeated: today's change
 from the settle is already in `markets_today`. Prompt `desk:v6` asks the writer
 to state levels as plain facts, never as support, resistance or a breakout.
 The primer, week in review and auction notes do not get it.
+
+## Normal move size (October 27, 2026)
+
+`core/analysis/move_size.py`, from hourly NQ buckets (the same filtered OHLC as
+the chart). A session counts when quotes cover at least 80% of its hours from
+one contract; gappy or rolled sessions are skipped, never counted as zero.
+
+- **Typical daily range:** median high-minus-low of the complete sessions among
+  the last 20, in points and percent (needs at least 10).
+- **Today's range** so far, and as a share of a typical day.
+- **Realised volatility:** standard deviation of one-hour log returns inside
+  those sessions, annualised (252 × 23 hours; needs 100 returns). It leaves out
+  the daily maintenance gap, so it reads a little below a close-to-close figure.
+- **VXN, VIX and VXN − VIX**, from market state; the gap only when both quotes
+  are within 30 minutes of each other. VXN updates in US cash hours only.
+
+The same notes as price location get these as `normal_move_size`, as
+ready-made text (prompt `desk:v7`).
+
+**Large-move trigger:** 0.55 × the typical daily range per hour, kept between
+0.6% and 1.5%, computed once per trade date. On 2026-10-27 the typical range
+was 1.46%, so the trigger is 0.80%, the same as the old fixed value; it rises in
+volatile weeks and falls in quiet ones. Without enough history, or if storage
+fails, `OMARKETS_DESK_MOVE_THRESHOLD_PCT` is used. The move note's facts say
+which trigger applied.
 
 ## Week in review
 
