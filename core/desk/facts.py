@@ -110,6 +110,7 @@ def build_figure(
     actual: float | None,
     forecast: float | None,
     previous: float | None,
+    revised_previous: float | None = None,
 ) -> Figure:
     decimals = reporting_decimals(unit, forecast, previous)
     shown = None if actual is None else _compare_round(actual, decimals)
@@ -120,6 +121,7 @@ def build_figure(
     else:
         expected = _compare_round(forecast, decimals)
         verdict = "in_line" if shown == expected else ("above" if shown > expected else "below")
+    revised, revision_text = _revision(unit, decimals, previous, revised_previous)
     return Figure(
         name=name,
         unit=unit,
@@ -131,7 +133,39 @@ def build_figure(
         actual_text=format_value(shown, unit, decimals),
         forecast_text=format_value(forecast, unit, decimals),
         previous_text=format_value(previous, unit, decimals),
+        revised_previous=revised,
+        revised_previous_text=None if revised is None else format_value(revised, unit, decimals),
+        revision_text=revision_text,
     )
+
+
+def _shown(value: float, unit: str, decimals: int) -> float:
+    """``value`` rounded exactly as ``format_value`` displays it."""
+    if unit != "percent" and abs(value) >= 1_000_000:
+        return round(value / 1_000_000, 2) * 1_000_000
+    if unit != "percent" and abs(value) >= 1_000:
+        return round(value / 1_000) * 1_000.0
+    return round(value, decimals)
+
+
+def _revision(unit: str, decimals: int, previous: float | None,
+              revised: float | None) -> tuple[float | None, str | None]:
+    """The revised previous value and "revised up/down by X", at official rounding.
+
+    No revision (or one too small to show at the reported precision) gives
+    ``(None, None)``; a revised value without the first-reported one gives no size.
+    """
+    if revised is None or not isfinite(revised):
+        return None, None
+    if previous is None or not isfinite(previous):
+        return revised, None
+    change = _shown(revised, unit, decimals) - _shown(previous, unit, decimals)
+    if change == 0:
+        return None, None
+    size = abs(round(change, decimals))
+    size_text = (f"{size:.{decimals}f} percentage points" if unit == "percent"
+                 else format_value(size, unit, decimals))
+    return revised, f"revised {'up' if change > 0 else 'down'} by {size_text}"
 
 
 #: Past surprises compared against (most recent first), and the minimum needed.
@@ -290,15 +324,22 @@ def release_slots(
             slot = merged.setdefault(
                 row.name.casefold(),
                 {"name": row.name, "unit": row.unit, "actual": None,
-                 "forecast": None, "previous": None,
+                 "forecast": None, "previous": None, "revised_previous": None,
                  "rank": _RANK.get(_value(row, "importance"), 0)},
             )
             for target, source in (("actual", "actual"), ("forecast", "consensus"),
                                    ("previous", "previous")):
                 if slot[target] is None and getattr(row, source) is not None:
                     slot[target] = getattr(row, source)
+            # A revision is only meaningful against the same source's first report.
+            revised = getattr(row, "revised_previous", None)
+            if slot["revised_previous"] is None and revised is not None:
+                slot["revised_previous"] = revised
+                if row.previous is not None:
+                    slot["previous"] = row.previous
         figures = [
-            build_figure(m["name"], m["unit"], m["actual"], m["forecast"], m["previous"])
+            build_figure(m["name"], m["unit"], m["actual"], m["forecast"], m["previous"],
+                         m["revised_previous"])
             for m in sorted(merged.values(), key=lambda m: -m["rank"])
         ]
         names: list[str] = []

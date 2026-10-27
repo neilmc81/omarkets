@@ -7,7 +7,7 @@ from typing import Any
 
 from core.desk.models import NoteKind
 
-PROMPT_VERSION = "desk:v4"
+PROMPT_VERSION = "desk:v5"
 
 SYSTEM = """\
 You are the Omarkets desk writer. Your reader is a new trader who is learning how \
@@ -44,6 +44,11 @@ big or ordinary; if it says there is not enough history, do not guess.
 9. "breaking_alerts" are headlines that matched simple keyword rules in the last \
 few hours. Mention one only if it is relevant to the note, and treat it as a \
 headline, not a confirmed fact.
+10. A figure may carry "previous_revised_to" (the previous period's number as it \
+stands now, after revision) and "revision" (how far it moved, when known). \
+Mention a revision in plain words when it changes the picture (for example a \
+strong new number after the earlier one was cut). If neither field is present, \
+do not mention revisions.
 
 Return a single JSON object with exactly these fields:
 - headline: under 90 characters, the plain-English verdict (e.g. "Inflation ran \

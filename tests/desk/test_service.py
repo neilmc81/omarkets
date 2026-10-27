@@ -370,3 +370,16 @@ async def test_calendar_rows_size_surprises_and_count_hidden_moments():
     assert rows[0].figures[0].surprise.history_count == 6
     every, none_hidden = await service.calendar(start, end, show_all=True)
     assert len(every) == 2 and none_hidden == 0
+
+
+def test_figure_facts_include_revision_only_when_present():
+    from core.desk import facts as F
+
+    revised, plain = DeskService._figure_facts([
+        F.build_figure("ADP", "jobs", 42_000.0, 40_000.0, 38_000.0, 36_000.0),
+        F.build_figure("CPI m/m", "percent", 0.3, 0.2, 0.4),
+    ])
+    assert revised["previous"] == "38K"
+    assert revised["previous_revised_to"] == "36K"
+    assert revised["revision"] == "revised down by 2K"
+    assert "previous_revised_to" not in plain and "revision" not in plain

@@ -282,3 +282,81 @@ def test_quote_strip_marks_a_stale_vix_outside_cboe_hours_as_closed():
         assert quotes["VIX"].closed_text == ("cash closed" if closed else None)
         assert quotes["NQ"].closed is False  # futures are never "cash closed"
         assert quotes["VIX"].explainer and "fear gauge" in quotes["VIX"].explainer
+
+
+# ------------------------------------------------------------------ revisions
+
+
+def test_revision_down_in_thousands():
+    figure = F.build_figure("ADP", "jobs", 42_000.0, 40_000.0, 38_000.0, 36_000.0)
+    assert figure.previous_text == "38K"
+    assert figure.revised_previous_text == "36K"
+    assert figure.revision_text == "revised down by 2K"
+
+
+def test_revision_up_and_rounded_to_reported_precision():
+    # 229,400 -> 231,600 shows as 229K -> 232K, so the size is 3K, not 2.2K.
+    figure = F.build_figure("Claims", "value", 230_000.0, 228_000.0, 229_400.0, 231_600.0)
+    assert (figure.previous_text, figure.revised_previous_text) == ("229K", "232K")
+    assert figure.revision_text == "revised up by 3K"
+
+
+def test_percent_revision_in_percentage_points():
+    figure = F.build_figure("CPI m/m", "percent", 0.3, 0.2, 0.4, 0.30000000000000004)
+    assert figure.revised_previous_text == "0.3%"
+    assert figure.revision_text == "revised down by 0.1 percentage points"
+    two = F.build_figure("Rate", "percent", 4.1, 4.0, 4.25, 4.5)
+    assert two.revision_text == "revised up by 0.25 percentage points"
+
+
+def test_unitless_revision_keeps_decimals():
+    figure = F.build_figure("ISM", "index", 49.0, 49.5, 52.3, 52.0)
+    assert figure.revision_text == "revised down by 0.3"
+
+
+def test_no_revision_is_omitted_not_zero():
+    for revised in (None, 38_000.0, 38_200.0):  # missing, same, below reported precision
+        figure = F.build_figure("ADP", "jobs", 42_000.0, 40_000.0, 38_000.0, revised)
+        assert figure.revised_previous is None
+        assert figure.revised_previous_text is None
+        assert figure.revision_text is None
+
+
+def test_revised_value_without_first_report_has_no_size():
+    figure = F.build_figure("ADP weekly", "jobs", 20_000.0, None, None, 16_750.0)
+    assert figure.revised_previous_text == "17K"
+    assert figure.revision_text is None
+
+
+def test_release_slot_carries_revision():
+    rows = [row("ADP", "ADP Non-Farm Employment Change", actual=42_000.0, consensus=40_000.0,
+                previous=38_000.0, unit="jobs")]
+    rows[0].revised_previous = 36_000.0
+    [slot] = F.release_slots(rows, start=T - timedelta(minutes=1), end=T + timedelta(minutes=1),
+                             min_importance="high")
+    assert slot.figures[0].revision_text == "revised down by 2K"
+
+
+def test_revision_does_not_change_the_current_figure_rounding():
+    figure = F.build_figure("CPI m/m", "percent", 0.6485480245771867, 0.6, 0.4, 0.35)
+    assert (figure.actual_text, figure.verdict) == ("0.6%", "in_line")
+
+
+def test_million_revision_size_matches_shown_values():
+    figure = F.build_figure("Homes", "homes/year", 2_000_000.0, None, 1_985_000.0, 1_995_000.0)
+    shown = (figure.previous_text, figure.revised_previous_text, figure.revision_text)
+    assert shown == ("1.99M", "2.00M", "revised up by 10K")
+
+
+def test_revision_paired_with_its_own_sources_first_report():
+    consensus = row("INITIAL_CLAIMS", "Unemployment Claims", consensus=228_000.0,
+                    previous=231_000.0, unit="value")
+    consensus.revised_previous = None
+    dol = row("INITIAL_CLAIMS", "Unemployment Claims", actual=230_000.0, previous=229_000.0,
+              unit="value")
+    dol.revised_previous = 231_000.0
+    for rows in ([consensus, dol], [dol, consensus]):
+        [slot] = F.release_slots(rows, start=T - timedelta(minutes=1),
+                                 end=T + timedelta(minutes=1), min_importance="high")
+        assert slot.figures[0].previous_text == "229K"
+        assert slot.figures[0].revision_text == "revised up by 2K"

@@ -139,6 +139,21 @@ label goes to the writer (`surprise_size`) and into the figures table. Consensus
 forecasts have only been stored since mid-September 2026, so most indicators
 need a few more months before they can be sized.
 
+## Revisions (October 27, 2026)
+
+When a release also revises the previous period's figure, release and
+pre-market notes get the previous value as first reported by the source that
+carries the revision (`previous`), the revised value (`previous_revised_to`) and the size and direction, e.g.
+"revised down by 2K" (`revision`). Both values are compared at the official
+reporting precision; a revision too small to show at that precision counts as no
+revision. With no revision the fields are left out (never zero). If only the
+revised value is known, `previous_revised_to` is sent without a size. Sources
+that report revisions today: ADP (monthly and weekly) and DOL jobless claims;
+BLS PPI rows compare the calendar's previous with the current BLS vintage, so
+there the original issuer figure is not verified.
+Prompt `desk:v5` tells the writer to mention a revision when it changes the
+picture.
+
 ## Week in review
 
 One AI call after the week's last close. Facts: each market's change from the
