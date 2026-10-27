@@ -175,12 +175,17 @@ The primer, week in review and auction notes do not get it.
 ## Normal move size (October 27, 2026)
 
 `core/analysis/move_size.py`, from hourly NQ buckets (the same filtered OHLC as
-the chart). A session counts when quotes cover at least 80% of its hours from
-one contract; gappy or rolled sessions are skipped, never counted as zero.
+the chart), read only inside trading hours (`trading_windows`: nothing after an
+early close or in the 2026 Labor Day halt). A session counts when quotes cover
+at least 80% of its trading hours from one contract; gappy or rolled sessions
+are skipped, never counted as zero.
 
 - **Typical daily range:** median high-minus-low of the complete sessions among
   the last 20, in points and percent (needs at least 10).
-- **Today's range** so far, and as a share of a typical day.
+- **The session's range** (`session_range_so_far` while it trades, labelled
+  with its date), and as a share of a typical day. A finished session's range is
+  given only if its quotes were complete, so a feed outage never looks like a
+  quiet day.
 - **Realised volatility:** standard deviation of one-hour log returns inside
   those sessions, annualised (252 × 23 hours; needs 100 returns). It leaves out
   the daily maintenance gap, so it reads a little below a close-to-close figure.
@@ -194,8 +199,9 @@ ready-made text (prompt `desk:v7`).
 0.6% and 1.5%, computed once per trade date. On 2026-10-27 the typical range
 was 1.46%, so the trigger is 0.80%, the same as the old fixed value; it rises in
 volatile weeks and falls in quiet ones. Without enough history, or if storage
-fails, `OMARKETS_DESK_MOVE_THRESHOLD_PCT` is used. The move note's facts say
-which trigger applied.
+fails, `OMARKETS_DESK_MOVE_THRESHOLD_PCT` is used (a failure is retried on the
+next poll). The trigger and whether it was scaled are cached together, so the
+facts always describe the trigger actually in use.
 
 ## Week in review
 

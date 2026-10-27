@@ -145,8 +145,8 @@ class DeskService:
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
-        #: The scaled large-move trigger for one trade date (see ``_move_threshold``).
-        self._trigger: tuple[date, float] | None = None
+        #: Trade date, large-move trigger and whether it was scaled (``_move_trigger``).
+        self._trigger: tuple[date, float, bool] | None = None
         self.ask_daily_limit = ask_daily_limit
         self.enabled = enabled
         self.poll_seconds = poll_seconds
@@ -574,7 +574,7 @@ class DeskService:
             start=now - timedelta(minutes=75), end=now, symbols=("NQ",),
             min_window=timedelta(minutes=30),
         )
-        threshold = await asyncio.to_thread(self._move_threshold, now)
+        threshold, _ = await asyncio.to_thread(self._move_trigger, now)
         if moves and abs(moves[0].change) >= threshold:
             return moves[0]
         return None
@@ -624,24 +624,27 @@ class DeskService:
             logger.exception("NQ move size unavailable")
             return None
 
-    def _move_threshold(self, now: datetime) -> float:
-        """The one-hour NQ move that triggers a note: scaled to the typical daily
-        range once per trade date, else the configured fixed threshold."""
+    def _move_trigger(self, now: datetime) -> tuple[float, bool]:
+        """The one-hour NQ move that triggers a note, and whether it is scaled to
+        the typical daily range (once per trade date) or the configured fixed
+        threshold. A storage failure is retried on the next poll, not cached."""
         day = active_session(now).trade_date
         if self._trigger is not None and self._trigger[0] == day:
-            return self._trigger[1]
+            return self._trigger[1], self._trigger[2]
         size = self._move_size(now)
         if size is None:
-            return self.move_threshold_pct
-        self._trigger = (day, size.trigger_pct(self.move_threshold_pct))
-        return self._trigger[1]
+            return self.move_threshold_pct, False
+        scaled = size.typical_range_pct is not None
+        self._trigger = (day, size.trigger_pct(self.move_threshold_pct), scaled)
+        return self._trigger[1], scaled
 
     def _nq_context(self, now: datetime) -> dict[str, Any]:
         """Where NQ is against its key levels and how big its moves normally are."""
         state = self.sources.market_state()
+        trigger, scaled = self._move_trigger(now)
         normal = F.normal_move(self._move_size(now), state.instruments.get("VXN"),
-                               state.instruments.get("VIX"),
-                               trigger_pct=self._move_threshold(now))
+                               state.instruments.get("VIX"), trigger_pct=trigger,
+                               trigger_scaled=scaled)
         return {**self._location(now), **({"normal_move_size": normal} if normal else {})}
 
     def _location(self, now: datetime) -> dict[str, Any]:

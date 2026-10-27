@@ -556,23 +556,27 @@ def price_location(levels: Any, price: float | None,
 VOL_INDEX_SKEW = timedelta(minutes=30)
 
 
-def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float) -> dict[str, Any] | None:
+def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
+                trigger_scaled: bool) -> dict[str, Any] | None:
     """How big NQ's moves normally are, and the fear gauges, as ready-made text.
 
     ``size`` is a :class:`core.analysis.move_size.MoveSize`; ``vxn``/``vix`` are
-    market-state instruments (or None). Unmeasurable parts are left out.
+    market-state instruments (or None). Unmeasurable parts are left out, and a
+    finished session's range only when its quotes were complete.
     """
     out: dict[str, Any] = {}
     if size is not None and size.typical_range is not None:
         out["typical_daily_range"] = (f"{size.typical_range:,.0f} points "
                                       f"({size.typical_range_pct:.2f}%)")
         out["typical_measured_over"] = f"median of the last {size.sessions} complete sessions"
-    if size is not None and size.today_range is not None:
-        today = f"{size.today_range:,.0f} points ({size.today_range_pct:.2f}%)"
+    if size is not None and size.today_range is not None and (
+            size.today_partial or size.today_complete):
+        today = (f"{size.trade_date:%a %b %d} session: {size.today_range:,.0f} points "
+                 f"({size.today_range_pct:.2f}%)")
         if size.typical_range_pct:
             share = size.today_range_pct / size.typical_range_pct * 100
             today += f", {share:.0f}% of a typical day"
-        out["today_range_so_far" if size.today_partial else "today_range"] = today
+        out["session_range_so_far" if size.today_partial else "session_range"] = today
     if size is not None and size.realised_vol_pct is not None:
         out["realised_volatility"] = f"{size.realised_vol_pct:.1f}% a year"
     vxn_value = getattr(vxn, "value", None)
@@ -588,9 +592,8 @@ def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float) -> dict[st
             out["vxn_minus_vix"] = f"{vxn_value - vix_value:+.2f} points"
     if not out:
         return None
-    scaled = size is not None and size.typical_range_pct is not None
     out["large_move_trigger"] = (f"{trigger_pct:.2f}% in one hour, "
-                                 + ("scaled to the typical daily range" if scaled
+                                 + ("scaled to the typical daily range" if trigger_scaled
                                     else "fixed (not enough history to scale it)"))
     return out
 

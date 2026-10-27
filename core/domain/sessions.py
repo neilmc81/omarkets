@@ -274,6 +274,15 @@ def session_phase(moment: datetime) -> SessionPhase:
     return SessionPhase.CLOSED
 
 
+def trading_windows(session: GlobexSession) -> list[tuple[datetime, datetime]]:
+    """The spans of ``session`` when futures trade, in UTC: the whole session,
+    except the 2026 Labor Day session, which leaves out its Monday halt."""
+    if session.trade_date != _LABOR_DAY_TRADE_DATE:
+        return [(session.opens_at, session.closes_at)]
+    return [(session.opens_at, _et_utc(_LABOR_DAY_2026, _LABOR_DAY_HALT)),
+            (_et_utc(_LABOR_DAY_2026, GLOBEX_OPEN), session.closes_at)]
+
+
 def market_closed(moment: datetime) -> bool:
     """True on a weekend, holiday or the daily maintenance break."""
     return session_phase(moment) in (SessionPhase.CLOSED, SessionPhase.MAINTENANCE)
@@ -423,6 +432,7 @@ __all__ = [
     "session_phase",
     "session_range",
     "session_segments",
+    "trading_windows",
     "volatility_index_open",
     "week_start",
 ]

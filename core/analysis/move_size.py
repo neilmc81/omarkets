@@ -7,7 +7,8 @@ Deterministic, from stored hourly OHLC buckets and the session engine:
   the session's last price. A session is complete when quotes cover at least
   ``MIN_COVERAGE`` of its hours from one futures contract; others (feed gaps,
   a contract roll) are skipped, never counted as a zero range.
-* **Today's range so far** — the active session's high minus low.
+* **Today's range so far** — the active session's high minus low (after the
+  session, only if its quotes are complete).
 * **Realised volatility** — the standard deviation of one-hour log returns
   inside those sessions (adjacent hours, same contract), annualised.
 * **Large-move trigger** — a one-hour move of ``TRIGGER_SHARE`` of the typical
@@ -24,7 +25,13 @@ from datetime import date, datetime, timedelta
 from math import log, sqrt
 from statistics import median, stdev
 
-from core.domain.sessions import GlobexSession, active_session, globex_session, previous_trade_date
+from core.domain.sessions import (
+    GlobexSession,
+    active_session,
+    globex_session,
+    previous_trade_date,
+    trading_windows,
+)
 from core.storage.base import OhlcBucket
 
 OhlcFn = Callable[..., Sequence[OhlcBucket]]
@@ -56,6 +63,8 @@ class MoveSize:
     today_range_pct: float | None
     #: True while the active session is still trading.
     today_partial: bool
+    #: True when today's quotes cover enough of its trading hours so far.
+    today_complete: bool = False
 
     def trigger_pct(self, fallback: float) -> float:
         """The one-hour move that counts as large, or ``fallback`` without history."""
@@ -74,10 +83,15 @@ def _lookback(session: GlobexSession) -> list[GlobexSession]:
     return sessions
 
 
-def _complete(session: GlobexSession, rows: list[OhlcBucket]) -> bool:
-    hours = (session.closes_at - session.opens_at) / _HOUR
+def _windows(session: GlobexSession, until: datetime) -> list[tuple[datetime, datetime]]:
+    return [(start, min(end, until)) for start, end in trading_windows(session) if start < until]
+
+
+def _complete(session: GlobexSession, rows: list[OhlcBucket], until: datetime) -> bool:
+    """Quotes from one contract cover at least ``MIN_COVERAGE`` of the trading hours."""
+    hours = sum((end - start) / _HOUR for start, end in _windows(session, until))
     contracts = {c for row in rows for c in row.contracts}
-    return len(rows) >= MIN_COVERAGE * hours and len(contracts) <= 1
+    return hours > 0 and len(rows) >= MIN_COVERAGE * hours and len(contracts) <= 1
 
 
 def _returns(rows: list[OhlcBucket]) -> list[float]:
@@ -88,8 +102,10 @@ def _returns(rows: list[OhlcBucket]) -> list[float]:
 def move_size(symbol: str, ohlc: OhlcFn, *, now: datetime) -> MoveSize:
     session = active_session(now)
     past = _lookback(session)
-    rows = sorted(ohlc(symbol, start=past[-1].opens_at, end=min(now, session.closes_at),
-                       bucket_seconds=3600), key=lambda b: b.start)
+    # Only quotes inside trading hours: none after an early close or in a halt.
+    within = [w for s in (*reversed(past), session) for w in _windows(s, now)]
+    rows = sorted(ohlc(symbol, start=within[0][0], end=within[-1][1], bucket_seconds=3600,
+                       within=within), key=lambda b: b.start)
     by_session: dict[date, list[OhlcBucket]] = {}
     for row in rows:
         for s in (session, *past):
@@ -101,7 +117,7 @@ def move_size(symbol: str, ohlc: OhlcFn, *, now: datetime) -> MoveSize:
     returns: list[float] = []
     for s in past:
         bucket = by_session.get(s.trade_date, [])
-        if not _complete(s, bucket):
+        if not _complete(s, bucket, s.closes_at):
             continue
         high, low, last = max(b.high for b in bucket), min(b.low for b in bucket), bucket[-1].close
         ranges.append((high - low, (high - low) / last * 100))
@@ -123,6 +139,7 @@ def move_size(symbol: str, ohlc: OhlcFn, *, now: datetime) -> MoveSize:
         trade_date=session.trade_date, sessions=len(ranges), typical_range=typical,
         typical_range_pct=typical_pct, realised_vol_pct=vol, today_range=today_range,
         today_range_pct=today_pct, today_partial=session.contains(now),
+        today_complete=_complete(session, today, now),
     )
 
 

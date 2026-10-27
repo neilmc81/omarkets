@@ -39,9 +39,10 @@ def past_days(n, start=None):
 
 
 def ohlc_of(rows):
-    def ohlc(symbol, *, start, end, bucket_seconds):
+    def ohlc(symbol, *, start, end, bucket_seconds, within=()):
         assert bucket_seconds == 3600
-        return [r for r in rows if start <= r.start < end]
+        return [r for r in rows if start <= r.start < end
+                and (not within or any(a <= r.start < b for a, b in within))]
     return ohlc
 
 
@@ -119,3 +120,42 @@ def test_no_quotes_today_is_unavailable():
     rows = [r for day in past_days(20) for r in session_rows(day)]
     size = MS.move_size("NQ", ohlc_of(rows), now=NOW)
     assert size.today_range is None and size.today_range_pct is None
+
+
+def test_quotes_after_an_early_close_are_not_read(memory_repo):
+    from tests.analysis.test_levels import obs
+
+    # Fri Nov 27 2026 closes at 13:15 ET; a 13:30 ET quote must not count.
+    early = globex_session(datetime(2026, 11, 27).date())
+    assert early.closes_at == datetime(2026, 11, 27, 18, 15, tzinfo=UTC)
+    memory_repo.store([obs(early.closes_at - timedelta(minutes=30), 20_000.0),
+                       obs(early.closes_at + timedelta(minutes=15), 22_000.0)])
+    seen = []
+
+    def ohlc(*args, **kwargs):
+        rows = memory_repo.ohlc(*args, **kwargs)
+        seen.extend(rows)
+        return rows
+
+    MS.move_size("NQ", ohlc, now=datetime(2026, 11, 30, 15, 0, tzinfo=UTC))
+    assert [r.high for r in seen] == [20_000.0]
+
+
+def test_labor_day_halt_is_not_counted_as_missing_hours():
+    from core.domain.sessions import trading_windows
+
+    labor = globex_session(datetime(2026, 9, 8).date())
+    windows = trading_windows(labor)
+    hours = sum((b - a) / HOUR for a, b in windows)
+    assert len(windows) == 2 and hours == 42
+    rows = [bucket(a + i * HOUR, 20_000.0) for a, b in windows
+            for i in range(int((b - a) / HOUR))][:34]          # 34 of 42 hours: 81%
+    assert MS._complete(labor, rows, labor.closes_at) is True
+
+
+def test_a_finished_session_with_missing_quotes_is_marked_incomplete():
+    today = globex_session(NOW.date())
+    rows = [r for day in past_days(20) for r in session_rows(day)]
+    rows += [bucket(today.opens_at, 20_000.0), bucket(today.opens_at + HOUR, 20_100.0)]
+    after = MS.move_size("NQ", ohlc_of(rows), now=today.closes_at + timedelta(minutes=30))
+    assert after.today_partial is False and after.today_complete is False
