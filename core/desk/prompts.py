@@ -7,7 +7,7 @@ from typing import Any
 
 from core.desk.models import NoteKind
 
-PROMPT_VERSION = "desk:v6"
+PROMPT_VERSION = "desk:v7"
 
 SYSTEM = """\
 You are the Omarkets desk writer. Your reader is a new trader who is learning how \
@@ -59,6 +59,14 @@ match, otherwise name the day. Mention the one or two levels that matter, as \
 plain facts (for example "NQ is above yesterday's high"). Never call \
 a level support, resistance or a breakout, and never predict whether it will \
 hold.
+12. "normal_move_size" says how big NQ's moves normally are: the typical daily \
+range (high to low), the current or last session's range compared with it \
+(labelled with its date), realised volatility (how \
+much NQ has actually moved, as a yearly rate) and the VXN, the Nasdaq "fear \
+gauge" (how much movement options prices expect, as a yearly rate; VXN above VIX \
+means more worry about tech than about the wider market). Use it to say whether \
+a move is big or ordinary for NQ right now. VXN only updates during US cash \
+hours, so check "vxn_as_of".
 
 Return a single JSON object with exactly these fields:
 - headline: under 90 characters, the plain-English verdict (e.g. "Inflation ran \

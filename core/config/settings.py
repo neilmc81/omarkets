@@ -261,7 +261,8 @@ class Settings(BaseSettings):
     desk_input_rate: float = Field(default=3.0, gt=0, allow_inf_nan=False)
     desk_output_rate: float = Field(default=15.0, gt=0, allow_inf_nan=False)
     desk_db_path: Path | None = None
-    #: NQ move over about an hour that earns its own "why is NQ moving" note.
+    #: NQ move over about an hour that earns its own "why is NQ moving" note, used
+    #: until there is enough history to scale it (``core/analysis/move_size.py``).
     desk_move_threshold_pct: float = Field(default=0.8, gt=0, allow_inf_nan=False)
     desk_notify: bool = True
     #: The 07:00 ET "what's on today" notification (no AI).

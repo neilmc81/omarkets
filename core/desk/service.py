@@ -17,6 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from core.analysis.levels import key_levels
+from core.analysis.move_size import MoveSize, move_size
 from core.desk import auctions as A
 from core.desk import breaking as B
 from core.desk import calendar as CAL
@@ -144,6 +145,8 @@ class DeskService:
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
+        #: Trade date, large-move trigger and whether it was scaled (``_move_trigger``).
+        self._trigger: tuple[date, float, bool] | None = None
         self.ask_daily_limit = ask_daily_limit
         self.enabled = enabled
         self.poll_seconds = poll_seconds
@@ -571,7 +574,8 @@ class DeskService:
             start=now - timedelta(minutes=75), end=now, symbols=("NQ",),
             min_window=timedelta(minutes=30),
         )
-        if moves and abs(moves[0].change) >= self.move_threshold_pct:
+        threshold, _ = await asyncio.to_thread(self._move_trigger, now)
+        if moves and abs(moves[0].change) >= threshold:
             return moves[0]
         return None
 
@@ -610,6 +614,38 @@ class DeskService:
                 "curve": rates.curve_text,
             },
         }, rates
+
+    def _move_size(self, now: datetime) -> MoveSize | None:
+        if self.sources.ohlc is None:
+            return None
+        try:
+            return move_size("NQ", self.sources.ohlc, now=now)
+        except Exception:  # noqa: BLE001 - move size is optional context
+            logger.exception("NQ move size unavailable")
+            return None
+
+    def _move_trigger(self, now: datetime) -> tuple[float, bool]:
+        """The one-hour NQ move that triggers a note, and whether it is scaled to
+        the typical daily range (once per trade date) or the configured fixed
+        threshold. A storage failure is retried on the next poll, not cached."""
+        day = active_session(now).trade_date
+        if self._trigger is not None and self._trigger[0] == day:
+            return self._trigger[1], self._trigger[2]
+        size = self._move_size(now)
+        if size is None:
+            return self.move_threshold_pct, False
+        scaled = size.typical_range_pct is not None
+        self._trigger = (day, size.trigger_pct(self.move_threshold_pct), scaled)
+        return self._trigger[1], scaled
+
+    def _nq_context(self, now: datetime) -> dict[str, Any]:
+        """Where NQ is against its key levels and how big its moves normally are."""
+        state = self.sources.market_state()
+        trigger, scaled = self._move_trigger(now)
+        normal = F.normal_move(self._move_size(now), state.instruments.get("VXN"),
+                               state.instruments.get("VIX"), trigger_pct=trigger,
+                               trigger_scaled=scaled)
+        return {**self._location(now), **({"normal_move_size": normal} if normal else {})}
 
     def _location(self, now: datetime) -> dict[str, Any]:
         """NQ against its overnight, prior-day and prior-week levels, if measurable."""
@@ -783,7 +819,7 @@ class DeskService:
                 "figures": self._figure_facts(sized),
                 "reaction_after_release": self._moves_facts(moves),
             })
-        facts = {**common, **(await asyncio.to_thread(self._location, now)),
+        facts = {**common, **(await asyncio.to_thread(self._nq_context, now)),
                  "released_this_morning": released_facts,
                  "still_scheduled_today": self._upcoming_facts(upcoming),
                  "overnight_headlines": self._headline_facts(headlines),
@@ -812,7 +848,7 @@ class DeskService:
         figures = self._sized(slot)
         facts = {
             **common,
-            **(await asyncio.to_thread(self._location, now)),
+            **(await asyncio.to_thread(self._nq_context, now)),
             "event": {"name": slot.title, "released": et(slot.at),
                       "what_it_is": F.explainer(slot.primary_code)},
             "figures": self._figure_facts(figures),
@@ -835,7 +871,7 @@ class DeskService:
         headlines = self._earnings_headlines(row, now)
         facts = {
             **common,
-            **(await asyncio.to_thread(self._location, now)),
+            **(await asyncio.to_thread(self._nq_context, now)),
             "company": {"name": row.company, "symbol": row.symbol,
                         "reported": f"{row.day:%a %b %d} {row.when_text}",
                         "eps_forecast": (f"${row.eps_forecast:.2f}"
@@ -860,7 +896,7 @@ class DeskService:
         direction = "up" if move.change > 0 else "down"
         facts = {
             **common,
-            **(await asyncio.to_thread(self._location, now)),
+            **(await asyncio.to_thread(self._nq_context, now)),
             "the_move": {"market": "Nasdaq 100 futures", "change": move.text,
                          "from": et(move.start_at), "to": et(move.end_at)},
             "other_markets_same_window": self._moves_facts(moves),
@@ -893,7 +929,7 @@ class DeskService:
             delayed=self._delayed(), min_window=timedelta(minutes=30),
         )
         headlines = self.headlines(now - timedelta(hours=6), now)
-        facts = {**common, **(await asyncio.to_thread(self._location, now)),
+        facts = {**common, **(await asyncio.to_thread(self._nq_context, now)),
                  "last_two_hours": self._moves_facts(moves),
                  "recent_headlines": self._headline_facts(headlines),
                  "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:5])}
