@@ -7,7 +7,7 @@ from typing import Any
 
 from core.desk.models import NoteKind
 
-PROMPT_VERSION = "desk:v7"
+PROMPT_VERSION = "desk:v8"
 
 SYSTEM = """\
 You are the Omarkets desk writer. Your reader is a new trader who is learning how \
@@ -67,6 +67,12 @@ gauge" (how much movement options prices expect, as a yearly rate; VXN above VIX
 means more worry about tech than about the wider market). Use it to say whether \
 a move is big or ordinary for NQ right now. VXN only updates during US cash \
 hours, so check "vxn_as_of".
+13. "macro_trends" is the recent direction of key economic data (inflation, \
+jobs, growth, the Fed's rate): the latest reading, whether it has been rising, \
+falling or steady, what a rise usually means for NQ, and how the last release \
+compared with forecasts. Use it for context, e.g. whether today's number fits \
+or breaks the trend. A trend describes the past, not a forecast. Skip it when \
+it is not relevant to the note; treat "stale" data with care.
 
 Return a single JSON object with exactly these fields:
 - headline: under 90 characters, the plain-English verdict (e.g. "Inflation ran \

@@ -117,6 +117,8 @@ class DeskSources:
     news_events: Callable[[], Sequence[Any]]
     #: Hourly OHLC buckets (``MarketStateService.ohlc``), for NQ's key levels.
     ohlc: Callable[..., Sequence[Any]] | None = None
+    #: The economic service's macro series, for the macro trends in notes.
+    macro_series: Callable[[], Sequence[Any]] | None = None
 
 
 class DeskService:
@@ -615,6 +617,19 @@ class DeskService:
             },
         }, rates
 
+    def _macro_trends(self, now: datetime, rates: Any) -> dict[str, Any]:
+        """The Macro page's trends as writer facts, if the series are available."""
+        if self.sources.macro_series is None:
+            return {}
+        try:
+            series = self.sources.macro_series()
+            events = self._events_between(now - M.RELEASE_LOOKBACK, now + M.FED_AHEAD)
+            trends = M.writer_trends(M.board(series, events, rates, now=now))
+        except Exception:  # noqa: BLE001 - macro trends are optional context
+            logger.exception("macro trends unavailable")
+            return {}
+        return {"macro_trends": trends} if trends else {}
+
     def _move_size(self, now: datetime) -> MoveSize | None:
         if self.sources.ohlc is None:
             return None
@@ -724,7 +739,8 @@ class DeskService:
             F.measure_moves, self.sources.history, start=now - timedelta(days=7), end=now,
             delayed=self._delayed(), min_window=timedelta(days=1),
         )
-        facts = {**common, "past_week_moves": self._moves_facts(week_moves),
+        facts = {**common, **(await asyncio.to_thread(self._macro_trends, now, rates)),
+                 "past_week_moves": self._moves_facts(week_moves),
                  "this_week": self._upcoming_facts(upcoming),
                  "recent_headlines": self._headline_facts(
                      self.headlines(now - timedelta(days=2), now, limit=20))}
@@ -784,6 +800,7 @@ class DeskService:
             "nq_each_day": daily,
             "events_by_nq_move": events,
             "next_week": self._upcoming_facts(upcoming[:8]),
+            **(await asyncio.to_thread(self._macro_trends, now, rates)),
         }
         title = f"Week in review · {week.trading_days[0]:%b %d}–{week.trading_days[-1]:%b %d}"
         return await self._write(note_id, NoteKind.REVIEW, title, now, facts,
@@ -820,6 +837,7 @@ class DeskService:
                 "reaction_after_release": self._moves_facts(moves),
             })
         facts = {**common, **(await asyncio.to_thread(self._nq_context, now)),
+                 **(await asyncio.to_thread(self._macro_trends, now, rates)),
                  "released_this_morning": released_facts,
                  "still_scheduled_today": self._upcoming_facts(upcoming),
                  "overnight_headlines": self._headline_facts(headlines),
@@ -855,6 +873,7 @@ class DeskService:
             "reaction_after_release": self._moves_facts(moves),
             "headlines_since_release": self._headline_facts(headlines),
             "next_events": self._upcoming_facts((await self.upcoming(now, days=3))[:5]),
+            **(await asyncio.to_thread(self._macro_trends, now, rates)),
         }
         if statement:
             facts["fed_statement_text"] = statement
