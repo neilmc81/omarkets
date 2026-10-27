@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from core.domain.instruments import AssetClass, Instrument, QuoteType
+from core.domain.instruments import AssetClass, Instrument, QuoteType, SessionCalendarId
 from core.providers.base import UnavailableInstrumentError
 from core.providers.fake import _SIM, FakeMarketDataProvider
 
@@ -152,6 +152,10 @@ def test_instrument_without_simulation_parameters_raises_unavailable() -> None:
         asset_class=AssetClass.EQUITY,
         quote_type=QuoteType.PRICE,
         unit="USD",
+        venue="NASDAQ",
+        currency="USD",
+        session_calendar=SessionCalendarId.CME_GLOBEX,
+        price_precision=2,
     )
     with pytest.raises(UnavailableInstrumentError) as excinfo:
         FakeMarketDataProvider(seed=1, instruments=[unknown], clock=_frozen_clock)

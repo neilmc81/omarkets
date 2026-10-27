@@ -88,19 +88,30 @@ def _et_utc(day: date, moment: time) -> datetime:
     return datetime.combine(day, moment, tzinfo=NEW_YORK).astimezone(UTC)
 
 
-class GlobexSession(BaseModel):
-    """A single CME Globex trading session, in UTC."""
+class TradingSession(BaseModel):
+    """One trading session of any calendar (:mod:`core.domain.calendars`), in UTC.
+
+    ``rth_*`` is the regular (cash) window inside the session, or ``None`` for a
+    market that has none (crypto).
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     trade_date: date
     opens_at: datetime
     closes_at: datetime
-    rth_opens_at: datetime
-    rth_closes_at: datetime
+    rth_opens_at: datetime | None = None
+    rth_closes_at: datetime | None = None
 
     def contains(self, moment: datetime) -> bool:
         return self.opens_at <= moment < self.closes_at
+
+
+class GlobexSession(TradingSession):
+    """A single CME Globex trading session, in UTC."""
+
+    rth_opens_at: datetime
+    rth_closes_at: datetime
 
     def in_rth(self, moment: datetime) -> bool:
         return self.rth_opens_at <= moment < self.rth_closes_at
@@ -417,6 +428,7 @@ __all__ = [
     "SegmentName",
     "SessionPhase",
     "SessionSegment",
+    "TradingSession",
     "active_session",
     "current_trade_date",
     "globex_session",

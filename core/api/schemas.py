@@ -57,6 +57,11 @@ class InstrumentDetail(BaseModel):
     quote_type: str
     timezone: str
     unit: str
+    venue: str
+    currency: str | None
+    session_calendar: str
+    session_calendar_label: str
+    price_precision: int = Field(ge=0)
     stale_after_seconds: float
     metadata: dict[str, str]
     state: InstrumentState

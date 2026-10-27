@@ -74,6 +74,24 @@ def test_crypto_trades_through_the_weekend():
     assert not state_of("BTC", FRIDAY_CLOSE, SATURDAY).market_closed
 
 
+def test_btc_is_never_market_closed_at_any_hour():
+    """Phase 0 gate: BTC's 24x7 calendar, not Globex, judges its quotes.
+
+    Every half hour for two weeks spanning a weekend, the daily CME break,
+    Thanksgiving and its early close, an old BTC quote is stale (an honest
+    "feed problem"), never excused as "market closed".
+    """
+    moment = datetime(2026, 11, 20, tzinfo=UTC)
+    while moment < datetime(2026, 12, 4, tzinfo=UTC):
+        for age in (timedelta(minutes=5), timedelta(hours=3)):
+            btc = state_of("BTC", moment - age, moment)
+            assert btc.status is DataStatus.STALE and not btc.market_closed, moment
+        moment += timedelta(minutes=30)
+    # The same quote ages on NQ do get excused over Thanksgiving.
+    thanksgiving = datetime(2026, 11, 26, 17, 0, tzinfo=UTC)
+    assert state_of("NQ", datetime(2026, 11, 25, 21, 0, tzinfo=UTC), thanksgiving).market_closed
+
+
 def test_risk_tone_says_markets_closed():
     market = build_market_state(
         {s: obs(s, FRIDAY_CLOSE) for s in ("NQ", "US2Y", "DXY", "VIX")},

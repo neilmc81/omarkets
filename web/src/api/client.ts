@@ -1,4 +1,4 @@
-import { healthResponseSchema } from "./schemas";
+import { healthResponseSchema, instrumentsResponseSchema } from "./schemas";
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number | null = null) {
@@ -55,3 +55,4 @@ async function requestValidated<T>(url: string, schema: { parse: (data: unknown)
 }
 
 export const fetchHealth = (signal?: AbortSignal) => requestValidated("/health", healthResponseSchema, signal);
+export const fetchInstruments = (signal?: AbortSignal) => requestValidated("/api/v1/instruments", instrumentsResponseSchema, signal);

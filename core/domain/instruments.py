@@ -21,9 +21,14 @@ class AssetClass(StrEnum):
     """Broad asset class, used for staleness defaults and grouping."""
 
     EQUITY_INDEX_FUTURE = "equity_index_future"
+    #: A cash index (SPX, DAX), as distinct from its futures.
+    EQUITY_INDEX = "equity_index"
     EQUITY = "equity"
     TREASURY_YIELD = "treasury_yield"
+    #: A currency index such as DXY, as distinct from a currency pair.
     FX_INDEX = "fx_index"
+    #: A spot currency pair such as EURUSD.
+    FX_SPOT = "fx_spot"
     VOLATILITY_INDEX = "volatility_index"
     COMMODITY = "commodity"
     CRYPTO = "crypto"
@@ -37,8 +42,27 @@ class QuoteType(StrEnum):
     INDEX = "index"
 
 
+class SessionCalendarId(StrEnum):
+    """Which trading calendar decides when an instrument's market is open.
+
+    The calendars themselves live in :mod:`core.domain.calendars`.
+    """
+
+    #: CME Globex (Sunday-Friday 18:00-17:00 ET, daily break, CME holidays).
+    CME_GLOBEX = "cme_globex"
+    #: Always open; a "day" is 00:00-24:00 UTC (crypto).
+    ALWAYS_OPEN = "24x7"
+
+
 class Instrument(BaseModel):
-    """A canonical, tradeable or observable instrument."""
+    """A canonical, tradeable or observable instrument.
+
+    ``venue`` is where the instrument trades or is computed, which is separate
+    from the provider that sends its price (see ``core/providers/registry.py``).
+    ``currency`` is the ISO code it is priced or settled in, or ``None`` for a
+    rate or index that is not an amount of money (yields, DXY, VIX).
+    ``price_precision`` is the number of decimals the venue quotes.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -48,6 +72,10 @@ class Instrument(BaseModel):
     quote_type: QuoteType
     timezone: str = "America/New_York"
     unit: str = Field(min_length=1)
+    venue: str = Field(min_length=1)
+    currency: str | None = Field(pattern=r"^[A-Z]{3}$")
+    session_calendar: SessionCalendarId
+    price_precision: int = Field(ge=0, le=8)
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
@@ -73,18 +101,34 @@ def _instrument(
     quote_type: QuoteType,
     unit: str,
     *,
+    venue: str,
+    currency: str | None,
+    price_precision: int,
+    session_calendar: SessionCalendarId = SessionCalendarId.CME_GLOBEX,
     timezone: str = "America/New_York",
     **metadata: str,
 ) -> Instrument:
+    # Every non-crypto instrument keeps the CME Globex calendar it has always
+    # been judged by. Stocks, yields and cash indices get their own calendars
+    # in their phase of the multi-asset plan (docs/PLAN.md §6).
     return Instrument(
         symbol=symbol,
         display_name=display_name,
         asset_class=asset_class,
         quote_type=quote_type,
         unit=unit,
+        venue=venue,
+        currency=currency,
+        session_calendar=session_calendar,
+        price_precision=price_precision,
         timezone=timezone,
         metadata=metadata,
     )
+
+
+def _megacap(symbol: str, display_name: str) -> Instrument:
+    return _instrument(symbol, display_name, AssetClass.EQUITY, QuoteType.PRICE, "USD",
+                       venue="NASDAQ", currency="USD", price_precision=2)
 
 
 _ALL: tuple[Instrument, ...] = (
@@ -95,6 +139,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.EQUITY_INDEX_FUTURE,
         QuoteType.PRICE,
         "index points",
+        venue="CME",
+        currency="USD",
+        price_precision=2,
     ),
     # --- Cross-asset context ---
     _instrument(
@@ -103,6 +150,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.EQUITY_INDEX_FUTURE,
         QuoteType.PRICE,
         "index points",
+        venue="CME",
+        currency="USD",
+        price_precision=2,
     ),
     _instrument(
         "US2Y",
@@ -110,6 +160,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.TREASURY_YIELD,
         QuoteType.YIELD,
         "percent",
+        venue="OTC",
+        currency=None,
+        price_precision=3,
     ),
     _instrument(
         "US10Y",
@@ -117,6 +170,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.TREASURY_YIELD,
         QuoteType.YIELD,
         "percent",
+        venue="OTC",
+        currency=None,
+        price_precision=3,
     ),
     _instrument(
         "DXY",
@@ -124,6 +180,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.FX_INDEX,
         QuoteType.INDEX,
         "index points",
+        venue="ICE",
+        currency=None,
+        price_precision=3,
     ),
     _instrument(
         "VIX",
@@ -131,6 +190,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.VOLATILITY_INDEX,
         QuoteType.INDEX,
         "index points",
+        venue="CBOE",
+        currency=None,
+        price_precision=2,
     ),
     _instrument(
         "VXN",
@@ -138,6 +200,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.VOLATILITY_INDEX,
         QuoteType.INDEX,
         "index points",
+        venue="CBOE",
+        currency=None,
+        price_precision=2,
     ),
     _instrument(
         "WTI",
@@ -145,6 +210,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.COMMODITY,
         QuoteType.PRICE,
         "USD per barrel",
+        venue="NYMEX",
+        currency="USD",
+        price_precision=2,
     ),
     _instrument(
         "GOLD",
@@ -152,6 +220,9 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.COMMODITY,
         QuoteType.PRICE,
         "USD per troy ounce",
+        venue="COMEX",
+        currency="USD",
+        price_precision=1,
     ),
     _instrument(
         "BTC",
@@ -159,17 +230,21 @@ _ALL: tuple[Instrument, ...] = (
         AssetClass.CRYPTO,
         QuoteType.PRICE,
         "USD",
+        venue="BINANCE",
+        currency="USD",
+        price_precision=2,
+        session_calendar=SessionCalendarId.ALWAYS_OPEN,
         timezone="UTC",
     ),
-    # --- Technology context ---
-    _instrument("NVDA", "NVIDIA", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
-    _instrument("MSFT", "Microsoft", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
-    _instrument("AAPL", "Apple", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
-    _instrument("AMZN", "Amazon", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
-    _instrument("META", "Meta Platforms", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
-    _instrument("GOOGL", "Alphabet", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
-    _instrument("AVGO", "Broadcom", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
-    _instrument("TSLA", "Tesla", AssetClass.EQUITY, QuoteType.PRICE, "USD"),
+    # --- Technology context (all eight list on Nasdaq) ---
+    _megacap("NVDA", "NVIDIA"),
+    _megacap("MSFT", "Microsoft"),
+    _megacap("AAPL", "Apple"),
+    _megacap("AMZN", "Amazon"),
+    _megacap("META", "Meta Platforms"),
+    _megacap("GOOGL", "Alphabet"),
+    _megacap("AVGO", "Broadcom"),
+    _megacap("TSLA", "Tesla"),
 )
 
 #: The canonical instrument registry. Read-only: the universe is static.

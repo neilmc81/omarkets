@@ -25,6 +25,7 @@ from core.analysis.risk_tone import risk_tone
 from core.api.routes import ServiceDep
 from core.desk.facts import LABELS, STRIP_SYMBOLS
 from core.desk.service import DeskService
+from core.domain.calendars import CME_GLOBEX, calendar_for
 from core.domain.chart import (
     INTERVAL_SECONDS,
     BarsResponse,
@@ -79,7 +80,11 @@ async def bars(
     interval: Interval = Interval.M5,
     range: Annotated[ChartRange, Query(alias="range")] = ChartRange.DAY,  # noqa: A002
 ) -> BarsResponse:
-    """OHLC bars from stored observations; gaps inside a session stay gaps."""
+    """OHLC bars from stored observations; gaps inside a session stay gaps.
+
+    Sessions come from the instrument's own calendar: Globex for NQ, a UTC day
+    for BTC.
+    """
     canonical = _symbol(symbol)
     try:
         B.check_interval(range, interval)
@@ -87,7 +92,8 @@ async def bars(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     state = service.current_state()
     now = state.generated_at
-    sessions = B.range_sessions(range, now)
+    calendar = calendar_for(canonical)
+    sessions = B.range_sessions(range, now, calendar)
     start, end = B.window(sessions, now)
     try:
         built, buckets = await asyncio.to_thread(
@@ -106,7 +112,7 @@ async def bars(
         label=LABELS.get(canonical, inst.display_name if inst else canonical),
         unit=inst.unit if inst else "",
         interval=interval, range=range, generated_at=now, start=start, end=end,
-        sessions=[B.chart_session(s) for s in sessions],
+        sessions=[B.chart_session(s, calendar) for s in sessions],
         bars=built,
         last_at=max((b.last_at for b in buckets), default=None),
         delayed=any(b.delayed for b in present),
@@ -141,7 +147,7 @@ async def session(service: ServiceDep) -> SessionCalendar:
         day += timedelta(days=1)
     return SessionCalendar(
         now=now, phase=phase, text=DeskService.session_text(now),
-        session=B.chart_session(current),
+        session=B.chart_session(current, CME_GLOBEX),
         maintenance_starts_at=maintenance[0], maintenance_ends_at=maintenance[1],
         next_open_at=(next_session_open(now)
                       if phase in (SessionPhase.CLOSED, SessionPhase.MAINTENANCE) else None),
@@ -184,7 +190,8 @@ async def chart_pins(
     if desk is None:
         raise HTTPException(status_code=503, detail="Desk is not enabled")
     now = service.current_state().generated_at
-    sessions = B.range_sessions(range, now)
+    # Release pins sit on the NQ chart, so they follow the Globex sessions.
+    sessions = B.range_sessions(range, now, CME_GLOBEX)
     start, end = sessions[0].opens_at, sessions[-1].closes_at
     try:
         found = await asyncio.to_thread(desk.chart_pins, start, end)

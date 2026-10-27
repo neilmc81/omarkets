@@ -15,6 +15,7 @@ from core.domain.instruments import (
     PRIMARY_SYMBOL,
     AssetClass,
     QuoteType,
+    SessionCalendarId,
     all_symbols,
     get_instrument,
     normalize_symbol,
@@ -119,3 +120,38 @@ def test_btc_uses_utc_timezone() -> None:
     btc = get_instrument("BTC")
     assert btc is not None
     assert btc.timezone == "UTC"
+
+
+def test_asset_classes_include_spot_fx_and_cash_indices() -> None:
+    assert AssetClass.FX_SPOT.value == "fx_spot"
+    assert AssetClass.EQUITY_INDEX.value == "equity_index"
+    # DXY stays a currency index, not a pair.
+    assert INSTRUMENTS["DXY"].asset_class is AssetClass.FX_INDEX
+
+
+def test_every_instrument_declares_venue_currency_calendar_and_precision() -> None:
+    venues = {symbol: instrument.venue for symbol, instrument in INSTRUMENTS.items()}
+    assert venues["NQ"] == venues["ES"] == "CME"
+    assert venues["BTC"] == "BINANCE"
+    assert venues["NVDA"] == "NASDAQ"
+    for symbol, instrument in INSTRUMENTS.items():
+        assert 0 <= instrument.price_precision <= 8, symbol
+        expected = (SessionCalendarId.ALWAYS_OPEN if symbol == "BTC"
+                    else SessionCalendarId.CME_GLOBEX)
+        assert instrument.session_calendar is expected, symbol
+    # Rates and indices are not amounts of money; prices are.
+    for symbol in ("US2Y", "US10Y", "DXY", "VIX", "VXN"):
+        assert INSTRUMENTS[symbol].currency is None, symbol
+    for symbol in ("NQ", "ES", "WTI", "GOLD", "BTC", "AAPL"):
+        assert INSTRUMENTS[symbol].currency == "USD", symbol
+    assert INSTRUMENTS["US2Y"].price_precision == 3
+
+
+def test_currency_must_be_an_iso_code() -> None:
+    from pydantic import ValidationError
+
+    from core.domain.instruments import Instrument
+
+    nq = INSTRUMENTS["NQ"].model_dump()
+    with pytest.raises(ValidationError):
+        Instrument(**{**nq, "currency": "usd"})

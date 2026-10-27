@@ -69,6 +69,12 @@ describe("SessionChart data mapping", () => {
       { from: seconds("2026-10-22T20:00:00Z"), to: seconds("2026-10-22T21:00:00Z") },
     ]);
   });
+
+  it("shades nothing in a 24x7 session, which has no cash hours", () => {
+    const day = { ...bars.sessions[0], trade_date: "2026-10-24", opens_at: "2026-10-24T00:00:00Z",
+      closes_at: "2026-10-25T00:00:00Z", rth_opens_at: null, rth_closes_at: null, segments: [] };
+    expect(overnightRanges([day, ...bars.sessions])).toEqual(overnightRanges(bars.sessions));
+  });
 });
 
 describe("SessionChart", () => {

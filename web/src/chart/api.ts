@@ -22,8 +22,9 @@ const sessionSchema = z.object({
   trade_date: z.string(),
   opens_at: time,
   closes_at: time,
-  rth_opens_at: time,
-  rth_closes_at: time,
+  // Null on a calendar without cash hours (24x7 crypto).
+  rth_opens_at: time.nullable(),
+  rth_closes_at: time.nullable(),
   early_close: z.boolean(),
   segments: z.array(segmentSchema),
 });

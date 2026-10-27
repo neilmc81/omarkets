@@ -2,11 +2,13 @@
 
 Rules:
 
-* A range is a set of whole Globex sessions from the session engine
-  (:mod:`core.domain.sessions`): ``1d`` is the active (or most recently
-  completed) session, ``5d`` the last five trading sessions, ``1m`` the trading
-  sessions of the last 30 calendar days. Weekends, holidays and the daily
-  maintenance break are not part of any session, so they never get bars.
+* A range is a set of whole sessions from the instrument's trading calendar
+  (:mod:`core.domain.calendars`; CME Globex unless the instrument says
+  otherwise): ``1d`` is the active (or most recently completed) session, ``5d``
+  the last five trading sessions, ``1m`` the trading sessions of the last 30
+  calendar days. On CME, weekends, holidays and the daily maintenance break are
+  not part of any session, so they never get bars. On the 24×7 calendar every
+  UTC day is a session.
 * Bars are aligned to the interval in UTC. ET is a whole number of hours from
   UTC, so 5-, 15- and 60-minute bars also start on whole ET minutes and hours.
 * A bar exists only where observations exist. Between a session's first and
@@ -25,6 +27,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 
 from core.desk import explainers as X
+from core.domain.calendars import CME_GLOBEX, SessionCalendar
 from core.domain.chart import (
     INTERVAL_SECONDS,
     Bar,
@@ -34,14 +37,7 @@ from core.domain.chart import (
     Sparkline,
     SparklinePoint,
 )
-from core.domain.market_calendar import is_early_close
-from core.domain.sessions import (
-    GlobexSession,
-    active_session,
-    globex_session,
-    previous_trade_date,
-    session_segments,
-)
+from core.domain.sessions import TradingSession
 from core.storage.base import OhlcBucket
 
 OhlcFn = Callable[..., Sequence[OhlcBucket]]
@@ -60,37 +56,39 @@ class RangeError(ValueError):
     """An interval that the range does not allow."""
 
 
-def range_sessions(chart_range: ChartRange, now: datetime) -> list[GlobexSession]:
-    """The trading sessions a range covers, oldest first."""
-    latest = active_session(now)
+def range_sessions(chart_range: ChartRange, now: datetime,
+                   calendar: SessionCalendar = CME_GLOBEX) -> list[TradingSession]:
+    """The trading sessions a range covers on ``calendar``, oldest first."""
+    latest = calendar.active_session(now)
     if chart_range is ChartRange.DAY:
         return [latest]
     if chart_range is ChartRange.FIVE_DAYS:
         dates = [latest.trade_date]
         while len(dates) < FIVE_DAY_SESSIONS:
-            dates.append(previous_trade_date(dates[-1]))
-        return [globex_session(day) for day in reversed(dates)]
+            dates.append(calendar.previous_trade_date(dates[-1]))
+        return [calendar.session(day) for day in reversed(dates)]
     earliest = latest.trade_date - timedelta(days=MONTH_DAYS)
     dates = [latest.trade_date]
-    while (before := previous_trade_date(dates[-1])) > earliest:
+    while (before := calendar.previous_trade_date(dates[-1])) > earliest:
         dates.append(before)
-    return [globex_session(day) for day in reversed(dates)]
+    return [calendar.session(day) for day in reversed(dates)]
 
 
-def chart_session(session: GlobexSession) -> ChartSession:
+def chart_session(session: TradingSession,
+                  calendar: SessionCalendar = CME_GLOBEX) -> ChartSession:
     return ChartSession(
         trade_date=session.trade_date,
         opens_at=session.opens_at,
         closes_at=session.closes_at,
         rth_opens_at=session.rth_opens_at,
         rth_closes_at=session.rth_closes_at,
-        early_close=is_early_close(session.trade_date),
+        early_close=calendar.early_close(session.trade_date),
         segments=[s.model_copy(update={"explainer": X.segment(s.name).text})
-                  for s in session_segments(session.trade_date)],
+                  for s in calendar.segments(session.trade_date)],
     )
 
 
-def window(sessions: Sequence[GlobexSession], now: datetime) -> tuple[datetime, datetime]:
+def window(sessions: Sequence[TradingSession], now: datetime) -> tuple[datetime, datetime]:
     """The chart window: the first session's open to now or the last close."""
     return sessions[0].opens_at, min(now.astimezone(UTC), sessions[-1].closes_at)
 
@@ -120,7 +118,7 @@ def _gap(start: datetime) -> Bar:
 def read_bars(
     ohlc: OhlcFn,
     symbol: str,
-    sessions: Sequence[GlobexSession],
+    sessions: Sequence[TradingSession],
     interval: Interval,
     *,
     end: datetime,

@@ -55,9 +55,10 @@ export function pinBarTime(pin: Pin, barTimes: number[], step: number): number |
   return null;
 }
 
-/** Overnight stretches to shade: everything in a session outside the cash hours. */
+/** Overnight stretches to shade: everything in a session outside the cash hours.
+ * A session without cash hours (24x7 crypto) has nothing to shade. */
 export function overnightRanges(sessions: ChartSession[]): Array<{ from: number; to: number }> {
-  return sessions.flatMap((s) => [
+  return sessions.flatMap((s) => s.rth_opens_at === null || s.rth_closes_at === null ? [] : [
     { from: seconds(s.opens_at), to: seconds(s.rth_opens_at) },
     { from: seconds(s.rth_closes_at), to: seconds(s.closes_at) },
   ]).filter((range) => range.to > range.from);

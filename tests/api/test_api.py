@@ -119,12 +119,20 @@ def test_instruments_listing(client):
     nq = next(i for i in body["instruments"] if i["symbol"] == "NQ")
     assert nq["asset_class"] == "equity_index_future"
     assert nq["state"]["symbol"] == "NQ"
+    assert (nq["venue"], nq["currency"], nq["price_precision"]) == ("CME", "USD", 2)
+    assert nq["session_calendar"] == "cme_globex"
+    assert nq["session_calendar_label"].startswith("CME Globex")
+    btc = next(i for i in body["instruments"] if i["symbol"] == "BTC")
+    assert (btc["venue"], btc["session_calendar"]) == ("BINANCE", "24x7")
+    us2y = next(i for i in body["instruments"] if i["symbol"] == "US2Y")
+    assert us2y["currency"] is None and us2y["price_precision"] == 3
 
 
 def test_instrument_lookup_is_case_insensitive(client):
     response = client.get("/api/v1/instruments/nq")
     assert response.status_code == 200
     assert response.json()["symbol"] == "NQ"
+    assert response.json()["venue"] == "CME"
 
 
 def test_unknown_instrument_returns_404(client):
