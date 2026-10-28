@@ -1,0 +1,76 @@
+{
+ "desk:v4": {
+  "ask:20261024T074748": {
+   "absent_not_missing": 0,
+   "bp_as_percent": 0,
+   "closed_as_stale": 3,
+   "issues": 14,
+   "over_length": true,
+   "repeated_lesson": null,
+   "sign_errors": 0,
+   "signed_direction": 10,
+   "unverifiable_numbers": 13,
+   "words": 296
+  },
+  "move:20261027T11": {
+   "absent_not_missing": 0,
+   "bp_as_percent": 0,
+   "closed_as_stale": 0,
+   "issues": 2,
+   "over_length": true,
+   "repeated_lesson": "vix",
+   "sign_errors": 0,
+   "signed_direction": 0,
+   "unverifiable_numbers": 10,
+   "words": 310
+  },
+  "premarket:2026-10-27": {
+   "absent_not_missing": 0,
+   "bp_as_percent": 0,
+   "closed_as_stale": 0,
+   "issues": 12,
+   "over_length": true,
+   "repeated_lesson": "auction",
+   "sign_errors": 0,
+   "signed_direction": 10,
+   "unverifiable_numbers": 11,
+   "words": 336
+  },
+  "release:20261022T1230:INITIAL_CLAIMS": {
+   "absent_not_missing": 0,
+   "bp_as_percent": 0,
+   "closed_as_stale": 0,
+   "issues": 12,
+   "over_length": true,
+   "repeated_lesson": null,
+   "sign_errors": 0,
+   "signed_direction": 11,
+   "unverifiable_numbers": 6,
+   "words": 363
+  },
+  "release:20261027T1230:DURABLE_GOODS": {
+   "absent_not_missing": 0,
+   "bp_as_percent": 0,
+   "closed_as_stale": 0,
+   "issues": 1,
+   "over_length": true,
+   "repeated_lesson": null,
+   "sign_errors": 0,
+   "signed_direction": 0,
+   "unverifiable_numbers": 6,
+   "words": 308
+  },
+  "review:2026-10-19": {
+   "absent_not_missing": 0,
+   "bp_as_percent": 1,
+   "closed_as_stale": 0,
+   "issues": 2,
+   "over_length": true,
+   "repeated_lesson": null,
+   "sign_errors": 0,
+   "signed_direction": 0,
+   "unverifiable_numbers": 12,
+   "words": 347
+  }
+ }
+}

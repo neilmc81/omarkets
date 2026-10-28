@@ -1,0 +1,259 @@
+{
+ "id": "review:2026-10-19",
+ "kind": "review",
+ "model": "anthropic/claude-opus-5.5",
+ "prompt_version": "desk:v4",
+ "why_chosen": "Weekly review, Opus. The only stored review.",
+ "facts_stored": [
+  "figures",
+  "moves",
+  "headlines",
+  "upcoming",
+  "rates"
+ ],
+ "facts_not_stored": [
+  "now / session text",
+  "markets_today (quote strip: levels, change today, delayed/stale flags)",
+  "breaking_alerts",
+  "bond_market as sent (rates is stored separately)",
+  "earnings / auction / statement details beyond figures and headlines"
+ ],
+ "note": {
+  "id": "review:2026-10-19",
+  "kind": "review",
+  "title": "Week in review · Oct 19–Oct 23",
+  "created_at": "2026-10-23T20:15:46.378075Z",
+  "event_at": "2026-10-23T20:00:00Z",
+  "figures": [],
+  "moves": [
+   {
+    "symbol": "NQ",
+    "label": "Nasdaq 100 futures",
+    "start_value": 29380.0,
+    "end_value": 29121.0,
+    "start_at": "2026-10-16T20:00:00Z",
+    "end_at": "2026-10-23T19:59:57Z",
+    "change": -0.88,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "-0.88%"
+   },
+   {
+    "symbol": "ES",
+    "label": "S&P 500 futures",
+    "start_value": 7702.25,
+    "end_value": 7660.25,
+    "start_at": "2026-10-16T19:59:59Z",
+    "end_at": "2026-10-23T19:59:57Z",
+    "change": -0.55,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "-0.55%"
+   },
+   {
+    "symbol": "US2Y",
+    "label": "2-year yield",
+    "start_value": 4.717,
+    "end_value": 4.686,
+    "start_at": "2026-10-16T19:59:52Z",
+    "end_at": "2026-10-23T19:59:33Z",
+    "change": -3.1,
+    "change_unit": "bp",
+    "delayed": false,
+    "text": "-3.1bp"
+   },
+   {
+    "symbol": "US10Y",
+    "label": "10-year yield",
+    "start_value": 5.083,
+    "end_value": 4.999,
+    "start_at": "2026-10-16T19:59:36Z",
+    "end_at": "2026-10-23T19:59:54Z",
+    "change": -8.4,
+    "change_unit": "bp",
+    "delayed": false,
+    "text": "-8.4bp"
+   },
+   {
+    "symbol": "DXY",
+    "label": "US dollar",
+    "start_value": 101.787,
+    "end_value": 101.8,
+    "start_at": "2026-10-16T19:59:55Z",
+    "end_at": "2026-10-23T19:59:56Z",
+    "change": 0.01,
+    "change_unit": "%",
+    "delayed": false,
+    "text": "+0.01%"
+   },
+   {
+    "symbol": "VIX",
+    "label": "VIX fear gauge",
+    "start_value": 19.99,
+    "end_value": 19.79,
+    "start_at": "2026-10-16T20:00:00Z",
+    "end_at": "2026-10-23T19:59:46Z",
+    "change": -1.0,
+    "change_unit": "%",
+    "delayed": false,
+    "text": "-1.00%"
+   },
+   {
+    "symbol": "WTI",
+    "label": "Crude oil",
+    "start_value": 101.59,
+    "end_value": 103.65,
+    "start_at": "2026-10-16T19:59:58Z",
+    "end_at": "2026-10-23T19:59:57Z",
+    "change": 2.03,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "+2.03%"
+   },
+   {
+    "symbol": "GOLD",
+    "label": "Gold",
+    "start_value": 4189.8,
+    "end_value": 4013.3,
+    "start_at": "2026-10-16T19:59:59Z",
+    "end_at": "2026-10-23T19:59:57Z",
+    "change": -4.21,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "-4.21%"
+   }
+  ],
+  "headlines": [],
+  "upcoming": [
+   {
+    "kind": "auction",
+    "title": "Treasury auction: 2-year note",
+    "at": "2026-10-26T17:00:00Z",
+    "when_text": "results at 1:00 PM ET",
+    "importance": "medium",
+    "detail": "$69 billion on offer",
+    "explainer": "The US Treasury sells new government debt at auction. Strong demand tends to pull yields down; weak demand can push yields up, which often weighs on Nasdaq stocks."
+   },
+   {
+    "kind": "auction",
+    "title": "Treasury auction: 5-year note",
+    "at": "2026-10-27T17:00:00Z",
+    "when_text": "results at 1:00 PM ET",
+    "importance": "medium",
+    "detail": "$70 billion on offer",
+    "explainer": "The US Treasury sells new government debt at auction. Strong demand tends to pull yields down; weak demand can push yields up, which often weighs on Nasdaq stocks."
+   },
+   {
+    "kind": "fed",
+    "title": "Fed rate decision",
+    "at": "2026-10-28T18:00:00Z",
+    "when_text": "",
+    "importance": "critical",
+    "detail": null,
+    "explainer": "The Federal Reserve sets interest rates. The single biggest scheduled event for markets."
+   },
+   {
+    "kind": "fed",
+    "title": "Fed chair press conference",
+    "at": "2026-10-28T18:30:00Z",
+    "when_text": "",
+    "importance": "high",
+    "detail": null,
+    "explainer": "The Fed chair explains the decision and takes questions. Markets often swing during it."
+   },
+   {
+    "kind": "earnings",
+    "title": "Alphabet (Google) earnings",
+    "at": "2026-10-28T20:05:00Z",
+    "when_text": "after the close",
+    "importance": "high",
+    "detail": "EPS forecast $2.94",
+    "explainer": "Alphabet (Google) is one of the largest Nasdaq 100 companies, so its results and outlook can move the whole index."
+   },
+   {
+    "kind": "earnings",
+    "title": "Microsoft earnings",
+    "at": "2026-10-28T20:05:00Z",
+    "when_text": "after the close",
+    "importance": "high",
+    "detail": "EPS forecast $4.71",
+    "explainer": "Microsoft is one of the largest Nasdaq 100 companies, so its results and outlook can move the whole index."
+   },
+   {
+    "kind": "economic",
+    "title": "PCE inflation & GDP (economic growth)",
+    "at": "2026-10-29T12:30:00Z",
+    "when_text": "",
+    "importance": "high",
+    "detail": null,
+    "explainer": "The Fed's preferred inflation measure. Matters a lot for rate expectations."
+   },
+   {
+    "kind": "auction",
+    "title": "Treasury auction: 7-year note",
+    "at": "2026-10-29T17:00:00Z",
+    "when_text": "results at 1:00 PM ET",
+    "importance": "medium",
+    "detail": "$44 billion on offer",
+    "explainer": "The US Treasury sells new government debt at auction. Strong demand tends to pull yields down; weak demand can push yields up, which often weighs on Nasdaq stocks."
+   }
+  ],
+  "rates": {
+   "as_of": "2026-10-23T20:15:04Z",
+   "lines": [
+    {
+     "symbol": "US2Y",
+     "label": "2-year yield",
+     "value": 4.686,
+     "value_text": "4.686%",
+     "day_change_bp": 5.1,
+     "week_change_bp": -3.1,
+     "day_text": "+5.1bp",
+     "week_text": "-3.1bp"
+    },
+    {
+     "symbol": "US10Y",
+     "label": "10-year yield",
+     "value": 5.001,
+     "value_text": "5.001%",
+     "day_change_bp": 4.8,
+     "week_change_bp": -8.4,
+     "day_text": "+4.8bp",
+     "week_text": "-8.4bp"
+    },
+    {
+     "symbol": "CURVE",
+     "label": "Curve (10y minus 2y)",
+     "value": 31.5,
+     "value_text": "+32bp",
+     "day_change_bp": -0.3,
+     "week_change_bp": -5.3,
+     "day_text": "-0.3bp",
+     "week_text": "-5.3bp"
+    }
+   ],
+   "curve_bp": 31.5,
+   "curve_text": "+32bp, normal (10-year above 2-year)",
+   "explainer": "Treasury yields are the interest rate the US government pays to borrow. The 2-year follows what traders expect the Fed to do with rates; the 10-year reflects longer-run growth and inflation. Rising yields usually weigh on Nasdaq stocks, because the future profits that tech prices depend on are worth less today when safe bonds pay more. Falling yields usually help."
+  },
+  "draft": {
+   "headline": "Nasdaq futures slip 0.88% as an early-week rally fades after Tesla",
+   "summary": "NQ finished the week down 0.88%. Gains on Monday and Tuesday gave way to three down days, led by Thursday's 1.52% drop. Yields fell over the week, but that did not stop tech from losing ground.",
+   "what_it_means": "Tesla looked like the week's key moment. It beat on earnings and sales, but its car revenue shrank. NQ's drop grew from −0.16% in the first 21 minutes to −3.01% by the close, but that window overlaps Thursday's slide, so not all of it belongs to Tesla. Thursday's jobless claims were lower than expected, a sign of a firm job market, yet markets barely moved at first. Why NQ fell later is unclear. Tuesday's jump had no clear trigger: ADP had no forecast and the housing figures were missing.",
+   "market_reaction": "Monday (+1.15%) and Tuesday (+0.69%) were the up days. Then came Wednesday (−0.98%), Thursday (−1.52%, the biggest move) and Friday (−0.20%). S&P 500 futures lost 0.55% for the week, less than tech-heavy NQ. Crude oil rose 2.03% for the week, including +4.14% today, to $103.59. Gold fell 4.21%. The VIX fear gauge slipped 1.00% to 19.45. The dollar was flat at +0.01%.",
+   "rates_read": "Over the week the 2-year yield fell 3.1bp (1bp is 0.01%) and the 10-year fell 8.4bp. Falling yields usually help Nasdaq stocks, but NQ still fell, so the pressure came from somewhere else. Friday pushed back: the 2-year rose 5.1bp to 4.686% and the 10-year rose 4.8bp to 5.001%. A 10-year yield above 5% is a heavy weight on the value of future tech profits.",
+   "watch_next": [
+    "Fed rate decision Wed 14:00 ET and the press conference at 14:30",
+    "Microsoft and Alphabet earnings Wednesday after the close",
+    "PCE inflation and GDP growth data Thursday at 08:30 ET",
+    "2-, 5- and 7-year Treasury auctions and how yields respond"
+   ],
+   "learn": "A 'beat' is not automatically good news. Tesla beat on earnings and sales, yet NQ fell afterward. Traders also weigh the details, like shrinking car revenue. First reactions can mislead too: NQ's early dip was small, then grew. Always check whether a move holds.",
+   "nq_tone": "negative"
+  },
+  "status": "ok",
+  "error": null,
+  "model": "anthropic/claude-opus-5.5 · desk:v4",
+  "cost_usd": 0.07451532
+ }
+}

@@ -1,0 +1,183 @@
+{
+ "id": "release:20261022T1230:INITIAL_CLAIMS",
+ "kind": "release",
+ "model": "anthropic/claude-opus-5.5",
+ "prompt_version": "desk:v4",
+ "why_chosen": "Release with a real figure and verdict, Opus.",
+ "facts_stored": [
+  "figures",
+  "moves",
+  "headlines",
+  "upcoming",
+  "rates"
+ ],
+ "facts_not_stored": [
+  "now / session text",
+  "markets_today (quote strip: levels, change today, delayed/stale flags)",
+  "breaking_alerts",
+  "bond_market as sent (rates is stored separately)",
+  "earnings / auction / statement details beyond figures and headlines"
+ ],
+ "note": {
+  "id": "release:20261022T1230:INITIAL_CLAIMS",
+  "kind": "release",
+  "title": "Jobless claims",
+  "created_at": "2026-10-22T13:02:02.636883Z",
+  "event_at": "2026-10-22T12:30:00Z",
+  "figures": [
+   {
+    "name": "Unemployment Claims",
+    "unit": "value",
+    "actual": 194000.0,
+    "forecast": 200000.0,
+    "previous": 199000.0,
+    "decimals": 0,
+    "verdict": "below",
+    "actual_text": "194K",
+    "forecast_text": "200K",
+    "previous_text": "199K",
+    "surprise": {
+     "value": -6000.0,
+     "value_text": "−6K",
+     "size": "not_enough_history",
+     "history_count": 3,
+     "larger_than": null,
+     "text": "Not enough history yet to size this surprise (3 earlier releases stored)"
+    }
+   }
+  ],
+  "moves": [
+   {
+    "symbol": "NQ",
+    "label": "Nasdaq 100 futures",
+    "start_value": 29541.25,
+    "end_value": 29523.5,
+    "start_at": "2026-10-22T12:29:56Z",
+    "end_at": "2026-10-22T12:44:48Z",
+    "change": -0.06,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "-0.06%"
+   },
+   {
+    "symbol": "ES",
+    "label": "S&P 500 futures",
+    "start_value": 7729.25,
+    "end_value": 7727.5,
+    "start_at": "2026-10-22T12:29:55Z",
+    "end_at": "2026-10-22T12:45:00Z",
+    "change": -0.02,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "-0.02%"
+   },
+   {
+    "symbol": "US2Y",
+    "label": "2-year yield",
+    "start_value": 4.729,
+    "end_value": 4.731,
+    "start_at": "2026-10-22T12:29:23Z",
+    "end_at": "2026-10-22T12:44:44Z",
+    "change": 0.2,
+    "change_unit": "bp",
+    "delayed": false,
+    "text": "+0.2bp"
+   },
+   {
+    "symbol": "US10Y",
+    "label": "10-year yield",
+    "start_value": 5.036,
+    "end_value": 5.04,
+    "start_at": "2026-10-22T12:29:38Z",
+    "end_at": "2026-10-22T12:44:54Z",
+    "change": 0.4,
+    "change_unit": "bp",
+    "delayed": false,
+    "text": "+0.4bp"
+   },
+   {
+    "symbol": "DXY",
+    "label": "US dollar",
+    "start_value": 101.644,
+    "end_value": 101.792,
+    "start_at": "2026-10-22T12:29:57Z",
+    "end_at": "2026-10-22T12:44:57Z",
+    "change": 0.15,
+    "change_unit": "%",
+    "delayed": false,
+    "text": "+0.15%"
+   },
+   {
+    "symbol": "VIX",
+    "label": "VIX fear gauge",
+    "start_value": 18.0,
+    "end_value": 18.01,
+    "start_at": "2026-10-22T12:29:46Z",
+    "end_at": "2026-10-22T12:44:46Z",
+    "change": 0.06,
+    "change_unit": "%",
+    "delayed": false,
+    "text": "+0.06%"
+   }
+  ],
+  "headlines": [],
+  "upcoming": [],
+  "rates": {
+   "as_of": "2026-10-22T13:01:32Z",
+   "lines": [
+    {
+     "symbol": "US2Y",
+     "label": "2-year yield",
+     "value": 4.727,
+     "value_text": "4.727%",
+     "day_change_bp": -9.6,
+     "week_change_bp": -0.3,
+     "day_text": "-9.6bp",
+     "week_text": "-0.3bp"
+    },
+    {
+     "symbol": "US10Y",
+     "label": "10-year yield",
+     "value": 5.036,
+     "value_text": "5.036%",
+     "day_change_bp": -11.0,
+     "week_change_bp": -2.0,
+     "day_text": "-11.0bp",
+     "week_text": "-2.0bp"
+    },
+    {
+     "symbol": "CURVE",
+     "label": "Curve (10y minus 2y)",
+     "value": 30.9,
+     "value_text": "+31bp",
+     "day_change_bp": -1.4,
+     "week_change_bp": -1.7,
+     "day_text": "-1.4bp",
+     "week_text": "-1.7bp"
+    }
+   ],
+   "curve_bp": 30.9,
+   "curve_text": "+31bp, normal (10-year above 2-year)",
+   "explainer": "Treasury yields are the interest rate the US government pays to borrow. The 2-year follows what traders expect the Fed to do with rates; the 10-year reflects longer-run growth and inflation. Rising yields usually weigh on Nasdaq stocks, because the future profits that tech prices depend on are worth less today when safe bonds pay more. Falling yields usually help."
+  },
+  "draft": {
+   "headline": "Jobless claims came in lower than expected, and markets barely moved",
+   "summary": "Fewer Americans filed for unemployment than forecast, a sign the job market is holding up. That can mean less urgency for Fed rate cuts. NQ barely reacted. Its bigger drop today happened outside the release window, for reasons the facts don't show.",
+   "what_it_means": "Jobless claims count new unemployment filings each week. This week came in at 194K, below the 200K forecast and the previous 199K. Fewer filings mean fewer layoffs, so the job market looks firm. For the Fed, a strong job market gives less reason to cut interest rates soon. That is usually a mild headwind for Nasdaq stocks. The surprise was −6K, but there is not enough history yet to say whether that is big or ordinary. One week of claims rarely changes the Fed's view on its own.",
+   "market_reaction": "From 08:29 to 08:44 ET, NQ slipped -0.06%. S&P 500 futures fell -0.02% (to 08:45). The dollar rose +0.15% and the VIX fear gauge rose +0.06%. These are small moves that fit a modestly stronger-economy read. The bigger story is the day. NQ is down -1.61%, the VIX is up +8.45% and crude oil is up +2.42%. Most of NQ's drop came outside this window, and the cause is unclear.",
+   "rates_read": "After the release, the 2-year yield (tied to Fed expectations) edged up +0.2bp and the 10-year rose +0.4bp. Those tiny rises fit a 'less need for cuts' read. For the day, though, yields have fallen hard. The 10-year is down -11.0bp to 5.036%, and the 2-year is down -9.6bp to 4.727%. Falling yields usually help Nasdaq stocks, yet NQ is lower. Something else appears to be weighing on it today.",
+   "watch_next": [
+    "US stock market open in 28 minutes: does NQ's drop deepen or ease?",
+    "5-year TIPS auction at 13:00 ET, $26 billion on offer",
+    "Whether yields keep falling while NQ stays weak",
+    "Next week's claims, to see if filings stay low"
+   ],
+   "learn": "For jobless claims, 'below forecast' means fewer layoffs, which signals a stronger economy. Strong data can push yields up, because the Fed may feel less need to cut rates. That is why good economic news is sometimes mildly negative for Nasdaq stocks.",
+   "nq_tone": "neutral"
+  },
+  "status": "ok",
+  "error": null,
+  "model": "anthropic/claude-opus-5.5 · desk:v4",
+  "cost_usd": 0.05748732
+ }
+}
