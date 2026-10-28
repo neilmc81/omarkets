@@ -9,6 +9,7 @@
    "repeated_lesson": null,
    "sign_errors": 0,
    "signed_direction": 10,
+   "under_length": false,
    "unverifiable_numbers": 13,
    "words": 296
   },
@@ -21,6 +22,7 @@
    "repeated_lesson": "vix",
    "sign_errors": 0,
    "signed_direction": 0,
+   "under_length": false,
    "unverifiable_numbers": 10,
    "words": 310
   },
@@ -33,6 +35,7 @@
    "repeated_lesson": "auction",
    "sign_errors": 0,
    "signed_direction": 10,
+   "under_length": false,
    "unverifiable_numbers": 11,
    "words": 336
   },
@@ -45,6 +48,7 @@
    "repeated_lesson": null,
    "sign_errors": 0,
    "signed_direction": 11,
+   "under_length": false,
    "unverifiable_numbers": 6,
    "words": 363
   },
@@ -57,6 +61,7 @@
    "repeated_lesson": null,
    "sign_errors": 0,
    "signed_direction": 0,
+   "under_length": false,
    "unverifiable_numbers": 6,
    "words": 308
   },
@@ -69,6 +74,7 @@
    "repeated_lesson": null,
    "sign_errors": 0,
    "signed_direction": 0,
+   "under_length": false,
    "unverifiable_numbers": 12,
    "words": 347
   }

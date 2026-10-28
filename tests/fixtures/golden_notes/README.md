@@ -1,12 +1,15 @@
 # Desk-note golden set
 
-The yardstick for the Phase 1 prompt rewrite (`docs/PLAN.md` §6–§7): a new
-prompt version must score no worse than `desk:v4` on these notes.
+The yardstick for the Phase 1 prompt rewrite (`docs/PLAN.md` §6–§7). These
+`desk:v4` notes are the **historical** baseline. The acceptance test for the new
+prompt (`desk:v9`) compares it with the current prompt (`desk:v8`) on the same
+captured facts; that needs the facts capture planned for Phase 1, so those
+cases will live in their own folders (`v8/`, `v9/`) next to `v4/`.
 
 ## The notes
 
-Six stored `desk:v4` notes, copied verbatim from `data/desk.sqlite3` on
-2026-10-28 (a read-only backup, so the live database was not opened for writing):
+Six stored `desk:v4` notes in `v4/`, copied verbatim from `data/desk.sqlite3`
+on 2026-10-28 (a read-only backup, so the live database was not opened for writing):
 
 | File | Kind | Writer | Why it is here |
 | --- | --- | --- | --- |
@@ -45,8 +48,8 @@ pins them.
 | Missing from the facts is not absent from the world | "there was no event/release/data" without "supplied"/"in the feed" |
 | Basis point wording | "1bp is 0.01%" or a yield change in small percents (say "0.01 percentage point") |
 | Sign accuracy | a measured move quoted with the opposite direction word |
-| Don't repeat lessons | the Learn box teaches the same term as one of the previous 5 notes |
-| Length targets | words over every draft field: pre-market/review 200–260; move/release/Fed/earnings/auction 140–180; ask 120–160 |
+| Don't repeat lessons | the note's own Learn text teaches the same term as one of the 5 notes written before it (frozen `lesson_history.json`) |
+| Length targets | words over every draft field, over **or under**: pre-market/review 200–260; move/release/Fed/earnings/auction 140–180; ask 120–160; primer exempt |
 | Number accuracy (partial) | numbers not found in the stored facts; an upper bound, see above |
 
 ### desk:v4 baseline
@@ -79,4 +82,10 @@ same way by two reviewers without seeing which version wrote which note.
 
 **Reading:** the facts are handled honestly; the problems are style rules
 (signed numbers, length, repeated lessons) and closed-vs-stale wording, which
-the v5 prompt rules in §7 target directly.
+the `desk:v9` rules in §7 target directly.
+
+**Known limits of the checker** (to fix before it gates paid candidates, per
+the Phase 1 plan): sign checks match a magnitude across all moves, not per
+instrument; numbers are checked only against stored facts; the prompt's own
+example numbers count as allowed in the production number check
+(`core/desk/writer.py:170`).

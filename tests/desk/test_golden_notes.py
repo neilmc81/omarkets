@@ -17,6 +17,8 @@ def test_direction_word_next_to_a_signed_number():
 def test_closed_market_called_stale():
     assert G.closed_as_stale(["Futures are shut for the weekend, so prices are stale."])
     assert G.closed_as_stale(["The NQ quote is stale while the market is open."]) == []
+    # Keeping the states apart is what the rule asks for.
+    assert G.closed_as_stale(["The market is closed, not stale."]) == []
 
 
 def test_absent_versus_missing():
@@ -41,15 +43,29 @@ def test_sign_errors_against_measured_moves():
     assert G.sign_errors("NQ slipped 0.06% and the VIX rose 0.06%.", moves) == []
 
 
-def test_repeated_lesson_is_by_taught_term_not_the_catch_all_topic():
+def test_repeated_lesson_is_judged_from_the_candidate_text():
     history = [
         {"id": "a", "created_at": "1", "learn": "The VIX is the fear gauge."},
         {"id": "b", "created_at": "2", "learn": "Some general point about markets."},
         {"id": "c", "created_at": "3", "learn": "The VIX measures expected swings."},
-        {"id": "d", "created_at": "4", "learn": "Another general point."},
     ]
-    assert G.repeated_lesson("c", history) == "vix"
-    assert G.repeated_lesson("d", history) is None
+    assert G.repeated_lesson("The VIX measures expected swings.", "3", history,
+                             note_id="c") == "vix"
+    # A new lesson for the same note, on a fresh term, is not a repeat.
+    assert G.repeated_lesson("A Treasury auction is how the government borrows.", "3",
+                             history, note_id="c") is None
+    # The catch-all topic alone never counts as a repeat.
+    assert G.repeated_lesson("Another general point.", "4", history) is None
+
+
+def test_a_short_candidate_cannot_win_by_saying_less():
+    fixtures, history = G.load()
+    premarket = next(f for f in fixtures if f["kind"] == "premarket")
+    draft = {**premarket["note"]["draft"], "summary": "Up.", "what_it_means": "Data out.",
+             "market_reaction": "Calm.", "rates_read": "Flat.", "learn": "Yields matter.",
+             "watch_next": []}
+    short = G.score({**premarket, "note": {**premarket["note"], "draft": draft}}, history)
+    assert short.under_length and short.issues >= 1
 
 
 def test_v4_baseline_is_unchanged():

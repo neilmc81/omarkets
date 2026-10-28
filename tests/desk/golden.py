@@ -37,6 +37,8 @@ SIGNED = re.compile(rf"\b(?:{_UP}|{_DOWN})\b{_FILLER}\s+[+\-−]\d[\d,.]*(?:%|bp
                     re.IGNORECASE)
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 _CLOSED = re.compile(r"\b(closed|shut|weekend|reopen\w*|holiday)\b", re.IGNORECASE)
+#: "closed, not stale" keeps the states apart, which is what the rule asks for.
+_NOT_STALE = re.compile(r"\bnot\s+(?:a\s+)?stale\b", re.IGNORECASE)
 _ABSENT = re.compile(r"\b(?:there (?:was|were|is|are) no|nothing was) (?:scheduled )?"
                      r"(?:event|events|release|releases|data|news)\b", re.IGNORECASE)
 _HEDGED = re.compile(r"\b(supplied|in (?:our|the) (?:feed|data|calendar|facts)|not (?:in|on) "
@@ -77,12 +79,17 @@ class Score:
         return self.length_target is not None and self.words > self.length_target[1]
 
     @property
+    def under_length(self) -> bool:
+        """Too short to carry the note: a candidate cannot win by saying less."""
+        return self.length_target is not None and self.words < self.length_target[0]
+
+    @property
     def issues(self) -> int:
         """Rule breaks counted for the score (unverifiable numbers excluded)."""
         return (len(self.signed_direction) + len(self.closed_as_stale)
                 + len(self.absent_not_missing) + len(self.bp_as_percent)
                 + len(self.sign_errors) + int(self.repeated_lesson is not None)
-                + int(self.over_length))
+                + int(self.over_length) + int(self.under_length))
 
 
 def draft_fields(draft: dict) -> list[str]:
@@ -102,7 +109,8 @@ def signed_direction(text: str) -> list[str]:
 
 def closed_as_stale(fields: Sequence[str]) -> list[str]:
     """A shut market described as 'stale' (closed and stale are different states)."""
-    return [s for f in fields for s in sentences(f) if "stale" in s.lower() and _CLOSED.search(s)]
+    return [s for f in fields for s in sentences(f)
+            if "stale" in s.lower() and _CLOSED.search(s) and not _NOT_STALE.search(s)]
 
 
 def absent_not_missing(fields: Sequence[str]) -> list[str]:
@@ -153,17 +161,22 @@ def lesson_term(text: str) -> str | None:
     return None
 
 
-def repeated_lesson(note_id: str, history: Sequence[dict]) -> str | None:
-    """The taught term, if one of the previous few notes already taught it."""
-    ordered = [row for row in sorted(history, key=lambda r: r["created_at"]) if row.get("learn")]
-    ids = [row["id"] for row in ordered]
-    if note_id not in ids:
+def repeated_lesson(learn: str | None, created_at: str, history: Sequence[dict],
+                    *, note_id: str | None = None) -> str | None:
+    """The term this lesson teaches, if one of the few notes written before it taught it.
+
+    Judged from the candidate's own ``learn`` text against the frozen history of
+    notes created strictly earlier (the note itself, if present, is skipped).
+    """
+    if not learn:
         return None
-    index = ids.index(note_id)
-    terms = {row["id"]: lesson_term(row["learn"]) for row in ordered}
-    mine = terms[note_id]
-    earlier = {terms[i] for i in ids[max(0, index - REPEAT_WINDOW):index]}
-    return mine if mine is not None and mine in earlier else None
+    mine = lesson_term(learn)
+    if mine is None:
+        return None
+    earlier = [row for row in sorted(history, key=lambda r: r["created_at"])
+               if row.get("learn") and row["created_at"] < created_at and row["id"] != note_id]
+    recent = {lesson_term(row["learn"]) for row in earlier[-REPEAT_WINDOW:]}
+    return mine if mine in recent else None
 
 
 def stored_facts_text(note: dict) -> str:
@@ -186,26 +199,33 @@ def score(fixture: dict, history: Sequence[dict]) -> Score:
         signed_direction=signed_direction(text), closed_as_stale=closed_as_stale(fields),
         absent_not_missing=absent_not_missing(fields), bp_as_percent=bp_as_percent(text),
         sign_errors=sign_errors(text, note.get("moves") or []),
-        repeated_lesson=repeated_lesson(fixture["id"], history),
+        repeated_lesson=repeated_lesson(draft.get("learn"), note["created_at"], history,
+                                        note_id=fixture["id"]),
         unverifiable_numbers=invented_numbers(parsed, stored_facts_text(note)),
     )
 
 
-def load(directory: Path = GOLDEN) -> tuple[list[dict], list[dict]]:
+def load(version: str = "v4", directory: Path = GOLDEN) -> tuple[list[dict], list[dict]]:
+    """One prompt version's notes (``<directory>/<version>/*.json``) and the lesson history.
+
+    Each version has its own folder, so candidates never enter another version's
+    baseline.
+    """
     history = json.loads((directory / "lesson_history.json").read_text())
-    fixtures = [json.loads(path.read_text()) for path in sorted(directory.glob("*.json"))
-                if path.name not in {"lesson_history.json", "baseline.json"}]
+    fixtures = [json.loads(path.read_text())
+                for path in sorted((directory / version).glob("*.json"))]
     return fixtures, history
 
 
-def score_all(directory: Path = GOLDEN) -> list[Score]:
-    fixtures, history = load(directory)
+def score_all(version: str = "v4", directory: Path = GOLDEN) -> list[Score]:
+    fixtures, history = load(version, directory)
     return [score(fixture, history) for fixture in fixtures]
 
 
 def summary(scores: Sequence[Score]) -> dict[str, dict]:
     """The baseline record: counts per note, for comparing prompt versions."""
     return {s.note_id: {"words": s.words, "over_length": s.over_length,
+                        "under_length": s.under_length,
                         "signed_direction": len(s.signed_direction),
                         "closed_as_stale": len(s.closed_as_stale),
                         "absent_not_missing": len(s.absent_not_missing),
