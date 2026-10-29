@@ -43,7 +43,8 @@ async def test_official_saved_statement_provenance_and_cached_retrieval():
         assert "For media inquiries" not in statement.text
         assert "Implementation Note" not in statement.text
         assert "Board of Governors" not in statement.text
-        assert event.actual is None and event.consensus is None
+        assert event.actual == 4.25 and event.unit == "percent"  # 4 to 4-1/4 percent
+        assert event.consensus is None
         now += timedelta(minutes=1)
         again = await provider.fetch()
         assert again.events[0].statement == statement
@@ -80,10 +81,28 @@ async def test_historical_notice_not_fetched():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
         batch = await FedReleasesProvider(
-            client, clock=lambda: PUBLISHED + timedelta(hours=24, seconds=1)
+            client, clock=lambda: PUBLISHED + timedelta(days=10, seconds=1)
         ).fetch()
     assert calls == [FED_RSS_URL]
     assert batch.events[0].statement is None
+    assert batch.events[0].actual is None
+
+
+async def test_rate_read_once_from_a_recent_statement_after_a_restart():
+    calls = []
+
+    def transport(request):
+        calls.append(str(request.url))
+        if str(request.url) == FED_RSS_URL:
+            return httpx.Response(200, text=rss())
+        return httpx.Response(200, content=FIXTURE.read_bytes())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+        provider = FedReleasesProvider(client, clock=lambda: PUBLISHED + timedelta(days=2))
+        first, second = await provider.fetch(), await provider.fetch()
+    assert calls.count(URL) == 1
+    assert first.events[0].statement is None
+    assert first.events[0].actual == second.events[0].actual == 4.25
 
 
 @pytest.mark.parametrize(

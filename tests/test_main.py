@@ -40,6 +40,14 @@ def test_census_key_reaches_the_census_provider(tmp_path, monkeypatch):
     assert census._api_key == "test-census-key"
 
 
+def test_bea_key_reaches_the_bea_provider(tmp_path, monkeypatch):
+    monkeypatch.setenv("OMARKETS_ECONOMIC_MODE", "live")
+    settings = Settings(_env_file=None, data_dir=tmp_path, bea_api_key="test-bea-key")
+    service = build_economic_service(settings)
+    bea = next(p for p in service.providers if p.name == "bea_data")
+    assert bea._api_key == "test-bea-key"
+
+
 def test_disabled_mode_builds_bare_service(tmp_path, monkeypatch):
     monkeypatch.setenv("OMARKETS_ECONOMIC_MODE", "disabled")
     settings = Settings(_env_file=None, data_dir=tmp_path)
@@ -72,6 +80,7 @@ def test_live_mode_builds_full_provider_set(tmp_path, monkeypatch):
         "nyfed",
         "bea_calendar",
         "bea_releases",
+        "bea_data",
         "fed_calendar",
         "fed_releases",
         "fred_release_calendar",
@@ -82,7 +91,9 @@ def test_live_mode_builds_full_provider_set(tmp_path, monkeypatch):
         "adp_releases",
         "nar_releases",
         "census_retail",
+        "census_releases",
         "fed_g17",
+        "conference_board",
     ]
     assert len(service.registry.definitions) > 1
 

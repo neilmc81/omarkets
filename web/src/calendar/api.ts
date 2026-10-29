@@ -11,6 +11,8 @@ const time = z.string().min(1);
 export const calendarFigureSchema = figureSchema.extend({
   reading: z.enum(["better", "worse"]).nullable(),
   reading_text: z.string().nullable(),
+  revised_previous_text: z.string().nullable().optional(),
+  revision_text: z.string().nullable().optional(),
 });
 
 export const calendarRowSchema = z.object({

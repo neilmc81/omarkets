@@ -87,12 +87,12 @@ describe("Calendar page", () => {
     expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/calendar?week=this&all=false&tz=Asia%2FTokyo", expect.anything());
     const table = screen.getByRole("table");
     const groups = within(table).getAllByRole("rowgroup").slice(1);
-    expect(within(groups[0]).getByText("Jobless claims")).toBeInTheDocument();
+    expect(within(groups[0]).getByText("Unemployment Claims")).toBeInTheDocument();
     expect(within(groups[1]).getByText("Friday, Oct 23")).toBeInTheDocument();
-    const fedRow = within(groups[1]).getByText("Fed rate decision").closest("tr")!;
+    const fedRow = within(groups[1]).getByText("Federal Funds Rate").closest("tr")!;
     expect(fedRow.querySelector(".cal-time")?.textContent).toBe("03:0014:00");
     expect(screen.getByText(/Times in your time zone \(UTC\+9\)/)).toBeInTheDocument();
-    const claimsRow = within(groups[0]).getByText("Jobless claims").closest("tr")!;
+    const claimsRow = within(groups[0]).getByText("Unemployment Claims").closest("tr")!;
     expect(within(claimsRow).getByText("194K")).toBeInTheDocument();
     expect(within(claimsRow).getByText("-0.06%")).toHaveClass("down");
     expect(within(claimsRow).getByRole("link", { name: "Read note" })).toHaveAttribute("href", "?note=release%3A20261022T1230%3AINITIAL_CLAIMS");
@@ -114,12 +114,12 @@ describe("Calendar page", () => {
   it("explains a release from the library and the surprise on hover", async () => {
     serve();
     render(<CalendarPage timeZone="Asia/Tokyo" />);
-    const event = await screen.findByRole("button", { name: "Jobless claims" });
+    const event = await screen.findByRole("button", { name: "Unemployment Claims" });
     await waitFor(() => {
       fireEvent.mouseEnter(event.parentElement!);
-      expect(screen.getByRole("dialog", { name: "Jobless claims" })).toHaveTextContent("New claims for unemployment benefits last week.");
+      expect(screen.getByRole("dialog", { name: "Unemployment Claims" })).toHaveTextContent("New claims for unemployment benefits last week.");
     });
-    const card = screen.getByRole("dialog", { name: "Jobless claims" });
+    const card = screen.getByRole("dialog", { name: "Unemployment Claims" });
     expect(card).toHaveTextContent("Below forecast: Fewer layoffs; a firm job market.");
     expect(within(card).getByRole("link", { name: "Read the note →" })).toBeInTheDocument();
     fireEvent.mouseLeave(event.parentElement!);
@@ -153,5 +153,23 @@ describe("Calendar page", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 503, json: async () => ({ detail: "Desk is not enabled" }) })));
     render(<CalendarPage timeZone="UTC" />);
     expect(await screen.findByText(/Calendar unavailable · Desk is not enabled/)).toBeInTheDocument();
+  });
+
+  it("gives each figure of a shared release time its own line", async () => {
+    const gdp = figure({ name: "Advance GDP q/q", unit: "percent", actual: 3.4, forecast: 3.2, previous: 1.5,
+      actual_text: "3.4%", forecast_text: "3.2%", previous_text: "1.5%", verdict: "above", surprise: null,
+      revised_previous_text: "2.2%", revision_text: "revised up by 0.7 percentage points" });
+    const morning: CalendarRow = { ...claims, title: "Jobless claims & GDP", figures: [figure(), gdp] as CalendarRow["figures"] };
+    serve({ ...board, days: [{ date: "2026-10-22", label: "Thursday, Oct 22", rows: [morning] }] });
+    render(<CalendarPage timeZone="Asia/Tokyo" />);
+    const gdpLine = (await screen.findByText("Advance GDP q/q")).closest("tr")!;
+    const claimsLine = screen.getByText("Unemployment Claims").closest("tr")!;
+    expect(gdpLine).not.toBe(claimsLine);
+    expect(gdpLine).toHaveClass("cal-sub");
+    expect(within(gdpLine).getByText("3.4%")).toHaveClass("up");
+    expect(within(gdpLine).getByText("→ 2.2%", { exact: false })).toBeInTheDocument();
+    expect(claimsLine.querySelector(".cal-time")).toHaveAttribute("rowspan", "2");
+    expect(gdpLine.querySelector(".cal-time")).toBeNull();
+    expect(screen.queryByText("Jobless claims & GDP")).toBeNull();
   });
 });

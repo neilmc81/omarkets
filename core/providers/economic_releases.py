@@ -66,6 +66,30 @@ def _extract_statement(body: bytes) -> str:
     return text
 
 
+_RANGE = re.compile(
+    r"target range for the federal funds rate (?:by [0-9/-]+ percentage points? )?(?:at|to) "
+    r"(\d{1,2}(?:-\d/\d)?|\d/\d) to (\d{1,2}(?:-\d/\d)?|\d/\d) percent"
+)
+
+
+def _fraction(text: str) -> float:
+    whole, _, part = text.rpartition("-") if "-" in text else ("", "", text)
+    if "/" in part:
+        top, bottom = part.split("/")
+        return float(whole or 0) + int(top) / int(bottom)
+    return float(part)
+
+
+def policy_rate_upper(text: str) -> float | None:
+    """Upper bound of the federal funds target range set by a statement, if stated once."""
+    text = re.sub("[\u2010\u2011\u2012\u2013]", "-", text)
+    found = {(_fraction(low), _fraction(high)) for low, high in _RANGE.findall(text)}
+    if len(found) != 1:
+        return None
+    low, high = found.pop()
+    return high if 0 <= low < high <= 25 and round(high - low, 4) == 0.25 else None
+
+
 def _statement_url(link: str, released: datetime) -> bool:
     parts = urlsplit(link)
     return (
@@ -84,6 +108,8 @@ class FedReleasesProvider(HttpEconomicProvider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._statements: dict[str, tuple[datetime, EconomicStatement]] = {}
+        #: Policy-rate upper bound per statement link; a published statement never changes.
+        self._rates: dict[str, float | None] = {}
 
     async def _statement(self, link: str, released: datetime) -> EconomicStatement:
         cached_entry = self._statements.get(link)
@@ -149,6 +175,19 @@ class FedReleasesProvider(HttpEconomicProvider):
                             issues.append("FOMC statement unavailable; published notice retained")
                     else:
                         issues.append("FOMC statement URL rejected; published notice retained")
+                rate = None
+                if code == "FOMC_STATEMENT" and _statement_url(link, released):
+                    if statement is not None:
+                        self._rates[link] = policy_rate_upper(statement.text)
+                    elif link not in self._rates and (
+                        timedelta(hours=24) < now - released <= timedelta(days=10)
+                    ):
+                        try:
+                            text = (await self._statement(link, released)).text
+                            self._rates[link] = policy_rate_upper(text)
+                        except (EconomicProviderError, ValueError, UnicodeError):
+                            issues.append("FOMC statement unavailable; rate not extracted")
+                    rate = self._rates.get(link)
                 events.append(
                     EconomicEvent(
                         id=stable_id(self.name, uid),
@@ -156,9 +195,11 @@ class FedReleasesProvider(HttpEconomicProvider):
                         name=title,
                         category="policy",
                         importance="critical" if code != "FOMC_MINUTES" else "high",
-                        unit="release",
+                        unit="percent" if rate is not None else "release",
                         frequency="release",
                         status="released",
+                        actual=rate,
+                        actual_basis="source_release" if rate is not None else None,
                         provider=self.name,
                         source_event_id=uid,
                         source_url=link,
@@ -167,8 +208,11 @@ class FedReleasesProvider(HttpEconomicProvider):
                         received_at=now,
                         mode="live",
                         notes=[
-                            "Official published notice; numeric actual and consensus unavailable.",
-                            "Not automatically merged with calendar events.",
+                            "Official published notice; consensus unavailable.",
+                            "Actual is the upper bound of the target range stated in the "
+                            "statement text."
+                            if rate is not None
+                            else "Numeric actual unavailable.",
                         ],
                     )
                 )

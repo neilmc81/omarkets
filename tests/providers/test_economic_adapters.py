@@ -509,6 +509,7 @@ async def test_demo_and_factory_modes():
         "nyfed",
         "bea_calendar",
         "bea_releases",
+        "bea_data",
         "fed_calendar",
         "fed_releases",
         "fred_release_calendar",
@@ -519,7 +520,9 @@ async def test_demo_and_factory_modes():
         "adp_releases",
         "nar_releases",
         "census_retail",
+        "census_releases",
         "fed_g17",
+        "conference_board",
     ]
     with pytest.raises(ValueError):
         build_economic_providers("unknown")

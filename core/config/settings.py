@@ -146,6 +146,7 @@ class Settings(BaseSettings):
     fred_api_key: SecretStr | None = None
     bls_api_key: SecretStr | None = None
     census_api_key: SecretStr | None = None
+    bea_api_key: SecretStr | None = None
     eia_api_key: SecretStr | None = None
 
     @field_validator("api_host")

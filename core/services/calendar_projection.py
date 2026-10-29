@@ -8,6 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.domain.economics import EconomicEvent, EventStatus
+from core.providers.economic_bea_data import revised_on
 from core.providers.economic_calendars import summary_period
 
 NY = ZoneInfo("America/New_York")
@@ -141,7 +142,9 @@ def project_calendar(
             for item in sorted(members, key=lambda item: (item.received_at, item.id))
         ]
         result.append(EconomicEvent.model_validate(payload))
-    return _current_issuer_actuals(_nar_actuals(_adp_actuals(result, now), now), now)
+    result = _current_issuer_actuals(_nar_actuals(_adp_actuals(result, now), now), now)
+    result = _census_actuals(_bea_actuals(result, now), now)
+    return _fomc_actuals(_conference_board_actuals(result, now), now)
 
 
 def _adp_actuals(events: list[EconomicEvent], now: datetime | None) -> list[EconomicEvent]:
@@ -379,3 +382,230 @@ def _current_issuer_actuals(
         replacements[schedule.id] = EconomicEvent.model_validate(payload)
         consumed.add(issuer.id)
     return [replacements.get(e.id, e) for e in events if e.id not in consumed]
+
+
+#: Forex Factory titles each BEA headline may fill (casefolded, exact).
+BEA_SCHEDULE_NAMES = {
+    "GDP": {"advance gdp q/q", "prelim gdp q/q", "final gdp q/q", "gdp q/q"},
+    "GDP_PRICE_INDEX": {
+        "advance gdp price index q/q",
+        "prelim gdp price index q/q",
+        "final gdp price index q/q",
+        "gdp price index q/q",
+    },
+    "PCE": {"pce price index m/m"},
+    "CORE_PCE": {"core pce price index m/m"},
+}
+
+
+def _bea_actuals(events: list[EconomicEvent], now: datetime | None) -> list[EconomicEvent]:
+    """Fill a consensus row only from a BEA table revised on that row's release date."""
+    issuers = [
+        e
+        for e in events
+        if e.provider == "bea_data"
+        and e.actual is not None
+        and e.event_code in BEA_SCHEDULE_NAMES
+        and revised_on(e) is not None
+        and (now is None or e.received_at <= now)
+    ]
+    schedules = [
+        e
+        for e in events
+        if e.provider == "consensus"
+        and e.scheduled_at is not None
+        and e.status != EventStatus.CANCELLED
+        and e.unit == "percent"
+        and e.event_code in BEA_SCHEDULE_NAMES
+        and (now is None or e.scheduled_at <= now)
+    ]
+
+    def matches(schedule: EconomicEvent, issuer: EconomicEvent) -> bool:
+        return (
+            schedule.event_code == issuer.event_code
+            and schedule.name.casefold().strip() in BEA_SCHEDULE_NAMES[issuer.event_code]
+            and schedule.country == issuer.country
+            and schedule.mode == issuer.mode
+            and schedule.scheduled_at.astimezone(NY).date() == revised_on(issuer)
+            and issuer.received_at >= schedule.scheduled_at
+            and (schedule.actual is None or schedule.actual == issuer.actual)
+        )
+
+    return _fold_issuers(
+        events, schedules, issuers, matches, "metric, title and BEA revision date"
+    )
+
+
+#: Forex Factory titles each Census headline may fill (casefolded, exact).
+CENSUS_SCHEDULE_NAMES = {
+    "DURABLE_GOODS": {"durable goods orders m/m"},
+    "CORE_DURABLE_GOODS": {"core durable goods orders m/m"},
+    "NEW_HOME_SALES": {"new home sales"},
+}
+
+
+def _census_actuals(events: list[EconomicEvent], now: datetime | None) -> list[EconomicEvent]:
+    """Fill a consensus row with the month its release covers (the month before)."""
+
+    def covered(schedule: EconomicEvent) -> str:
+        local = schedule.scheduled_at.astimezone(NY)
+        year, month = (local.year, local.month - 1) if local.month > 1 else (local.year - 1, 12)
+        return f"{year:04d}-{month:02d}"
+
+    issuers = [
+        e
+        for e in events
+        if e.provider == "census_releases"
+        and e.actual is not None
+        and e.event_code in CENSUS_SCHEDULE_NAMES
+        and (now is None or e.received_at <= now)
+    ]
+    schedules = [
+        e
+        for e in events
+        if e.provider == "consensus"
+        and e.scheduled_at is not None
+        and e.status != EventStatus.CANCELLED
+        and any(e.name.casefold().strip() in names for names in CENSUS_SCHEDULE_NAMES.values())
+        and (now is None or e.scheduled_at <= now)
+    ]
+
+    def matches(schedule: EconomicEvent, issuer: EconomicEvent) -> bool:
+        return (
+            schedule.name.casefold().strip() in CENSUS_SCHEDULE_NAMES[issuer.event_code]
+            and schedule.unit == issuer.unit
+            and schedule.country == issuer.country
+            and schedule.mode == issuer.mode
+            and issuer.period == covered(schedule)
+            and issuer.received_at >= schedule.scheduled_at
+            and (schedule.actual is None or schedule.actual == issuer.actual)
+        )
+
+    return _fold_issuers(events, schedules, issuers, matches, "metric, title and covered month")
+
+
+def _fold_issuers(
+    events, schedules, issuers, matches, matched: str, *, consume: bool = True
+) -> list[EconomicEvent]:
+    """Copy one unambiguous issuer value into its schedule row; issuer rows fold in."""
+    replacements, consumed = {}, set()
+    for schedule in schedules:
+        candidates = [e for e in issuers if matches(schedule, e)]
+        if len({(e.period, e.actual) for e in candidates}) != 1:
+            continue
+        issuer = min(candidates, key=lambda e: e.received_at)
+        if sum(matches(other, issuer) for other in schedules) != 1:
+            continue
+        sources = [*(schedule.occurrence_sources or [schedule])]
+        for e in candidates:
+            sources.extend(e.occurrence_sources or [e])
+        revised = (
+            issuer.previous
+            if issuer.previous is not None
+            and schedule.previous is not None
+            and issuer.previous != schedule.previous
+            else None
+        )
+        payload = schedule.model_dump()
+        payload.update(
+            actual=issuer.actual,
+            actual_basis="source_release",
+            raw_surprise=None,
+            status=EventStatus.RELEASED,
+            period=issuer.period,
+            frequency=issuer.frequency,
+            revised_previous=revised,
+            received_at=max(schedule.received_at, issuer.received_at),
+            revision=schedule.revision + issuer.revision,
+            occurrence_aliases=sorted(
+                set(schedule.occurrence_aliases + [schedule.id, *(e.id for e in candidates)])
+            ),
+            occurrence_sources=[
+                e.model_dump(exclude={"occurrence_sources", "occurrence_aliases"}) for e in sources
+            ],
+            notes=list(
+                dict.fromkeys(
+                    [
+                        *schedule.notes,
+                        *issuer.notes,
+                        f"Actual source: {issuer.source_url}; {matched} matched the release day.",
+                    ]
+                )
+            ),
+        )
+        replacements[schedule.id] = EconomicEvent.model_validate(payload)
+        if consume:
+            consumed.update(e.id for e in candidates)
+    return [replacements.get(e.id, e) for e in events if e.id not in consumed]
+
+
+def _published_with(schedule: EconomicEvent, issuer: EconomicEvent, minutes: int) -> bool:
+    return (
+        issuer.released_at is not None
+        and abs((issuer.released_at - schedule.scheduled_at).total_seconds()) <= minutes * 60
+        and issuer.released_at <= issuer.received_at
+    )
+
+
+def _consensus_rows(events, names: set[str], now: datetime | None) -> list[EconomicEvent]:
+    return [
+        e
+        for e in events
+        if e.provider == "consensus"
+        and e.scheduled_at is not None
+        and e.status != EventStatus.CANCELLED
+        and e.name.casefold().strip() in names
+        and (now is None or e.scheduled_at <= now)
+    ]
+
+
+def _conference_board_actuals(
+    events: list[EconomicEvent], now: datetime | None
+) -> list[EconomicEvent]:
+    """CB consumer confidence: the issuer release published in the scheduled slot."""
+    issuers = [
+        e
+        for e in events
+        if e.provider == "conference_board"
+        and e.event_code == "CONSUMER_CONFIDENCE"
+        and e.actual is not None
+        and (now is None or e.received_at <= now)
+    ]
+
+    def matches(schedule: EconomicEvent, issuer: EconomicEvent) -> bool:
+        return (
+            schedule.unit == issuer.unit
+            and schedule.mode == issuer.mode
+            and _published_with(schedule, issuer, 5)
+            and (schedule.actual is None or schedule.actual == issuer.actual)
+        )
+
+    schedules = _consensus_rows(events, {"cb consumer confidence"}, now)
+    return _fold_issuers(events, schedules, issuers, matches, "publication time")
+
+
+def _fomc_actuals(events: list[EconomicEvent], now: datetime | None) -> list[EconomicEvent]:
+    """Federal funds rate: the upper bound stated in the FOMC statement of that slot.
+
+    The statement row stays on the calendar (it carries the statement text)."""
+    issuers = [
+        e
+        for e in events
+        if e.provider == "fed_releases"
+        and e.event_code == "FOMC_STATEMENT"
+        and e.actual is not None
+        and (now is None or e.received_at <= now)
+    ]
+
+    def matches(schedule: EconomicEvent, issuer: EconomicEvent) -> bool:
+        return (
+            schedule.unit == "percent"
+            and schedule.mode == issuer.mode
+            and _published_with(schedule, issuer, 15)
+            and (schedule.actual is None or schedule.actual == issuer.actual)
+        )
+
+    schedules = _consensus_rows(events, {"federal funds rate"}, now)
+    return _fold_issuers(
+        events, schedules, issuers, matches, "FOMC statement time", consume=False
+    )
