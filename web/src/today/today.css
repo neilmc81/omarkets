@@ -1241,6 +1241,19 @@
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
+.cal-row.cal-sub td {
+  border-top: 1px dashed color-mix(in srgb, var(--t-line) 60%, transparent);
+}
+
+.cal-actual {
+  font-weight: 600;
+}
+
+.cal-revised {
+  color: var(--t-muted);
+  font-size: 12px;
+}
+
 .cal-row.selected td:first-child {
   box-shadow: inset 3px 0 0 var(--t-accent);
 }

@@ -256,7 +256,8 @@ READING_CODES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("growth", ("PAYROLLS", "ADP", "RETAIL_SALES", "CORE_RETAIL_SALES", "GDP", "ISM_MFG",
                 "ISM_SERVICES", "INDUSTRIAL_PRODUCTION", "JOLTS", "DURABLE_GOODS",
                 "HOUSING_STARTS", "BUILDING_PERMITS", "EXISTING_HOME_SALES",
-                "NEW_HOME_SALES", "EMPIRE_STATE_MFG", "PHILLY_FED_MFG")),
+                "NEW_HOME_SALES", "EMPIRE_STATE_MFG", "PHILLY_FED_MFG",
+                "CONSUMER_CONFIDENCE")),
 )
 
 
@@ -386,6 +387,9 @@ INDICATORS: tuple[Explainer, ...] = (
     _indicator("CORPORATE_PROFITS", "Corporate profits",
                "Total US company profits, published with GDP.",
                "Usually a small mover: company earnings reports matter far more for NQ."),
+    _indicator("CONSUMER_CONFIDENCE", "CB consumer confidence",
+               "The Conference Board's monthly survey of how households feel about the economy.",
+               "Usually a small mover: it hints at future spending.", _GROWTH_UP, _GROWTH_DOWN),
     _indicator("FOMC", "Fed rate decision", "The Federal Reserve sets interest rates.",
                "The single biggest scheduled event for markets.",
                "A higher rate or a more hawkish message than expected usually lifts yields "

@@ -66,22 +66,19 @@ function surpriseLines(figure: CalendarFigure): string[] {
   ];
 }
 
-function Figures({ row, field }: { row: CalendarRow; field: "actual_text" | "forecast_text" | "previous_text" }) {
-  if (row.figures.length === 0) return <span className="t-muted">—</span>;
-  return <>{row.figures.map((figure) => <div key={figure.name} className={figure[field] === "—" ? "t-muted" : ""}>{figure[field]}</div>)}</>;
+/** One figure's surprise chip, or the row's state when nothing is scored. */
+function Surprise({ row, figure }: { row: CalendarRow; figure?: CalendarFigure }) {
+  if (!row.released) return <span className="cal-chip">upcoming</span>;
+  if (!figure || !(figure.surprise || figure.reading_text)) return <span className="t-muted">—</span>;
+  return <Explain title={`Surprise · ${figure.name}`} lines={surpriseLines(figure)}>
+    <span className={`cal-chip ${figure.reading ?? "neutral"}`}>
+      {figure.surprise?.value_text ?? ""} {figure.reading ?? (figure.verdict === "in_line" ? "in line" : "")}
+    </span>
+  </Explain>;
 }
 
-function Surprise({ row }: { row: CalendarRow }) {
-  if (!row.released) return <span className="cal-chip">upcoming</span>;
-  const scored = row.figures.filter((figure) => figure.surprise || figure.reading_text);
-  if (scored.length === 0) return <span className="t-muted">—</span>;
-  return <>{scored.map((figure) => <div key={figure.name}>
-    <Explain title={`Surprise · ${figure.name}`} lines={surpriseLines(figure)}>
-      <span className={`cal-chip ${figure.reading ?? "neutral"}`}>
-        {figure.surprise?.value_text ?? ""} {figure.reading ?? (figure.verdict === "in_line" ? "in line" : "")}
-      </span>
-    </Explain>
-  </div>)}</>;
+function Value({ text, className = "" }: { text: string | undefined; className?: string }) {
+  return !text || text === "—" ? <span className="t-muted">—</span> : <span className={className}>{text}</span>;
 }
 
 function NqMove({ row, now }: { row: CalendarRow; now: number }) {
@@ -96,31 +93,47 @@ function NqMove({ row, now }: { row: CalendarRow; now: number }) {
   }
 }
 
+/** One line per figure, like a classic economic calendar; time, impact, NQ and note span them. */
 function Row({ row, timeZone, entry, now, selected, onSelect }: {
   row: CalendarRow; timeZone: string; entry?: Explainer; now: number; selected: boolean; onSelect: () => void;
 }) {
   const [label, bars] = IMPACT[row.importance];
   const at = new Date(row.at);
-  return <tr className={`cal-row imp-${row.importance}${selected ? " selected" : ""}`} onClick={onSelect}>
-    <td className="cal-time"><b>{clock(timeZone).format(at)}</b><span className="t-muted">{NY.format(at)}</span></td>
-    <td className="cal-impact">
-      <span className="cal-bars" aria-hidden="true">{[0, 1, 2].map((i) => <i key={i} className={i < bars ? "on" : ""} />)}</span>{label}
-    </td>
+  const lines: (CalendarFigure | undefined)[] = row.figures.length > 0 ? row.figures : [undefined];
+  const span = lines.length;
+  return <>{lines.map((figure, i) => <tr key={figure?.name ?? row.title}
+    className={`cal-row imp-${row.importance}${i > 0 ? " cal-sub" : ""}${selected ? " selected" : ""}`} onClick={onSelect}>
+    {i === 0 && <>
+      <td className="cal-time" rowSpan={span}><b>{clock(timeZone).format(at)}</b><span className="t-muted">{NY.format(at)}</span></td>
+      <td className="cal-impact" rowSpan={span}>
+        <span className="cal-bars" aria-hidden="true">{[0, 1, 2].map((j) => <i key={j} className={j < bars ? "on" : ""} />)}</span>{label}
+      </td>
+    </>}
     <td className="cal-event">
-      <Explain title={row.title} lines={eventLines(row, entry)} noteId={row.note_id}>{row.title}</Explain>
+      <Explain title={figure?.name ?? row.title} lines={eventLines(row, entry)} noteId={row.note_id}>{figure?.name ?? row.title}</Explain>
     </td>
-    <td><Figures row={row} field="actual_text" /></td>
-    <td><Figures row={row} field="forecast_text" /></td>
-    <td><Figures row={row} field="previous_text" /></td>
-    <td><Surprise row={row} /></td>
-    <td className="cal-nq"><NqMove row={row} now={now} /></td>
-    <td className="cal-note">
-      {row.note_id ? <NoteLink noteId={row.note_id}>Read note</NoteLink>
-        : !row.released && row.kind !== "speech"
-          ? <button type="button" className="t-link" onClick={(event) => { event.stopPropagation(); onSelect(); }}>What to watch</button>
-          : <span className="t-muted">—</span>}
+    <td className="cal-actual">
+      <Value text={figure?.actual_text} className={figure?.reading === "better" ? "up" : figure?.reading === "worse" ? "down" : ""} />
     </td>
-  </tr>;
+    <td><Value text={figure?.forecast_text} /></td>
+    <td>
+      <Value text={figure?.previous_text} />
+      {figure?.revised_previous_text && <Explain title={`Previous · ${figure.name}`}
+        lines={[`First reported ${figure.previous_text}, now ${figure.revised_previous_text}${figure.revision_text ? ` (${figure.revision_text})` : ""}.`]}>
+        <span className="cal-revised"> → {figure.revised_previous_text}</span>
+      </Explain>}
+    </td>
+    <td><Surprise row={row} figure={figure} /></td>
+    {i === 0 && <>
+      <td className="cal-nq" rowSpan={span}><NqMove row={row} now={now} /></td>
+      <td className="cal-note" rowSpan={span}>
+        {row.note_id ? <NoteLink noteId={row.note_id}>Read note</NoteLink>
+          : !row.released && row.kind !== "speech"
+            ? <button type="button" className="t-link" onClick={(event) => { event.stopPropagation(); onSelect(); }}>What to watch</button>
+            : <span className="t-muted">—</span>}
+      </td>
+    </>}
+  </tr>)}</>;
 }
 
 function Bars({ releases }: { releases: PlaybookRelease[] }) {

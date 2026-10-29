@@ -285,7 +285,8 @@ earlier refreshes.
 | `OMARKETS_ECONOMIC_DB_PATH` | `<data_dir>/economics-<mode>.sqlite3` | Optional separate SQLite path |
 | `OMARKETS_FRED_API_KEY` | unset | FRED key; unset means those series are unavailable |
 | `OMARKETS_BLS_API_KEY` | unset | Optional BLS registered key; keyless works, invalid key auto-falls back |
-| `OMARKETS_CENSUS_API_KEY` | unset | Census data API key for `census_retail` (retail sales headline) |
+| `OMARKETS_CENSUS_API_KEY` | unset | Census data API key for `census_retail` (retail sales headline) and `census_releases` (durable goods, core durable goods, new home sales actuals) |
+| `OMARKETS_BEA_API_KEY` | unset | BEA data API key for `bea_data` (GDP, GDP price index, PCE and core PCE m/m actuals) |
 | `OMARKETS_EIA_API_KEY` | unset | Reserved for Phase 3 energy market data |
 | `OMARKETS_ECONOMIC_POLL_SECONDS` | `21600` | Fallback interval for providers without a named default |
 | `OMARKETS_ECONOMIC_POLL_OVERRIDES` | `{}` | Named provider intervals in seconds, minimum 30 |

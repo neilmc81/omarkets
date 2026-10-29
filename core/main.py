@@ -147,6 +147,7 @@ def build_economic_service(settings: Settings) -> EconomicService:
             fred_api_key=_secret(settings.fred_api_key),
             bls_api_key=_secret(settings.bls_api_key),
             census_api_key=_secret(settings.census_api_key),
+            bea_api_key=_secret(settings.bea_api_key),
         ),
         registry=MacroRegistry(definitions=definitions),
         mode=mode,

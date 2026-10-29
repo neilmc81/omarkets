@@ -40,6 +40,7 @@ EVENT_CODES: tuple[tuple[str, str, str, str], ...] = (
     ("building permits", "BUILDING_PERMITS", "housing", "medium"),
     ("existing home sales", "EXISTING_HOME_SALES", "housing", "medium"),
     ("new home sales", "NEW_HOME_SALES", "housing", "medium"),
+    ("cb consumer confidence", "CONSUMER_CONFIDENCE", "growth", "medium"),
     ("ism manufacturing prices", "ISM_MFG_PRICES", "inflation", "high"),
     ("ism manufacturing", "ISM_MFG", "growth", "high"),
     ("ism services", "ISM_SERVICES", "growth", "high"),
