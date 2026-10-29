@@ -160,7 +160,9 @@ give "your time". The chart polls (1D every minute, 5D every two minutes, 1M eve
 five); it is not a tick-by-tick stream. The old raw 1,000-observation line
 (`HistoryChart`) and the old workstation pages are gone (UI redesign Phase 6);
 core and source diagnostics now sit in the status panel behind the header's
-feeds dot.
+feeds dot, with a read-only Instruments table (symbol, asset class, venue,
+currency, trading calendar, decimals, source and delay, and what the feed is
+doing now).
 
 Dev and preview bind only to `127.0.0.1`, with same-origin REST/WebSocket
 proxies; no backend CORS changes are needed. Set `OMARKETS_BACKEND_TARGET` to
@@ -637,8 +639,8 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | --- | --- | --- |
 | `/health` | GET | Application, storage, and provider health |
 | `/api/v1/state` | GET | Current market state for the whole universe |
-| `/api/v1/instruments` | GET | Configured instruments with current state |
-| `/api/v1/instruments/{symbol}` | GET | Current state for one instrument (404 if unknown) |
+| `/api/v1/instruments` | GET | Configured instruments with current state, venue, currency, trading calendar and decimals (the read-only Instruments table in the status panel) |
+| `/api/v1/instruments/{symbol}` | GET | The same for one instrument (404 if unknown) |
 | `/api/v1/history/{symbol}` | GET | Stored observations; `start`, `end`, `limit` params |
 | `/api/v1/markets/status` | GET | Per-instrument value, feed status, source, contract, timestamps |
 | `/api/v1/market/providers` | GET | Market-data routing (symbol → provider) and feed status |

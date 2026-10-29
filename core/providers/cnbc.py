@@ -66,6 +66,20 @@ SYMBOL_MAP: dict[str, str] = {
     "TSLA": "TSLA.O",
 }
 
+#: Canonical symbol -> the exchange delay (seconds) CNBC serves it with. A
+#: listed symbol is labelled delayed, and only counts as stale once it is older
+#: than this delay plus the staleness margin. An unlisted symbol is expected in
+#: real time, so a lagging quote for it turns stale. A new symbol on this
+#: adapter needs an entry here if CNBC serves it delayed. Observed lag is never
+#: turned into an allowance automatically.
+EXPECTED_DELAY_SECONDS: dict[str, int] = {
+    "NQ": 600,
+    "ES": 600,
+    "WTI": 600,
+    "GOLD": 600,
+    "VXN": 900,
+}
+
 SESSION_STATUS = {"REG_MKT", "PRE_MKT", "POST_MKT", "EXT_MKT", "OPEN"}
 
 
@@ -232,7 +246,7 @@ class CNBCMarketDataProvider(MarketDataProvider):
         # receipt. That is a delayed feed and must never be labelled live.
         lag = max(0.0, (now - status).total_seconds())
         in_session = session in SESSION_STATUS
-        expected_delay = {"NQ": 600, "ES": 600, "WTI": 600, "GOLD": 600, "VXN": 900}.get(symbol, 0)
+        expected_delay = EXPECTED_DELAY_SECONDS.get(symbol, 0)
         if not exchange_time_known:
             feed = "stale"
         elif in_session and (expected_delay or lag > self._live_lag_seconds):
@@ -397,4 +411,4 @@ class _ProviderFailure(RuntimeError):
     pass
 
 
-__all__ = ["CNBCMarketDataProvider", "SYMBOL_MAP"]
+__all__ = ["CNBCMarketDataProvider", "EXPECTED_DELAY_SECONDS", "SYMBOL_MAP"]

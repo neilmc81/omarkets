@@ -37,13 +37,17 @@ class _Frozen(BaseModel):
 
 
 class ChartSession(_Frozen):
-    """One Globex session in a chart window, with its display segments."""
+    """One session of the instrument's calendar in a chart window, with its segments.
+
+    ``rth_*`` (the US cash hours) are ``None`` on a calendar without them (24×7
+    crypto), which also has no segments.
+    """
 
     trade_date: date
     opens_at: AwareDatetime
     closes_at: AwareDatetime
-    rth_opens_at: AwareDatetime
-    rth_closes_at: AwareDatetime
+    rth_opens_at: AwareDatetime | None
+    rth_closes_at: AwareDatetime | None
     early_close: bool
     segments: list[SessionSegment]
 

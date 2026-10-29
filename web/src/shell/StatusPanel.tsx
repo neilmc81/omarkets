@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
-import type { HealthResponse } from "../api/schemas";
+import { fetchInstruments } from "../api/client";
+import type { HealthResponse, InstrumentRow } from "../api/schemas";
+import { usePoll } from "../chart/usePoll";
 import type { Desk } from "../today/api";
 import type { FeedsStatus } from "./feeds";
 
@@ -13,6 +15,46 @@ const at = (iso: string | null | undefined) => (iso ? `${ET.format(new Date(iso)
 const SOURCE_STATUS: Record<string, string> = {
   healthy: "OK", degraded: "degraded", unavailable: "unavailable", not_configured: "not set up",
 };
+
+// What the feed is doing now, in the words the rest of the app uses.
+function feedNow(row: InstrumentRow): string {
+  const { status, feed_status: feed, market_closed: closed } = row.state;
+  if (status === "unavailable") return "unavailable";
+  if (closed) return "market closed";
+  if (status === "stale") return feed === "delayed" ? "delayed · stale" : "stale";
+  return feed;
+}
+
+const delayText = (row: InstrumentRow) => row.state.status === "unavailable" ? "—"
+  : row.state.expected_delay_seconds > 0 ? `${Math.round(row.state.expected_delay_seconds / 60)} min delay` : "real time";
+
+// Read-only: every instrument the core knows, where it trades and which
+// calendar decides when its market is open. Nothing here can be edited. It
+// refreshes while the panel is open, so "Now" follows the core.
+const INSTRUMENTS_POLL_MS = 15_000;
+
+function InstrumentsTable() {
+  const { data, error } = usePoll(fetchInstruments, "instruments", INSTRUMENTS_POLL_MS);
+  if (!data) return error ? <p className="t-error" role="status">Instruments unavailable: {error}</p>
+    : <p className="t-muted">Loading…</p>;
+  const rows = data.instruments;
+  return <>
+  <p className="t-muted">As of {at(data.generated_at)}{error ? ` · refresh failed: ${error}` : ""}</p>
+  <table className="status-table instruments-table" aria-label="Instruments">
+    <thead><tr><th>Symbol</th><th>Class</th><th>Venue</th><th>Currency</th><th>Calendar</th><th>Decimals</th><th>Source</th><th>Now</th></tr></thead>
+    <tbody>{rows.map((row) => <tr key={row.symbol}>
+      <td title={row.display_name}><b>{row.symbol}</b></td>
+      <td>{row.asset_class.replaceAll("_", " ")}</td>
+      <td>{row.venue}</td>
+      <td>{row.currency ?? "—"}</td>
+      <td>{row.session_calendar_label}</td>
+      <td>{row.price_precision}</td>
+      <td>{row.state.source ?? "—"} · {delayText(row)}</td>
+      <td>{feedNow(row)}</td>
+    </tr>)}</tbody>
+  </table>
+  </>;
+}
 
 export function StatusPanel({ feeds, health, healthError, desk, deskError, onClose }: {
   feeds: FeedsStatus;
@@ -66,6 +108,8 @@ export function StatusPanel({ feeds, health, healthError, desk, deskError, onClo
         </tr>)}</tbody>
       </table>
     </>}
+    <h3>Instruments</h3>
+    <InstrumentsTable />
     <h3>About</h3>
     <div className="status-about">
       <p>Omarkets is open source under the MIT licence. It is not financial advice and never places orders. Quotes are delayed and may be wrong or late.</p>

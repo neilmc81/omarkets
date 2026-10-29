@@ -24,6 +24,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+from core.domain.calendars import calendar_for
 from core.domain.instruments import (
     DEFAULT_STALE_SECONDS,
     INSTRUMENTS,
@@ -39,7 +40,6 @@ from core.domain.models import (
     ProviderStatus,
     utc_now,
 )
-from core.domain.sessions import closed_since_last_session
 from core.providers.base import MarketDataProvider
 from core.storage.base import ObservationRepository, OhlcBucket, StorageError
 
@@ -173,12 +173,10 @@ def build_instrument_state(
         DataStatus.STALE if declared_stale or excess_age > freshness_margin else DataStatus.LIVE
     )
     feed_status = _feed_status(observation, status)
-    # Crypto trades through weekends, so only session-bound markets close.
-    market_closed = (
-        status is DataStatus.STALE
-        and instrument.asset_class is not AssetClass.CRYPTO
-        and closed_since_last_session(observation.timestamp, now)
-    )
+    # The instrument's own calendar decides whether an old quote is just the
+    # last print before a closure; a 24x7 market never closes.
+    market_closed = status is DataStatus.STALE and calendar_for(
+        instrument).closed_since_last_session(observation.timestamp, now)
     latency = None
     if observation.received_at is not None:
         latency = max(0.0, (observation.received_at - observation.timestamp).total_seconds())

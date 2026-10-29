@@ -430,3 +430,52 @@ async def test_wti_requests_the_explicit_crude_contract_not_the_continuous_symbo
     assert observations[0].symbol == "WTI"
     assert observations[0].metadata["contract_code"] == "CLX26"
     assert observations[0].metadata["contract_expiry"] == "2026-10-20"
+
+
+def test_expected_delays_live_in_the_adapter_table():
+    from core.providers.cnbc import EXPECTED_DELAY_SECONDS
+
+    # The values the inline literal held before Phase 0 moved them here.
+    assert EXPECTED_DELAY_SECONDS == {"NQ": 600, "ES": 600, "WTI": 600, "GOLD": 600, "VXN": 900}
+
+
+async def test_a_declared_delay_reads_delayed_not_stale(monkeypatch):
+    """Phase 0 gate: a test instrument with a declared delay reads delayed, not stale.
+
+    DXY stands in for a new CNBC symbol whose feed runs 12 minutes behind.
+    Without a table entry the quote turns stale; with one it is a usable,
+    clearly labelled delayed quote.
+    """
+    from datetime import timedelta
+
+    from core.desk.facts import quote_strip
+    from core.domain.models import DataStatus, FeedStatus
+    from core.providers import cnbc
+    from core.services.market_state import StalePolicy, build_instrument_state, build_market_state
+
+    p, client = provider(lambda request: httpx.Response(200, json={}))
+    row = record(".DXY", "101.5", last_time=(NOW - timedelta(minutes=12)).isoformat())
+
+    def read():
+        observation = p._normalize("DXY", row, NOW)
+        state = build_instrument_state("DXY", observation, policy=StalePolicy(), now=NOW)
+        market = build_market_state({"DXY": observation}, policy=StalePolicy(), now=NOW,
+                                    provider="cnbc")
+        (quote,) = quote_strip(market, ("DXY",))
+        return state, quote
+
+    try:
+        undeclared, quote = read()
+        assert undeclared.status is DataStatus.STALE
+        assert undeclared.expected_delay_seconds == 0
+        assert quote.stale
+
+        monkeypatch.setitem(cnbc.EXPECTED_DELAY_SECONDS, "DXY", 900)
+        declared, quote = read()
+        assert declared.status is DataStatus.LIVE
+        assert declared.feed_status is FeedStatus.DELAYED
+        assert declared.expected_delay_seconds == 900
+        assert not declared.market_closed
+        assert quote.delayed and not quote.stale and not quote.closed
+    finally:
+        await client.aclose()

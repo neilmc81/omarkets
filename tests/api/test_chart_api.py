@@ -151,3 +151,66 @@ def test_sparklines_contract(client):
     assert body["interval"] == "15m"
     assert [p["value"] for p in lines["NQ"]] == [29_200.0]
     assert lines["DXY"] == []
+
+
+def test_btc_bars_use_24x7_utc_day_sessions_and_never_say_closed(memory_repo):
+    """Phase 0 gate: the BTC chart shows 24x7 sessions and never "market closed"."""
+    from core.services.market_state import StalePolicy, build_market_state
+
+    sunday = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)  # CME shut until 18:00 ET
+    quotes = []
+    at = datetime(2026, 10, 20, tzinfo=UTC)
+    while at < sunday - timedelta(hours=2):  # the feed stopped two hours ago
+        quotes.append(MarketObservation(symbol="BTC", timestamp=at, value=80_000.0,
+                                        unit="USD", source="binance", received_at=at,
+                                        metadata={"feed_status": "live"}))
+        at += timedelta(minutes=30)
+    memory_repo.store(quotes)
+
+    class Service(StubService):
+        def current_state(self, now=None):
+            return build_market_state({"BTC": quotes[-1]}, policy=StalePolicy(), now=sunday,
+                                      provider="binance")
+
+    app = FastAPI()
+    app.include_router(chart.router)
+    app.state.service = Service(memory_repo, {})
+    with TestClient(app) as test_client:
+        body = test_client.get("/api/v1/bars/BTC?interval=1h&range=5d").json()
+        day = test_client.get("/api/v1/bars/BTC?interval=1h&range=1d").json()
+        nq = test_client.get("/api/v1/bars/NQ?interval=1h&range=1d").json()
+
+    assert [s["trade_date"] for s in body["sessions"]] == [
+        "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"]
+    for session in body["sessions"]:
+        assert session["opens_at"].endswith("T00:00:00Z")
+        assert session["rth_opens_at"] is None and session["segments"] == []
+        assert session["early_close"] is False
+    assert body["start"] == "2026-10-21T00:00:00Z" and body["end"] == "2026-10-25T12:00:00Z"
+    # Saturday has bars; the weekend is not cut out as it is for NQ.
+    assert any(b["time"].startswith("2026-10-24") and b["count"] for b in body["bars"])
+    assert body["status"] == "stale" and body["market_closed"] is False
+    assert [s["trade_date"] for s in day["sessions"]] == ["2026-10-25"]
+    # NQ on the same Sunday still shows Friday's Globex session.
+    assert [s["trade_date"] for s in nq["sessions"]] == ["2026-10-23"]
+
+
+def test_btc_quiet_spell_across_utc_midnight_stays_a_gap(memory_repo):
+    """A 24x7 market trades through midnight: a missing hour there is a gap bar."""
+    from core.analysis import bars as B
+    from core.domain.calendars import ALWAYS_OPEN
+    from core.domain.chart import ChartRange, Interval
+
+    quotes = [MarketObservation(symbol="BTC", timestamp=at, value=80_000.0, unit="USD",
+                                source="binance", received_at=at,
+                                metadata={"feed_status": "live"})
+              for at in (datetime(2026, 10, 22, 23, 0, tzinfo=UTC),
+                         datetime(2026, 10, 23, 1, 0, tzinfo=UTC))]
+    memory_repo.store(quotes)
+    now = datetime(2026, 10, 23, 2, 0, tzinfo=UTC)
+    sessions = B.range_sessions(ChartRange.FIVE_DAYS, now, ALWAYS_OPEN)
+    _, end = B.window(sessions, now)
+    built, _ = B.read_bars(memory_repo.ohlc, "BTC", sessions, Interval.H1, end=end)
+    assert [(b.time.isoformat(), b.count) for b in built] == [
+        ("2026-10-22T23:00:00+00:00", 1), ("2026-10-23T00:00:00+00:00", 0),
+        ("2026-10-23T01:00:00+00:00", 1)]

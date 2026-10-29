@@ -14,8 +14,23 @@ afterEach(() => window.history.replaceState(null, "", "/"));
 const older = { ...note, id: "move:1", kind: "move", title: "Big move", created_at: "2026-10-14T11:00:00Z",
   draft: { ...draft, headline: "Nasdaq slides as fear rises" } };
 
+const row = (symbol: string, extra: Record<string, unknown>, state: Record<string, unknown>) => ({
+  symbol, display_name: symbol, asset_class: "equity_index_future", quote_type: "price", timezone: "America/New_York",
+  unit: "index points", venue: "CME", currency: "USD", session_calendar: "cme_globex",
+  session_calendar_label: "CME Globex (Sun–Fri 18:00–17:00 ET)", price_precision: 2, stale_after_seconds: 60, metadata: {},
+  ...extra, state: { symbol, status: "live", feed_status: "delayed", source: "cnbc", expected_delay_seconds: 600, market_closed: false, ...state },
+});
+const instruments = { generated_at: "2026-10-22T15:00:00Z", count: 3, instruments: [
+  row("NQ", {}, {}),
+  row("BTC", { asset_class: "crypto", venue: "BINANCE", session_calendar: "24x7", session_calendar_label: "24×7 (day = 00:00–24:00 UTC)" },
+    { feed_status: "live", source: "binance", expected_delay_seconds: 0 }),
+  row("US2Y", { asset_class: "treasury_yield", venue: "OTC", currency: null, price_precision: 3 },
+    { status: "stale", feed_status: "stale", expected_delay_seconds: 0, market_closed: true }),
+] };
+
 function serve(body: unknown = desk) {
   const fetcher = vi.fn((url: string) => url === "/health" ? ok(health)
+    : url === "/api/v1/instruments" ? ok(instruments)
     : url === "/api/v1/desk/ask" ? ok({ ...note, id: "ask:1", kind: "ask" })
       : url === "/api/v1/desk/learn" ? ok({ count: 0, entries: [] })
         : ok(body));
@@ -71,6 +86,37 @@ describe("shared shell", () => {
     expect(dot).toHaveAttribute("aria-expanded", "true");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "System status" })).toBeNull();
+  });
+
+  it("lists every instrument read-only in the status panel", async () => {
+    serve();
+    render(<Root />);
+    fireEvent.click(await screen.findByRole("button", { name: "All feeds OK" }));
+    const table = await screen.findByRole("table", { name: "Instruments" });
+    const rows = [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent));
+    expect(rows).toEqual([
+      ["NQ", "equity index future", "CME", "USD", "CME Globex (Sun–Fri 18:00–17:00 ET)", "2", "cnbc · 10 min delay", "delayed"],
+      ["BTC", "crypto", "BINANCE", "USD", "24×7 (day = 00:00–24:00 UTC)", "2", "binance · real time", "live"],
+      ["US2Y", "treasury yield", "OTC", "—", "CME Globex (Sun–Fri 18:00–17:00 ET)", "3", "cnbc · real time", "market closed"],
+    ]);
+    expect(table.querySelector("input, select, button")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "System status" })).toHaveTextContent("As of Oct 22");
+  });
+
+  it("refreshes the Instruments table while the panel is open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const fetcher = serve();
+      render(<Root />);
+      fireEvent.click(await screen.findByRole("button", { name: "All feeds OK" }));
+      await screen.findByRole("table", { name: "Instruments" });
+      const calls = () => fetcher.mock.calls.filter(([url]) => url === "/api/v1/instruments").length;
+      const before = calls();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(calls()).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("switches pages with 1–7 and ignores keys typed into inputs", async () => {

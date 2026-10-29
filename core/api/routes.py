@@ -21,10 +21,11 @@ from core.api.schemas import (
     NewsHealth,
     ProvidersResponse,
 )
+from core.domain.calendars import calendar_for
 from core.domain.contracts import DEFAULT_FUTURES_ROOTS, contract_for_symbol
 from core.domain.cross_market import CrossMarketState
-from core.domain.instruments import get_instrument, normalize_symbol
-from core.domain.models import MarketState
+from core.domain.instruments import Instrument, get_instrument, normalize_symbol
+from core.domain.models import InstrumentState, MarketState
 from core.providers.registry import ProviderRegistry
 from core.services.market_state import MarketStateService
 from core.storage.base import StorageError
@@ -123,19 +124,7 @@ async def instruments(service: ServiceDep) -> InstrumentsResponse:
             raise HTTPException(
                 status_code=500, detail=f"instrument definition missing: {state.symbol}"
             )
-        details.append(
-            InstrumentDetail(
-                symbol=state.symbol,
-                display_name=state.display_name,
-                asset_class=state.asset_class.value,
-                quote_type=state.quote_type.value,
-                timezone=definition.timezone,
-                unit=state.unit,
-                stale_after_seconds=state.stale_after_seconds,
-                metadata=definition.metadata,
-                state=state,
-            )
-        )
+        details.append(_detail(definition, state))
     return InstrumentsResponse(
         generated_at=current.generated_at,
         count=len(details),
@@ -157,7 +146,11 @@ async def instrument(symbol: str, service: ServiceDep) -> InstrumentDetail:
         raise HTTPException(status_code=404, detail=f"unknown instrument: {symbol}")
 
     current = service.current_state()
-    state = current.instruments[canonical]
+    return _detail(definition, current.instruments[canonical])
+
+
+def _detail(definition: Instrument, state: InstrumentState) -> InstrumentDetail:
+    calendar = calendar_for(definition)
     return InstrumentDetail(
         symbol=state.symbol,
         display_name=state.display_name,
@@ -165,6 +158,11 @@ async def instrument(symbol: str, service: ServiceDep) -> InstrumentDetail:
         quote_type=state.quote_type.value,
         timezone=definition.timezone,
         unit=state.unit,
+        venue=definition.venue,
+        currency=definition.currency,
+        session_calendar=calendar.calendar_id.value,
+        session_calendar_label=calendar.label,
+        price_precision=definition.price_precision,
         stale_after_seconds=state.stale_after_seconds,
         metadata=definition.metadata,
         state=state,

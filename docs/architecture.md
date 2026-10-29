@@ -13,6 +13,55 @@ describe removed code (for example the analyst chain, Jev and the
 `*_ANALYST_*` settings in §6) and are **not** the current design. For values in
 force, run `omarketsctl config`; code defaults and old docs can differ from it.
 
+## October 27, 2026: multi-asset groundwork (Phase 0)
+
+First step of the multi-asset plan ([`PLAN.md`](PLAN.md) §6). NQ behaviour is
+unchanged; `tests/test_replay_gate.py` proves it (below).
+
+- **Instrument fields.** `Instrument` (`core/domain/instruments.py`) gains
+  `venue` (where it trades, e.g. `CME`, `NASDAQ`, `BINANCE`; separate from the
+  provider that sends the price), `currency` (ISO code, `None` for yields and
+  indices such as DXY and VIX), `session_calendar` (a `SessionCalendarId`) and
+  `price_precision` (decimals the venue quotes). Nothing formats with
+  `price_precision` yet. `AssetClass` adds `FX_SPOT` and `EQUITY_INDEX`
+  (unused so far); `FX_INDEX` stays for DXY.
+- **Trading calendars.** `core/domain/calendars.py` defines the
+  `SessionCalendar` interface (session for a date, active session, previous
+  trade date, early close, display segments, market closed, closed since the
+  last session) and `calendar_for(instrument)`. `CME_GLOBEX` wraps
+  `core/domain/sessions.py` unchanged; `ALWAYS_OPEN` (24×7) is never closed and
+  its chart session is one UTC day with no cash hours. BTC uses `ALWAYS_OPEN`;
+  every other instrument keeps `CME_GLOBEX`, as before. `TradingSession` is the
+  calendar-neutral session type; `GlobexSession` extends it.
+- **Who asks the calendar.** Staleness (`build_instrument_state`: an old quote
+  is "market closed" only if its own calendar says the market shut since) and
+  the bars endpoint (`/api/v1/bars/{symbol}` sessions). The session timeline
+  (`/api/v1/session`), release pins, key levels, normal move size, desk
+  scheduling, the CNBC poll pause and the economics/news quiet periods still
+  call the Globex functions directly; they move one slice at a time in later
+  phases.
+- **Chart payload.** `ChartSession.rth_opens_at` / `rth_closes_at` are nullable
+  (`null` on the 24×7 calendar, which also has no segments). NQ/ES always fill
+  them. The web schema and overnight shading accept a session without them.
+  Back-to-back sessions (24×7 UTC days) are read as one stretch, so a quiet
+  spell across midnight is still shown as a gap; CME sessions never touch.
+- **Expected delay.** CNBC's declared delays now live in the adapter table
+  `EXPECTED_DELAY_SECONDS` in `core/providers/cnbc.py` (same values: NQ, ES,
+  WTI, GOLD 600 s; VXN 900 s). A symbol listed there reads *delayed* (live
+  status, delayed feed) until it is older than its delay plus the margin; an
+  unlisted symbol whose quotes lag turns *stale*.
+- **Instruments API and table.** `/api/v1/instruments` adds `venue`,
+  `currency`, `session_calendar`, `session_calendar_label` and
+  `price_precision`. The status panel shows them in a read-only table that
+  refreshes every 15 seconds while it is open.
+- **Replay gate.** `tests/test_replay_gate.py` replays fixed CNBC/Binance-shaped
+  quotes (late September to late November 2026: DST end, Thanksgiving, the
+  early close) and compares SHA-256 digests of the state, the quote strip and
+  the chart endpoints (NQ, ES, US2Y, DXY bars in every range; session, levels,
+  risk tone, sparklines) at eight instants against
+  `tests/fixtures/replay/phase0_golden.json`, recorded on `main` at 65f4212
+  before any Phase 0 change. Re-record only for an agreed screen change.
+
 ## October 10 scope revision: technical analysis retired
 
 The current repair candidate removes the active TechnicalService, technical
@@ -245,7 +294,7 @@ docs/               architecture and design notes
 
 | Component | Location | What exists |
 | --- | --- | --- |
-| Instrument universe | `core/domain/instruments.py` | 18 canonical symbols across 7 asset classes; immutable registry |
+| Instrument universe | `core/domain/instruments.py` | 18 canonical symbols across 7 asset classes (9 defined); venue, currency, trading calendar and decimals per instrument; immutable registry |
 | Typed schemas | `core/domain/models.py` | `MarketObservation`, `PriceQuote`, `InstrumentState`, `MarketState` |
 | Provider interface | `core/providers/base.py` | `MarketDataProvider` with `start`/`fetch_snapshot`/`stream_updates`/`health`/`aclose` |
 | Fake provider | `core/providers/fake.py` | Deterministic seeded random walk / mean-reverting simulation, injectable clock |
@@ -517,7 +566,7 @@ Binance spot ───────────┘        (per-observation source
 | --- | --- | --- |
 | Futures contracts | `core/domain/contracts.py` | Front-month selection (NQ/ES: H/M/U/Z, third Friday; WTI: monthly NYMEX CL rule), roll rule, contract code/expiry/provider symbol |
 | Feed status | `core/domain/models.py` | `FeedStatus` (live/delayed/stale/unavailable/demo) on `InstrumentState`, plus provider symbol, contract, latency |
-| CNBC adapter | `core/providers/cnbc.py` | Canonical↔vendor mapping, yield normalization to percent, delayed-vs-live from exchange lag, bounded poll with backoff |
+| CNBC adapter | `core/providers/cnbc.py` | Canonical↔vendor mapping, declared delays (`EXPECTED_DELAY_SECONDS`), yield normalization to percent, delayed-vs-live from exchange lag, bounded poll with backoff |
 | Binance adapter | `core/providers/binance.py` | BTC spot, bounded poll with backoff |
 | Composite | `core/providers/composite.py` | Merge child streams; one failing child cannot stop the others; single start/close per child |
 | Routing | `core/providers/registry.py` | Canonical symbol → provider, configurable, no scattered conditionals |
