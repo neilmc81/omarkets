@@ -51,6 +51,18 @@ so a restart cannot produce a duplicate note or notification.
   validated (`NoteDraft`) and rejected if it contains trading advice.
 - `core/desk/service.py` schedules notes and sends one desktop notification per
   successful note. `core/desk/store.py` keeps notes in `data/desk.sqlite3`.
+  Each note's exact facts and request envelope (prompt version, SHA-256 of the
+  system text, primary/fallback model and routing, the model that wrote it) go
+  in the side table `note_facts`, never in the note payload, so they can be
+  replayed through a new prompt. A written note's facts are never overwritten.
+  The reader accepts both draft shapes: `nq_tone` (stored name) or `tone`
+  (desk:v9), and `rates_read` may be missing. A list skips (and logs) an
+  unreadable note instead of failing the whole list.
+- `omarketsctl desk-backup [file]` copies `desk.sqlite3` with SQLite's backup
+  API (safe while the service runs; includes attempts, failure alerts,
+  `desk_once` and follow-ups). Restore: stop `omarkets.service`, copy the
+  backup over `desk.sqlite3`, delete its `-wal`/`-shm` files, start the
+  service. AI budget accounting lives elsewhere and is never rolled back.
 - `core/providers/earnings_nasdaq.py` reads mega-cap earnings dates from the
   public Nasdaq calendar.
 - API: `GET /api/v1/desk`, `GET /api/v1/desk/notes/{id}`, `GET /api/v1/desk/learn`,

@@ -1006,7 +1006,7 @@ class DeskService:
             cost_usd=result.cost_usd,
             unverified_numbers=list(result.unverified_numbers), **parts,
         )
-        self.store.save(note)
+        self.store.save(note, facts, self.writer.envelope(kind, result))
         if note.status == "ok":
             logger.info("desk note %s written (cost=%s)", note_id, result.cost_usd)
             if notify and self.notify is not None:

@@ -695,7 +695,7 @@ def _note_view(note: dict[str, Any] | None) -> dict[str, Any] | None:
         "created_at": note.get("created_at"),
         "headline": draft.get("headline"),
         "summary": summary,
-        "nq_tone": draft.get("nq_tone"),
+        "nq_tone": draft.get("nq_tone") or draft.get("tone"),
         "model": note.get("model"),
         "spoken": f"The latest {label}: {headline}. {summary}".strip(),
     }

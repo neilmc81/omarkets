@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+
+from pydantic import ValidationError
 
 from core.desk.models import BreakingAlert, DeskNote, FollowUp, LearnEntry
+
+logger = logging.getLogger(__name__)
 
 
 class DeskStore:
@@ -45,6 +52,13 @@ class DeskStore:
             if "followup" not in columns:
                 # "Did it hold?" results; kept apart so a written note is never rewritten.
                 self._db.execute("ALTER TABLE desk_notes ADD COLUMN followup TEXT")
+            # The exact facts a note was written from, and how it was requested.
+            # Kept out of the note payload so older releases still read the notes.
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS note_facts ("
+                " note_id TEXT PRIMARY KEY, facts TEXT NOT NULL, envelope TEXT NOT NULL,"
+                " captured_at TEXT NOT NULL)"
+            )
 
     @staticmethod
     def _note(payload: str, followup: str | None) -> DeskNote:
@@ -52,6 +66,19 @@ class DeskStore:
         if followup:
             note = note.model_copy(update={"follow_up": FollowUp.model_validate_json(followup)})
         return note
+
+    def _notes(self, rows: list[tuple[str, str | None]]) -> list[DeskNote]:
+        """Readable notes from ``rows``; one unreadable payload is logged and skipped,
+        so it can never blank a whole list."""
+        notes = []
+        for payload, followup in rows:
+            try:
+                notes.append(self._note(payload, followup))
+            except ValidationError as exc:
+                found = re.search(r'"id":\s*"([^"]*)"', payload)
+                logger.error("desk note %s unreadable, skipped: %d errors",
+                             found.group(1) if found else "?", exc.error_count())
+        return notes
 
     def get(self, note_id: str) -> DeskNote | None:
         with self._lock:
@@ -74,10 +101,12 @@ class DeskStore:
             ).fetchone()
         return row is not None
 
-    def save(self, note: DeskNote) -> None:
-        """Insert, or replace a failed attempt. A successful note is never overwritten."""
+    def save(self, note: DeskNote, facts: dict[str, Any] | None = None,
+             envelope: dict[str, Any] | None = None) -> None:
+        """Insert, or replace a failed attempt. A successful note is never overwritten,
+        and nor are the facts it was written from."""
         with self._lock, self._db:
-            self._db.execute(
+            cursor = self._db.execute(
                 "INSERT INTO desk_notes (id, kind, status, created_at, payload)"
                 " VALUES (?,?,?,?,?)"
                 " ON CONFLICT(id) DO UPDATE SET status=excluded.status,"
@@ -87,6 +116,30 @@ class DeskStore:
                 (note.id, note.kind.value, note.status, note.created_at.isoformat(),
                  note.model_dump_json(exclude={"follow_up"})),
             )
+            if cursor.rowcount == 1 and facts is not None:
+                self._db.execute(
+                    "INSERT OR REPLACE INTO note_facts (note_id, facts, envelope, captured_at)"
+                    " VALUES (?,?,?,?)",
+                    (note.id, json.dumps(facts, default=str, sort_keys=True),
+                     json.dumps(envelope or {}, sort_keys=True), note.created_at.isoformat()),
+                )
+
+    def facts(self, note_id: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        """The facts and request envelope a note was written from, if captured."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT facts, envelope FROM note_facts WHERE note_id=?", (note_id,)
+            ).fetchone()
+        return (json.loads(row[0]), json.loads(row[1])) if row else None
+
+    def backup(self, target: Path | str) -> None:
+        """A consistent copy of the whole database (WAL included), via SQLite's backup."""
+        out = sqlite3.connect(str(target))
+        try:
+            with self._lock:
+                self._db.backup(out)
+        finally:
+            out.close()
 
     def save_follow_up(self, note_id: str, follow_up: FollowUp) -> None:
         with self._lock, self._db:
@@ -144,7 +197,7 @@ class DeskStore:
                 " ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [self._note(*row) for row in rows]
+        return self._notes(rows)
 
     def readable(self, start: datetime, end: datetime, limit: int) -> list[DeskNote]:
         """Written notes (status ok, with a draft) created in ``[start, end)``, newest first."""
@@ -156,7 +209,7 @@ class DeskStore:
                 " AND created_at>=? AND created_at<? ORDER BY created_at DESC, id LIMIT ?",
                 (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat(), limit),
             ).fetchall()
-        return [self._note(*row) for row in rows]
+        return self._notes(rows)
 
     def release_note_ids(self) -> list[str]:
         """Ids of written release and Fed notes, for linking calendar rows to them."""
@@ -178,8 +231,7 @@ class DeskStore:
                 "SELECT payload FROM desk_notes WHERE status='ok' ORDER BY created_at DESC"
             ).fetchall()
         merged: dict[str, LearnEntry] = {}
-        for (payload,) in rows:
-            note = DeskNote.model_validate_json(payload)
+        for note in self._notes([(payload, None) for (payload,) in rows]):
             text = " ".join((note.draft.learn if note.draft else "").split())
             key = re.sub(r"[^\w ]", "", text.casefold()).strip()
             if not key:

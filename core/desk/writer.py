@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -14,7 +15,7 @@ import httpx
 from pydantic import ValidationError
 
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import SYSTEM, user_message
+from core.desk.prompts import PROMPT_VERSION, SYSTEM, user_message
 from core.services.ai_budget import BudgetPaused
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ def _json_object(text: str) -> dict[str, Any]:
 
 def _draft_text(draft: NoteDraft) -> str:
     return " ".join([draft.headline, draft.summary, draft.what_it_means,
-                     draft.market_reaction, draft.rates_read, draft.learn, *draft.watch_next])
+                     draft.market_reaction, draft.rates_read or "", draft.learn, *draft.watch_next])
 
 
 def check_draft(draft: NoteDraft) -> str | None:
@@ -141,6 +142,19 @@ class DeskWriter:
         if model is None:
             raise ValueError(f"no desk model for {kind}")
         return model
+
+    def envelope(self, kind: NoteKind, result: WriteResult) -> dict[str, Any]:
+        """How a note was requested: enough to replay its facts through the same setup."""
+        primary = self.model_for(kind)
+        return {
+            "prompt_version": PROMPT_VERSION,
+            "system_sha256": hashlib.sha256(SYSTEM.encode()).hexdigest(),
+            "primary_model": primary,
+            "fallback_model": self._fallback,
+            "model_params": self._params.get(primary, {}),
+            "model": result.model,
+            "max_output_tokens": self._max_output,
+        }
 
     def _rates_for(self, model: str) -> tuple[float, float]:
         return self._rates.get(model, self._default_rates)

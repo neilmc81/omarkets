@@ -72,7 +72,7 @@ def desk_summary(desk: object) -> dict | None:
         fields = {
             "id": note.get("id"), "kind": note.get("kind"), "title": note.get("title"),
             "created_at": note.get("created_at"), "headline": draft.get("headline"),
-            "summary": draft.get("summary"), "tone": draft.get("nq_tone"),
+            "summary": draft.get("summary"), "tone": draft.get("nq_tone") or draft.get("tone"),
         }
         if all(isinstance(value, str) for value in fields.values()):
             summary = fields
