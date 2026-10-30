@@ -1044,7 +1044,8 @@ class DeskService:
                      facts: dict[str, Any], *, notify: bool = True,
                      instrument: Instrument | None = None, **parts: Any) -> DeskNote:
         if (kind in ID.INSTRUMENT_KINDS) != (instrument is not None):
-            raise ValueError(f"{kind.value} note {note_id}: instrument {instrument} "
+            symbol = instrument.symbol if instrument else None
+            raise ValueError(f"{kind.value} note {note_id}: instrument {symbol} "
                              "does not match its kind")
         result = await self.writer.write(kind, facts, instrument=instrument)
         note = DeskNote(
