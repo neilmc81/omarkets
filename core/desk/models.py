@@ -239,6 +239,9 @@ class DeskNote(BaseModel):
     unverified_numbers: list[str] = Field(default_factory=list)
     #: Added after the note is written; stored separately, never part of the draft.
     follow_up: FollowUp | None = None
+    #: The instrument a pre-market, move or ask note is about; None for event
+    #: notes. Stored in its own column and merged on read, never in the payload.
+    instrument: str | None = None
 
 
 class NoteSummary(BaseModel):

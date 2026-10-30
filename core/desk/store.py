@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from core.desk.identity import INSTRUMENT_KINDS, instrument_of
 from core.desk.models import BreakingAlert, DeskNote, FollowUp, LearnEntry
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,13 @@ class DeskStore:
             if "followup" not in columns:
                 # "Did it hold?" results; kept apart so a written note is never rewritten.
                 self._db.execute("ALTER TABLE desk_notes ADD COLUMN followup TEXT")
+            if "instrument" not in columns:
+                # Which instrument a note is about (None for desk-wide event notes).
+                self._db.execute("ALTER TABLE desk_notes ADD COLUMN instrument TEXT")
+                kinds = ",".join(f"'{k.value}'" for k in INSTRUMENT_KINDS)
+                # Every note written before this column is NQ's.
+                self._db.execute(
+                    f"UPDATE desk_notes SET instrument='NQ' WHERE kind IN ({kinds})")
             # The exact facts a note was written from, and how it was requested.
             # Kept out of the note payload so older releases still read the notes.
             self._db.execute(
@@ -61,19 +69,20 @@ class DeskStore:
             )
 
     @staticmethod
-    def _note(payload: str, followup: str | None) -> DeskNote:
+    def _note(payload: str, followup: str | None, instrument: str | None = None) -> DeskNote:
         note = DeskNote.model_validate_json(payload)
+        update: dict[str, Any] = {"instrument": instrument}
         if followup:
-            note = note.model_copy(update={"follow_up": FollowUp.model_validate_json(followup)})
-        return note
+            update["follow_up"] = FollowUp.model_validate_json(followup)
+        return note.model_copy(update=update)
 
-    def _notes(self, rows: list[tuple[str, str | None]]) -> list[DeskNote]:
+    def _notes(self, rows: list[tuple[str, str | None, str | None]]) -> list[DeskNote]:
         """Readable notes from ``rows``; one unreadable payload is logged and skipped,
         so it can never blank a whole list."""
         notes = []
-        for payload, followup in rows:
+        for payload, followup, instrument in rows:
             try:
-                notes.append(self._note(payload, followup))
+                notes.append(self._note(payload, followup, instrument))
             except ValidationError as exc:
                 found = re.search(r'"id":\s*"([^"]*)"', payload)
                 logger.error("desk note %s unreadable, skipped: %d errors",
@@ -83,7 +92,7 @@ class DeskStore:
     def get(self, note_id: str) -> DeskNote | None:
         with self._lock:
             row = self._db.execute(
-                "SELECT payload, followup FROM desk_notes WHERE id=?", (note_id,)
+                "SELECT payload, followup, instrument FROM desk_notes WHERE id=?", (note_id,)
             ).fetchone()
         return self._note(*row) if row else None
 
@@ -115,14 +124,15 @@ class DeskStore:
                 logger.exception("desk note %s: facts not serialisable, not captured", note.id)
         with self._lock, self._db:
             cursor = self._db.execute(
-                "INSERT INTO desk_notes (id, kind, status, created_at, payload)"
-                " VALUES (?,?,?,?,?)"
+                "INSERT INTO desk_notes (id, kind, status, created_at, payload, instrument)"
+                " VALUES (?,?,?,?,?,?)"
                 " ON CONFLICT(id) DO UPDATE SET status=excluded.status,"
                 " created_at=excluded.created_at, payload=excluded.payload,"
                 " attempts=desk_notes.attempts+1"
                 " WHERE desk_notes.status != 'ok'",
                 (note.id, note.kind.value, note.status, note.created_at.isoformat(),
-                 note.model_dump_json(exclude={"follow_up"})),
+                 note.model_dump_json(exclude={"follow_up", "instrument"}),
+                 instrument_of(note.id)),
             )
             if cursor.rowcount == 1 and captured is not None:
                 self._db.execute(
@@ -200,7 +210,7 @@ class DeskStore:
         clause = "" if include_failed else "WHERE status='ok'"
         with self._lock:
             rows = self._db.execute(
-                f"SELECT payload, followup FROM desk_notes {clause}"
+                f"SELECT payload, followup, instrument FROM desk_notes {clause}"
                 " ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -211,7 +221,7 @@ class DeskStore:
         # created_at is stored as UTC ISO text, so UTC bounds compare as text.
         with self._lock:
             rows = self._db.execute(
-                "SELECT payload, followup FROM desk_notes WHERE status='ok'"
+                "SELECT payload, followup, instrument FROM desk_notes WHERE status='ok'"
                 " AND json_valid(payload) AND json_extract(payload, '$.draft') IS NOT NULL"
                 " AND created_at>=? AND created_at<? ORDER BY created_at DESC, id LIMIT ?",
                 (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat(), limit),
@@ -238,7 +248,7 @@ class DeskStore:
                 "SELECT payload FROM desk_notes WHERE status='ok' ORDER BY created_at DESC"
             ).fetchall()
         merged: dict[str, LearnEntry] = {}
-        for note in self._notes([(payload, None) for (payload,) in rows]):
+        for note in self._notes([(payload, None, None) for (payload,) in rows]):
             text = " ".join((note.draft.learn if note.draft else "").split())
             key = re.sub(r"[^\w ]", "", text.casefold()).strip()
             if not key:
@@ -251,20 +261,25 @@ class DeskStore:
                                      title=note.title, created_at=note.created_at, times=1)
         return list(merged.values())
 
-    def latest_ok(self, kind: str, since_iso: str) -> DeskNote | None:
+    def latest_ok(self, kind: str, since_iso: str,
+                  instrument: str | None = None) -> DeskNote | None:
+        """The newest written note of ``kind`` since then; for one instrument if given."""
         with self._lock:
             row = self._db.execute(
-                "SELECT payload, followup FROM desk_notes WHERE kind=? AND status='ok'"
-                " AND created_at>=? ORDER BY created_at DESC LIMIT 1",
-                (kind, since_iso),
+                "SELECT payload, followup, instrument FROM desk_notes WHERE kind=? AND status='ok'"
+                " AND created_at>=? AND (? IS NULL OR instrument=?)"
+                " ORDER BY created_at DESC LIMIT 1",
+                (kind, since_iso, instrument, instrument),
             ).fetchone()
         return self._note(*row) if row else None
 
-    def count_since(self, kind: str, since_iso: str) -> int:
+    def count_since(self, kind: str, since_iso: str, instrument: str | None = None) -> int:
+        """Notes of ``kind`` (any status) since then; for one instrument if given."""
         with self._lock:
             row = self._db.execute(
-                "SELECT COUNT(*) FROM desk_notes WHERE kind=? AND created_at>=?",
-                (kind, since_iso),
+                "SELECT COUNT(*) FROM desk_notes WHERE kind=? AND created_at>=?"
+                " AND (? IS NULL OR instrument=?)",
+                (kind, since_iso, instrument, instrument),
             ).fetchone()
         return int(row[0])
 
