@@ -1,0 +1,282 @@
+{
+ "id": "premarket:2026-10-27",
+ "kind": "premarket",
+ "title": "Pre-market · Tuesday Oct 27",
+ "created_at": "2026-10-27T13:00:46.336063+00:00",
+ "facts": {
+  "figures": [
+   {
+    "name": "ADP Weekly Employment Change",
+    "unit": "jobs/week (four-week average, seasonally adjusted)",
+    "actual": 17000.0,
+    "forecast": null,
+    "previous": 18500.0,
+    "decimals": 0,
+    "verdict": "no_forecast",
+    "actual_text": "17K",
+    "forecast_text": "—",
+    "previous_text": "18K",
+    "surprise": null
+   },
+   {
+    "name": "Durable Goods Orders m/m",
+    "unit": "percent",
+    "actual": null,
+    "forecast": 2.0,
+    "previous": 0.0,
+    "decimals": 1,
+    "verdict": "not_reported",
+    "actual_text": "—",
+    "forecast_text": "2.0%",
+    "previous_text": "0.0%",
+    "surprise": null
+   },
+   {
+    "name": "Core Durable Goods Orders m/m",
+    "unit": "percent",
+    "actual": null,
+    "forecast": 0.6,
+    "previous": 0.3,
+    "decimals": 1,
+    "verdict": "not_reported",
+    "actual_text": "—",
+    "forecast_text": "0.6%",
+    "previous_text": "0.3%",
+    "surprise": null
+   }
+  ],
+  "moves": [],
+  "headlines": [
+   {
+    "source": "cnbc_top",
+    "title": "Santoli: We are nearing a now-or-never moment for the AI trade to rebound",
+    "published_at": "2026-10-27T12:33:52Z",
+    "url": "https://www.cnbc.com/2026/10/27/santoli-now-or-never-for-ai-trade.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Israel election puts Netanyahu’s wartime leadership on the line as Trump urges voters to return him to power",
+    "published_at": "2026-10-27T12:28:52Z",
+    "url": "https://www.cnbc.com/2026/10/26/israel-election-netanyahu-iran-gaza-palestine.html"
+   },
+   {
+    "source": "cnbc_economy",
+    "title": "World Bank's Banga: Availability of capital 'not really an issue' as AI demand drives up borrowing costs",
+    "published_at": "2026-10-27T12:26:06Z",
+    "url": "https://www.cnbc.com/2026/10/27/world-bank-president-ajay-banga.html"
+   },
+   {
+    "source": "guardian_world",
+    "title": "Israel goes to the polls in most consequential election in its history – live updates",
+    "published_at": "2026-10-27T12:23:02Z",
+    "url": "https://www.theguardian.com/world/live/2026/oct/27/israel-elections-knesset-netanyahu-likud-eisenkot-gaza-latest-updates"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Inherited IRAs can boost wealth — and trigger a tax bill. Here's how to reduce it",
+    "published_at": "2026-10-27T12:15:01Z",
+    "url": "https://www.cnbc.com/2026/10/27/inherited-ira-taxes-10-year-rule-roth-conversions.html"
+   },
+   {
+    "source": "cnbc_economy",
+    "title": "Global alarm over AI: World Bank President Banga speaks to CNBC",
+    "published_at": "2026-10-27T12:14:07Z",
+    "url": "https://www.cnbc.com/2026/10/27/world-bank-president-ajay-banga.html"
+   },
+   {
+    "source": "cnbc_tech",
+    "title": "Tech's relief rally extends as attention turns to tough decisions for the Fed",
+    "published_at": "2026-10-27T12:09:19Z",
+    "url": "https://www.cnbc.com/2026/10/27/tech-rally-fed-decision.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Frozen housing market sends remodelers mixed messages",
+    "published_at": "2026-10-27T12:04:59Z",
+    "url": "https://www.cnbc.com/2026/10/27/frozen-housing-market-sends-remodelers-mixed-messages.html"
+   },
+   {
+    "source": "bbc_world",
+    "title": "Mbappé sorry for 'ill-judged' Mao remark after backlash in China",
+    "published_at": "2026-10-27T12:02:20Z",
+    "url": "https://www.bbc.co.uk/news/articles/cv62yg0erp8zo?at_medium=RSS&at_campaign=rss"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "A rising wealth tide lifts all yachts",
+    "published_at": "2026-10-27T12:00:01Z",
+    "url": "https://www.cnbc.com/2026/10/27/a-rising-wealth-tide-lifts-all-yachts.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "SpaceX, Tesla and Anthropic may reshape the S&P 500—but not right away",
+    "published_at": "2026-10-27T12:00:01Z",
+    "url": "https://www.cnbc.com/make-it/2026/10/27/spacex-tesla-anthropic-and-sp-500-index-rules.html"
+   },
+   {
+    "source": "npr_world",
+    "title": "Democrats have a midterm edge, poll shows. And, Israelis vote in high-stakes election",
+    "published_at": "2026-10-27T11:39:52Z",
+    "url": "https://www.npr.org/2026/10/27/g-s1-150052/up-first-newsletter-midterms-polling-data-voter-fraud-israel-prime-minister-elections"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Boeing narrows third-quarter loss as defense sales rise, but focus remains on 737 Max production",
+    "published_at": "2026-10-27T11:30:49Z",
+    "url": "https://www.cnbc.com/2026/10/27/-boeing-ba-q3-2026-earnings.html"
+   },
+   {
+    "source": "bbc_world",
+    "title": "Netherlands pulls out of Eurovision again over Israel participation",
+    "published_at": "2026-10-27T11:23:19Z",
+    "url": "https://www.bbc.co.uk/news/articles/cmr4y5dvlzneo?at_medium=RSS&at_campaign=rss"
+   },
+   {
+    "source": "bbc_world",
+    "title": "Turnout highest since 1977 as Israelis vote in pivotal election",
+    "published_at": "2026-10-27T11:11:33Z",
+    "url": "https://www.bbc.co.uk/news/articles/c3j47l4kdez4o?at_medium=RSS&at_campaign=rss"
+   },
+   {
+    "source": "bbc_world",
+    "title": "Turnout so far highest in decades as Israelis vote in pivotal election",
+    "published_at": "2026-10-27T11:11:33Z",
+    "url": "https://www.bbc.co.uk/news/articles/c3j47l4kdez4o?at_medium=RSS&at_campaign=rss"
+   },
+   {
+    "source": "cnbc_economy",
+    "title": "Fed rate hikes are coming, but not this week: CNBC survey",
+    "published_at": "2026-10-27T11:10:01Z",
+    "url": "https://www.cnbc.com/2026/10/27/federal-reserve-rate-hike-timing-expectations.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Fed expected to hold rates steady, but Warsh may point way to more hikes",
+    "published_at": "2026-10-27T11:06:22Z",
+    "url": "https://www.cnbc.com/2026/10/27/federal-reserve-rates-kevin-warsh.html"
+   },
+   {
+    "source": "guardian_world",
+    "title": "Finnish and Norwegian leaders hold rare ‘frank and substantive’ call with Putin on Ukraine – Europe live",
+    "published_at": "2026-10-27T11:05:46Z",
+    "url": "https://www.theguardian.com/world/live/2026/oct/27/russia-ukraine-oleshky-serbia-france-europe-latest-news-updates"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Coca-Cola hikes earnings outlook, even as it sees lackluster demand in North America",
+    "published_at": "2026-10-27T11:03:21Z",
+    "url": "https://www.cnbc.com/2026/10/27/coca-cola-ko-q3-2026-earnings.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Boeing is set to report earnings before the bell. Here's what Wall Street expects",
+    "published_at": "2026-10-27T11:00:01Z",
+    "url": "https://www.cnbc.com/2026/10/27/-boeing-ba-q3-2026-earnings.html"
+   },
+   {
+    "source": "cnbc_tech",
+    "title": "Anthropic's IPO is risky business",
+    "published_at": "2026-10-27T11:00:01Z",
+    "url": "https://www.cnbc.com/2026/10/27/anthropic-five-surprising-risks-s1.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "A 'canary in the coal mine': Measles resurgence exposes weaknesses in U.S. public health, experts say",
+    "published_at": "2026-10-27T11:00:01Z",
+    "url": "https://www.cnbc.com/2026/10/27/us-measles-public-health.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Coca-Cola earnings are out – Here are the numbers",
+    "published_at": "2026-10-27T10:59:01Z",
+    "url": "https://www.cnbc.com/2026/10/27/coca-cola-ko-q3-2026-earnings.html"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Man charged with assisting ‘foreign intelligence service’ after incident at UK base used for Iran strikes",
+    "published_at": "2026-10-27T10:37:25Z",
+    "url": "https://www.cnbc.com/2026/10/27/uk-national-security-raf-fairford-iran.html"
+   }
+  ],
+  "upcoming": [
+   {
+    "kind": "economic",
+    "title": "New Home Sales",
+    "at": "2026-10-27T14:00:00Z",
+    "when_text": "",
+    "importance": "medium",
+    "detail": "New Home Sales: forecast 651K",
+    "explainer": "Sales of newly built homes. Housing is sensitive to interest rates."
+   },
+   {
+    "kind": "auction",
+    "title": "Treasury auction: 5-year note",
+    "at": "2026-10-27T17:00:00Z",
+    "when_text": "results at 1:00 PM ET",
+    "importance": "medium",
+    "detail": "$70 billion on offer",
+    "explainer": "The US Treasury sells new government debt at auction. Strong demand tends to pull yields down; weak demand can push yields up, which often weighs on Nasdaq stocks."
+   }
+  ],
+  "rates": {
+   "as_of": "2026-10-27T13:00:18Z",
+   "lines": [
+    {
+     "symbol": "US2Y",
+     "label": "2-year yield",
+     "value": 4.726,
+     "value_text": "4.726%",
+     "day_change_bp": 1.5,
+     "week_change_bp": -4.8,
+     "day_text": "+1.5bp",
+     "week_text": "-4.8bp"
+    },
+    {
+     "symbol": "US10Y",
+     "label": "10-year yield",
+     "value": 4.986,
+     "value_text": "4.986%",
+     "day_change_bp": 0.0,
+     "week_change_bp": -12.9,
+     "day_text": "+0.0bp",
+     "week_text": "-12.9bp"
+    },
+    {
+     "symbol": "CURVE",
+     "label": "Curve (10y minus 2y)",
+     "value": 26.0,
+     "value_text": "+26bp",
+     "day_change_bp": -1.5,
+     "week_change_bp": -8.1,
+     "day_text": "-1.5bp",
+     "week_text": "-8.1bp"
+    }
+   ],
+   "curve_bp": 26.0,
+   "curve_text": "+26bp, normal (10-year above 2-year)",
+   "explainer": "Treasury yields are the interest rate the US government pays to borrow. The 2-year follows what traders expect the Fed to do with rates; the 10-year reflects longer-run growth and inflation. Rising yields usually weigh on Nasdaq stocks, because the future profits that tech prices depend on are worth less today when safe bonds pay more. Falling yields usually help."
+  },
+  "event_at": null
+ },
+ "facts_complete": false,
+ "envelope": null,
+ "baseline": {
+  "prompt_version": "desk:v4",
+  "model": "anthropic/claude-opus-5.5",
+  "draft": {
+   "headline": "NQ futures firm before the open; durable goods numbers not yet known",
+   "summary": "Nasdaq 100 futures are up +0.58% before the open. The VIX fear gauge is lower and the 10-year yield is flat. This morning's durable goods figures are not known yet, so a key data read is still missing.",
+   "what_it_means": "Two reports were due this morning. ADP's weekly private hiring estimate showed 17K, versus 18K the week before. There was no forecast, so it cannot be called a surprise. It was little changed. Durable goods orders track big-ticket items like machines and planes. They were due at 08:30, with forecasts of 2.0% and 0.6% for the core measure. The actual numbers are not known yet. Headlines say the Fed is expected to hold rates this week, with talk of possible future hikes.",
+   "market_reaction": "Nasdaq 100 futures are up +0.58% and S&P 500 futures are up +0.40%. The VIX fear gauge fell -3.59%. In the window after the ADP report, NQ gained +0.17%. After 08:30 it slipped -0.08%. Without the durable goods numbers, the cause of that small dip is unclear. Oil eased -0.73% to $101.02. The dollar rose +0.21%, and gold barely moved at -0.02%.",
+   "rates_read": "The 2-year yield tracks Fed expectations. It is up +1.5bp to 4.726%. The 10-year is unchanged today at 4.986% but down -12.9bp over the past week. Falling longer-term yields help tech stocks because future profits are worth more today. Both yields edged up after 08:30, by +1.0bp for the 2-year and +1.3bp for the 10-year. That is a small move, but worth watching.",
+   "watch_next": [
+    "Actual durable goods numbers once they are published",
+    "New Home Sales at 10:00 ET, forecast 651K",
+    "5-year Treasury auction at 13:00 ET, $70 billion on offer",
+    "This week's Fed meeting and any hints of future rate hikes"
+   ],
+   "learn": "Treasury auction: the government borrows by selling bonds to investors. If demand is weak, buyers ask for higher yields. That can push rates up and weigh on Nasdaq stocks. Strong demand tends to calm yields. Today's 5-year note sale is $70 billion.",
+   "nq_tone": "supportive"
+  }
+ }
+}

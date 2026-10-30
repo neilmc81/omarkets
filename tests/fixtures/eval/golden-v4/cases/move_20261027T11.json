@@ -1,0 +1,200 @@
+{
+ "id": "move:20261027T11",
+ "kind": "move",
+ "title": "NQ up 0.88% in the last hour",
+ "created_at": "2026-10-27T15:33:53.360346+00:00",
+ "facts": {
+  "figures": [],
+  "moves": [
+   {
+    "symbol": "NQ",
+    "label": "Nasdaq 100 futures",
+    "start_value": 29502.25,
+    "end_value": 29761.25,
+    "start_at": "2026-10-27T14:17:11Z",
+    "end_at": "2026-10-27T15:22:08Z",
+    "change": 0.88,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "+0.88%"
+   },
+   {
+    "symbol": "ES",
+    "label": "S&P 500 futures",
+    "start_value": 7715.75,
+    "end_value": 7758.0,
+    "start_at": "2026-10-27T14:17:10Z",
+    "end_at": "2026-10-27T15:22:04Z",
+    "change": 0.55,
+    "change_unit": "%",
+    "delayed": true,
+    "text": "+0.55%"
+   },
+   {
+    "symbol": "US2Y",
+    "label": "2-year yield",
+    "start_value": 4.739,
+    "end_value": 4.722,
+    "start_at": "2026-10-27T14:15:35Z",
+    "end_at": "2026-10-27T15:22:08Z",
+    "change": -1.7,
+    "change_unit": "bp",
+    "delayed": false,
+    "text": "-1.7bp"
+   },
+   {
+    "symbol": "US10Y",
+    "label": "10-year yield",
+    "start_value": 5.001,
+    "end_value": 4.991,
+    "start_at": "2026-10-27T14:16:26Z",
+    "end_at": "2026-10-27T15:22:07Z",
+    "change": -1.0,
+    "change_unit": "bp",
+    "delayed": false,
+    "text": "-1.0bp"
+   },
+   {
+    "symbol": "DXY",
+    "label": "US dollar",
+    "start_value": 102.185,
+    "end_value": 102.24,
+    "start_at": "2026-10-27T14:17:09Z",
+    "end_at": "2026-10-27T15:22:07Z",
+    "change": 0.05,
+    "change_unit": "%",
+    "delayed": false,
+    "text": "+0.05%"
+   },
+   {
+    "symbol": "VIX",
+    "label": "VIX fear gauge",
+    "start_value": 18.1,
+    "end_value": 17.58,
+    "start_at": "2026-10-27T14:17:01Z",
+    "end_at": "2026-10-27T15:22:01Z",
+    "change": -2.87,
+    "change_unit": "%",
+    "delayed": false,
+    "text": "-2.87%"
+   }
+  ],
+  "headlines": [
+   {
+    "source": "cnbc_top",
+    "title": "Ex-FBI official's lawyers slam unusual new criminal charge: 'Outrageous government conduct'",
+    "published_at": "2026-10-27T15:19:50Z",
+    "url": "https://www.cnbc.com/2026/10/27/fbi-hunter-biden-congress-charges-doj.html"
+   },
+   {
+    "source": "guardian_world",
+    "title": "Reader Q&A: After Lula’s sensational victory in Brazil’s presidential election, the Guardian’s Latin America correspondent answers your questions",
+    "published_at": "2026-10-27T15:19:15Z",
+    "url": "https://www.theguardian.com/world/live/2026/oct/27/brazil-election-reader-questions-lula-bolsonaro"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Oil prices fall after Iran supreme leader and top security official discuss conditions to end war",
+    "published_at": "2026-10-27T15:11:32Z",
+    "url": "https://www.cnbc.com/2026/10/27/oil-today-iran-us-crude-wti-brent-trump.html"
+   },
+   {
+    "source": "cnbc_earnings",
+    "title": "Boeing doesn't expect to significantly ramp up 737 Max production until late 2027",
+    "published_at": "2026-10-27T15:01:59Z",
+    "url": "https://www.cnbc.com/2026/10/27/-boeing-ba-q3-2026-earnings.html"
+   },
+   {
+    "source": "cnbc_earnings",
+    "title": "Boeing narrows loss on higher defense sales, targets Max production increase for late 2027",
+    "published_at": "2026-10-27T14:56:22Z",
+    "url": "https://www.cnbc.com/2026/10/27/-boeing-ba-q3-2026-earnings.html"
+   },
+   {
+    "source": "npr_world",
+    "title": "Bolsonaro's Party accepts Brazil election defeat, but he refuses to concede",
+    "published_at": "2026-10-27T14:41:17Z",
+    "url": "https://www.npr.org/2026/10/27/nx-s1-6019217/bolsonaro-flavio-lula-brazil-election-trump"
+   },
+   {
+    "source": "cnbc_top",
+    "title": "Oil prices fall amid diplomatic push to de-escalate Saudi-Iran tensions",
+    "published_at": "2026-10-27T14:35:49Z",
+    "url": "https://www.cnbc.com/2026/10/27/oil-today-iran-us-crude-wti-brent-trump.html"
+   },
+   {
+    "source": "guardian_world",
+    "title": "Norway’s PM defends rare call with Putin on Ukraine despite doubts among European leaders – Europe live",
+    "published_at": "2026-10-27T14:02:54Z",
+    "url": "https://www.theguardian.com/world/live/2026/oct/27/russia-ukraine-oleshky-serbia-france-europe-latest-news-updates"
+   },
+   {
+    "source": "cnbc_earnings",
+    "title": "JetBlue stock surges 15% as company outlook calms investors",
+    "published_at": "2026-10-27T13:22:55Z",
+    "url": "https://www.cnbc.com/2026/10/26/jetblue-jblu-3q-2026-earnings.html"
+   }
+  ],
+  "upcoming": [],
+  "rates": {
+   "as_of": "2026-10-27T15:32:03Z",
+   "lines": [
+    {
+     "symbol": "US2Y",
+     "label": "2-year yield",
+     "value": 4.72,
+     "value_text": "4.720%",
+     "day_change_bp": 0.9,
+     "week_change_bp": -4.8,
+     "day_text": "+0.9bp",
+     "week_text": "-4.8bp"
+    },
+    {
+     "symbol": "US10Y",
+     "label": "10-year yield",
+     "value": 4.986,
+     "value_text": "4.986%",
+     "day_change_bp": 0.0,
+     "week_change_bp": -11.8,
+     "day_text": "+0.0bp",
+     "week_text": "-11.8bp"
+    },
+    {
+     "symbol": "CURVE",
+     "label": "Curve (10y minus 2y)",
+     "value": 26.6,
+     "value_text": "+27bp",
+     "day_change_bp": -0.9,
+     "week_change_bp": -7.0,
+     "day_text": "-0.9bp",
+     "week_text": "-7.0bp"
+    }
+   ],
+   "curve_bp": 26.6,
+   "curve_text": "+27bp, normal (10-year above 2-year)",
+   "explainer": "Treasury yields are the interest rate the US government pays to borrow. The 2-year follows what traders expect the Fed to do with rates; the 10-year reflects longer-run growth and inflation. Rising yields usually weigh on Nasdaq stocks, because the future profits that tech prices depend on are worth less today when safe bonds pay more. Falling yields usually help."
+  },
+  "event_at": "2026-10-27T14:17:11Z"
+ },
+ "facts_complete": false,
+ "envelope": null,
+ "baseline": {
+  "prompt_version": "desk:v4",
+  "model": "deepseek/deepseek-v4.1-flash-1017",
+  "draft": {
+   "headline": "NQ up 1.1% but no headline clearly explains the jump",
+   "summary": "Nasdaq 100 futures rose 0.88% in the measured window and are 1.10% higher today, with the VIX fear gauge lower. No supplied headline clearly explains the size of the move; falling oil on de-escalation talk is the closest candidate.",
+   "what_it_means": "Nasdaq 100 futures jumped 0.88% between 10:17 and 11:22 ET and are 1.10% higher on the day. The supplied headlines do not clearly explain a move that size. The closest candidate is oil: crude fell 1.54% to $100.19 after reports of talks to de-escalate Iran and Saudi tensions. Cheaper oil can ease inflation worries. Boeing and JetBlue earnings are company news, not a broad driver. The cause is not confirmed.",
+   "market_reaction": "In the same window, S&P 500 futures rose 0.55% and the VIX fear gauge fell 2.87%, so the whole index complex firmed, not just tech. The dollar was barely changed, up 0.05%. Crude oil is down 1.54% today at $100.19 and gold is up 0.80% at $4,070.90. Prices are about 10 minutes delayed.",
+   "rates_read": "The 2-year yield, which tracks Fed expectations, is 4.720%, up 0.9 basis points today but 1.7 basis points lower during the move. The 10-year is 4.986%, flat on the day and 1.0 basis point lower in the window. Both sit high, which normally weighs on Nasdaq stocks. The small dip during the rally was a mild tailwind, not proof of cause.",
+   "watch_next": [
+    "Treasury 5-year auction at 13:00 ET, $70 billion on offer",
+    "Fed rate decision Wednesday 14:00 ET; forecast 4.0%",
+    "Fed chair press conference Wednesday 14:30 ET",
+    "Alphabet earnings Wednesday after the close"
+   ],
+   "learn": "The VIX is called the fear gauge: it measures how much option protection investors are paying for, so it tends to rise when stocks fall. A 4.35% drop to 17.59 means less demand for protection and a calmer mood, which usually travels with firming stock prices.",
+   "nq_tone": "supportive"
+  }
+ }
+}

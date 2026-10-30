@@ -1,0 +1,53 @@
+{
+ "name": "golden-v4 (desk:v4 notes, partial facts)",
+ "cases": [
+  {
+   "id": "ask:20261024T074748",
+   "kind": "ask",
+   "file": "cases/ask_20261024T074748.json",
+   "sha256": "c53ef098d16dddf5ef083b62e2a172456bd8bd5a533fc3f9b08b4daf217d9ded",
+   "facts_complete": false
+  },
+  {
+   "id": "move:20261027T11",
+   "kind": "move",
+   "file": "cases/move_20261027T11.json",
+   "sha256": "82371fcc971a5340b9323925c53bab6d97f1367625a799f6ce6c9941b81abf96",
+   "facts_complete": false
+  },
+  {
+   "id": "premarket:2026-10-27",
+   "kind": "premarket",
+   "file": "cases/premarket_2026-10-27.json",
+   "sha256": "18847962ea729017f590f16ca1143b888b24d6175549d3fa6e388597b0e73472",
+   "facts_complete": false
+  },
+  {
+   "id": "release:20261022T1230:INITIAL_CLAIMS",
+   "kind": "release",
+   "file": "cases/release_20261022T1230_INITIAL_CLAIMS.json",
+   "sha256": "97f8316e431e9bd3cff0361cd1040428d3f7cd95f0a64694f72a6f2bdd6fc8ca",
+   "facts_complete": false
+  },
+  {
+   "id": "release:20261027T1230:DURABLE_GOODS",
+   "kind": "release",
+   "file": "cases/release_20261027T1230_DURABLE_GOODS.json",
+   "sha256": "d18c1c7630d6cc06508ce6a9e6e9c97448942b923857892dc49f75b4da3b2895",
+   "facts_complete": false
+  },
+  {
+   "id": "review:2026-10-19",
+   "kind": "review",
+   "file": "cases/review_2026-10-19.json",
+   "sha256": "097e4d3d40893bb88c7d1aa5b5ae1a7d9490c8ef364a7a40c719ffb1ef01affc",
+   "facts_complete": false
+  }
+ ],
+ "lesson_history": {
+  "file": "lesson_history.json",
+  "sha256": "6cf19a03dbcd20f015eeebea615a3afbe22458b915ea61e919eefd49af1c6a5b"
+ },
+ "frozen_at": "2026-10-30T10:49:07.405335+00:00",
+ "sha256": "70305f42d9fa649f207ad80a1c32e9f2639dde90ef2a1e3fb28a27f5e186ed84"
+}

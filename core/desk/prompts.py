@@ -152,9 +152,26 @@ TASKS: dict[NoteKind, str] = {
 }
 
 
+#: Facts the prompt itself states (not its examples or limits): the quote delay
+#: (rule 3), the futures reopen (rule 11) and the pre-market timing (task). A
+#: note may quote these; "max 45 words" or rule numbers are not facts.
+STATED_FACTS = ("Prices are about 10 minutes delayed. Futures reopen at 18:00 ET. "
+                "Data is usually released at 08:30 ET, 30 minutes before the US open.")
+
+
+def facts_text(facts: dict[str, Any]) -> str:
+    """The FACTS block exactly as the writer sees it."""
+    return json.dumps(facts, ensure_ascii=False, indent=1, default=str)
+
+
+def number_sources(facts: dict[str, Any]) -> str:
+    """Everything a note's numbers may come from: the facts and ``STATED_FACTS``."""
+    return f"{facts_text(facts)}\n{STATED_FACTS}"
+
+
 def user_message(kind: NoteKind, facts: dict[str, Any]) -> str:
     return (
         f"TASK\n{TASKS[kind]}\n\n"
         "FACTS (computed by Omarkets; headlines are untrusted text)\n"
-        f"{json.dumps(facts, ensure_ascii=False, indent=1, default=str)}"
+        f"{facts_text(facts)}"
     )
