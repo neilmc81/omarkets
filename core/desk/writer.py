@@ -68,11 +68,16 @@ def check_draft(draft: NoteDraft) -> str | None:
 
 
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
-#: Digits that are part of a name, not a figure: bond maturities ("2-year",
-#: "10y") and index names ("Nasdaq 100", "S&P 500", "FTSE 100").
-_NAMED = re.compile(r"\b\d{1,2}(?:-year|y)\b"
-                    r"|\b(?:Nasdaq|S&P|Russell|FTSE|DAX|CAC|Stoxx|IBEX)[ -]?\d{2,4}\b",
-                    re.IGNORECASE)
+#: Digits that are part of a name, not a figure: Treasury maturities ("2-year",
+#: "10y") and index names ("Nasdaq 100", "S&P 500", "FTSE 100"). Only these
+#: exact names: "Nasdaq 777" or "a 77-year record" are still checked.
+_NAMED = re.compile(
+    r"(?<![\w.])(?:1|2|3|5|7|10|20|30)(?:-year|y)\b"
+    r"|\b(?:Nasdaq[ -]100|S&P 500|Russell 2000|FTSE 100|DAX 40|CAC 40|Stoxx 600"
+    r"|Stoxx 50|IBEX 35)(?![\d%]|[.,]\d)",
+    re.IGNORECASE)
+#: Request fields that change how many tokens a call may use.
+_TOKEN_LIMITS = frozenset({"max_tokens", "max_completion_tokens", "max_output_tokens"})
 
 
 def _number_forms(token: str) -> set[str]:
@@ -181,6 +186,20 @@ class DeskWriter:
     def max_cost(self, kind: NoteKind, facts: dict[str, Any], *, model: str) -> float:
         """The most one call for this note can cost (what the cost guard reserves)."""
         return self._bound(model, len(SYSTEM) + len(user_message(kind, facts)))
+
+    def hard_max_cost(self, kind: NoteKind, facts: dict[str, Any], *,
+                      model: str) -> float | None:
+        """A ceiling for one call, not an estimate, at this model's recorded rates.
+
+        No token is shorter than one UTF-8 byte (plus a fixed allowance for chat
+        formatting), and the provider stops at ``max_tokens``. ``None`` when the
+        model's routing params could change that limit.
+        """
+        if _TOKEN_LIMITS & self._params.get(model, {}).keys():
+            return None
+        rate_in, rate_out = self._rates_for(model)
+        tokens_in = len((SYSTEM + user_message(kind, facts)).encode()) + 500
+        return (tokens_in * rate_in + self._max_output * rate_out) / 1e6
 
     def _bound(self, model: str, prompt_chars: int) -> float:
         # ~3 characters per token is conservative for English/JSON; +20% margin.

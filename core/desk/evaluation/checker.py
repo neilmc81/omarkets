@@ -169,11 +169,10 @@ def fact_moves(facts: Any) -> list[FactMove]:
 
 
 def _forms(magnitude: str) -> set[str]:
-    """A magnitude and its roundings, keeping at least one decimal if it had any."""
-    forms = _number_forms(magnitude)
-    if "." in magnitude:
-        forms = {f for f in forms if "." in f}
-    return forms
+    """A magnitude and its roundings; a fraction is never rounded to a whole number
+    ("0.88" → 0.88, 0.9), but a whole number stays itself ("3.0" → 3)."""
+    exact = _normal(magnitude)
+    return {f for f in _number_forms(magnitude) if "." in f or f == exact}
 
 
 def _normal(number: str) -> str | None:

@@ -131,10 +131,8 @@ def _run(args: argparse.Namespace, cases: C.CaseSet, settings: Any, project_dir:
         if not args.paid:
             print("plan only: no calls made (add --paid to run)")
             return 0
-        existing = R.load_results(args.out, cases) if args.out.exists() else None
         results = asyncio.run(runner.run(cases, run_id=run_id, max_calls=args.max_calls,
-                                         allowance_usd=args.allowance_usd, out=args.out,
-                                         existing=existing))
+                                         allowance_usd=args.allowance_usd, out=args.out))
         calls, committed = ledger.usage(run_id)
         print(f"wrote {len(results.entries)} result(s) to {args.out}; run total "
               f"{calls} call(s), ${committed / 1e6:.4f}")

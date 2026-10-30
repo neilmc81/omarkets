@@ -3,7 +3,10 @@
 1. Its own run ledger (SQLite): a hard call count and a dollar allowance per
    run, fixed when the run is created. Every attempt is recorded *before* the
    request is sent, so a crash or restart can never repeat a case or lift a
-   limit; an attempt whose cost is unknown keeps its full bound.
+   limit; an attempt whose cost is unknown keeps its full bound. The bound is
+   a ceiling, not an estimate (``DeskWriter.hard_max_cost``). Each result is
+   stored in the ledger too, and the results file is always rebuilt from it,
+   so a second process or a stale copy can't lose a paid draft.
 2. The shared AI cost guard (the weekly $2.50 ledger): every call reserves its
    bound there too, exactly as desk notes do.
 
@@ -15,6 +18,7 @@ the remaining calls and dollars.
 
 from __future__ import annotations
 
+import json
 import math
 import sqlite3
 import threading
@@ -76,7 +80,7 @@ class RunLedger:
                 " run_id TEXT NOT NULL REFERENCES eval_runs(run_id), case_id TEXT NOT NULL,"
                 " model TEXT NOT NULL, reserved_micro INTEGER NOT NULL, actual_micro INTEGER,"
                 " status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,"
-                " PRIMARY KEY (run_id, case_id))")
+                " entry TEXT, PRIMARY KEY (run_id, case_id))")
 
     def limits(self, run_id: str) -> RunLimits | None:
         with self._lock:
@@ -137,20 +141,35 @@ class RunLedger:
                         f"run {run_id}: ${(committed + bound) / 1e6:.4f} would exceed its "
                         f"${limits[1] / 1e6:.4f} allowance")
                 self._db.execute(
-                    "INSERT OR REPLACE INTO eval_calls VALUES (?,?,?,?,NULL,?,?,NULL)",
+                    "INSERT OR REPLACE INTO eval_calls VALUES (?,?,?,?,NULL,?,?,NULL,NULL)",
                     (run_id, case_id, model, bound, PENDING, datetime.now(UTC).isoformat()))
                 self._db.commit()
             except BaseException:
                 self._db.rollback()
                 raise
 
-    def finish(self, run_id: str, case_id: str, status: str, cost_usd: float | None) -> None:
+    def finish(self, run_id: str, case_id: str, status: str, cost_usd: float | None,
+               entry: dict[str, Any]) -> None:
+        """Record the outcome and the result itself (the draft, or the error)."""
         actual = None if cost_usd is None else _micro(cost_usd)
         with self._lock, self._db:
             self._db.execute(
-                "UPDATE eval_calls SET status=?, actual_micro=?, finished_at=? "
+                "UPDATE eval_calls SET status=?, actual_micro=?, finished_at=?, entry=? "
                 "WHERE run_id=? AND case_id=? AND status=?",
-                (status, actual, datetime.now(UTC).isoformat(), run_id, case_id, PENDING))
+                (status, actual, datetime.now(UTC).isoformat(),
+                 json.dumps(entry, ensure_ascii=False), run_id, case_id, PENDING))
+
+    def results(self, run_id: str, manifest_sha256: str, label: str) -> Results:
+        """Every attempted case's result; an attempt with no outcome is marked interrupted."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT case_id, model, entry FROM eval_calls WHERE run_id=? AND status!=? "
+                "ORDER BY started_at, case_id", (run_id, REFUSED)).fetchall()
+        return Results(manifest_sha256, label, {
+            case_id: json.loads(entry) if entry else {
+                "model": model, "draft": None,
+                "error": "attempt interrupted; not retried (one per case)"}
+            for case_id, model, entry in rows})
 
     def close(self) -> None:
         with self._lock:
@@ -203,9 +222,10 @@ class EvalRunner:
             model = self._model or self._writer.model_for(kind)
             if model not in self._rates:
                 raise RunRefused(f"no price on record for {model}; can't bound its cost")
-            bound = self._writer.max_cost(kind, case.facts, model=model)
-            if not math.isfinite(bound) or bound <= 0:
-                raise RunRefused(f"{case.id}: cost bound could not be set")
+            bound = self._writer.hard_max_cost(kind, case.facts, model=model)
+            if bound is None or not math.isfinite(bound) or bound <= 0:
+                raise RunRefused(f"{case.id}: cost bound could not be set for {model} "
+                                 "(its routing params change the token limit)")
             planned.append(PlannedCall(case, model, bound))
         calls, committed = self._ledger.usage(run_id)
         if calls + len(planned) > max_calls:
@@ -218,17 +238,20 @@ class EvalRunner:
         return planned
 
     async def run(self, cases: CaseSet, *, run_id: str, max_calls: int, allowance_usd: float,
-                  out: Path, existing: Results | None = None) -> Results:
-        """Attempt every remaining case once, saving results after each call."""
+                  out: Path) -> Results:
+        """Attempt every remaining case once; ``out`` is rewritten from the ledger
+        after each call."""
         planned = self.plan(cases, run_id=run_id, max_calls=max_calls,
                             allowance_usd=allowance_usd)
         self._ledger.open_run(run_id, RunLimits(cases.sha256, max_calls, _micro(allowance_usd)))
-        results = existing or Results(cases.sha256, f"{PROMPT_VERSION} run {run_id}")
-        for case_id in self._ledger.attempted(run_id):
-            if case_id not in results.entries:
-                results.entries[case_id] = {
-                    "draft": None, "error": "attempt interrupted; not retried (one per case)"}
-        save_results(out, results)
+        label = f"{PROMPT_VERSION} run {run_id}"
+
+        def saved() -> Results:
+            results = self._ledger.results(run_id, cases.sha256, label)
+            save_results(out, results)
+            return results
+
+        results = saved()
         for call in planned:
             case = call.case
             self._ledger.begin(run_id, case.id, call.model, call.bound_usd)
@@ -242,15 +265,14 @@ class EvalRunner:
             else:
                 status = DONE
             self._ledger.finish(run_id, case.id, status,
-                                0.0 if status == REFUSED else result.cost_usd)
-            results.entries[case.id] = {
+                                0.0 if status == REFUSED else result.cost_usd, {
                 "model": result.model, "prompt_version": PROMPT_VERSION,
                 "draft": result.draft.model_dump(mode="json") if result.draft else None,
                 "error": result.error, "cost_usd": result.cost_usd,
                 "bound_usd": call.bound_usd,
                 "unverified_numbers": list(result.unverified_numbers),
-            }
-            save_results(out, results)
+            })
+            results = saved()
             if status == REFUSED:
                 raise RunRefused(f"shared AI budget refused {case.id}: {error}")
             if result.cost_usd is not None and result.cost_usd > call.bound_usd:

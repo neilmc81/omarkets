@@ -113,8 +113,10 @@ reported; otherwise it is worked out from that model's rates.
 **Number check.** Every number in the note must appear in the facts the
 writer was given, either exactly or rounded to fewer decimals. Only the FACTS
 block counts: the system prompt's own numbers ("max 45 words", rule numbers)
-are not facts. Digits inside a name ("2-year", "10y", "Nasdaq 100", "S&P 500")
-are not figures and are skipped. If a number does not match, the note is
+are not facts. Digits inside a name are not figures and are skipped: Treasury
+maturities (1, 2, 3, 5, 7, 10, 20, 30 years: "2-year", "10y") and exact index
+names ("Nasdaq 100", "S&P 500", "FTSE 100" and a few others). "Nasdaq 777" or
+"a 77-year record" are still checked. If a number does not match, the note is
 regenerated once. If invented numbers remain, the note is saved with them
 listed in `unverified_numbers`.
 
@@ -148,10 +150,15 @@ service, and only `eval run --paid` makes paid calls.
   when the run is created and kept in `data/desk-eval-runs.sqlite3`; every
   attempt is recorded before it is sent, so a crash or restart never repeats a
   case or lifts a limit, and a call whose cost is unknown keeps its full bound.
-  Each call also reserves its bound on the shared weekly AI budget. The run
-  refuses to start if a cost bound can't be set (a model with no price on
-  record, no shared budget with limits, partial facts) or if the worst case
-  doesn't fit the calls and dollars left.
+  That bound is a ceiling, not an estimate: one token per prompt byte (plus
+  500 for chat formatting) and every output token, at the model's recorded
+  rates (which must be at or above the provider's price). Each result is kept
+  in the run ledger and the results file is rebuilt from it, so a second
+  process or a stale copy can't lose a paid draft. Each call also reserves on
+  the shared weekly AI budget, as desk notes do. The run refuses to start if a
+  cost bound can't be set (a model with no price on record or whose routing
+  params change the token limit, no shared budget with limits, partial facts)
+  or if the worst case doesn't fit the calls and dollars left.
 
 ## Did it hold? (release, Fed and earnings notes)
 

@@ -350,6 +350,13 @@ def runner_for(tmp_path, provider: Provider, *, weekly: float = 2.5,
 
 
 def bound(cases: C.CaseSet) -> float:
+    """The run ledger's ceiling for one call."""
+    writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
+    return writer.hard_max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL)
+
+
+def estimate(cases: C.CaseSet) -> float:
+    """What the shared cost guard reserves for one call."""
     writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
     return writer.max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL)
 
@@ -372,8 +379,7 @@ async def test_runner_makes_one_call_per_case_reserved_on_the_shared_ledger(tmp_
     assert ledger.usage("r") == (3, 30_000)
     assert R.load_results(out, cases).entries == results.entries
     # Run again (a restart): every case was attempted, nothing is sent.
-    again = await runner.run(cases, run_id="r", max_calls=3, allowance_usd=1.0, out=out,
-                             existing=R.load_results(out, cases))
+    again = await runner.run(cases, run_id="r", max_calls=3, allowance_usd=1.0, out=out)
     assert provider.requests == 3 and again.entries == results.entries
 
 
@@ -422,7 +428,7 @@ async def test_call_limit_holds_across_a_crash_and_restart(tmp_path):
     # Limits can't be raised or changed by restarting.
     with pytest.raises(RunRefused, match="cannot change"):
         runner.plan(cases, **{**limits, "max_calls": 4})
-    results = await runner.run(cases, **limits, out=out, existing=R.load_results(out, cases))
+    results = await runner.run(cases, **limits, out=out)
     assert provider.requests == 3  # only ask:2 was sent; ask:1 is never retried
     assert results.entries["ask:1"]["error"].startswith("attempt interrupted")
     assert ledger.usage("r")[0] == 3
@@ -462,7 +468,7 @@ async def test_unknown_cost_keeps_the_bound_and_a_budget_refusal_is_not_an_attem
     # The shared weekly ledger is full: the guard refuses before anything is sent.
     tight = frozen(tmp_path / "t", [complete_case("ask:a"), complete_case("ask:b")])
     provider = Provider()
-    runner, guard, ledger = runner_for(tmp_path / "t", provider, weekly=bound(tight) * 1.2)
+    runner, guard, ledger = runner_for(tmp_path / "t", provider, weekly=estimate(tight) * 1.2)
     with pytest.raises(RunRefused, match="shared AI budget"):
         await runner.run(tight, run_id="t", max_calls=2, allowance_usd=1.0,
                          out=tmp_path / "t.json")
@@ -492,3 +498,64 @@ def test_run_without_paid_makes_no_calls(tmp_path, monkeypatch, capsys):
     assert cli.main(["eval", "render", str(cases.directory), str(tmp_path / "prompts")]) == 0
     rendered = (tmp_path / "prompts" / "ask_0.txt").read_text()
     assert rendered.startswith(f"SYSTEM\n{SYSTEM}") and facts_text(FACTS) in rendered
+
+
+# --------------------------------------------------------------------------- review fixes
+
+
+def test_whole_number_changes_are_still_sign_checked():
+    facts = {"bond_market": {"yields": [{"name": "2-year yield", "change_today": "-3.0bp"}]}}
+    assert K.sign_errors("The 2-year rose 3bp.", facts) == ["rose 3bp"]
+    assert K.sign_errors("The 2-year rose 3.0bp.", facts) == ["rose 3.0bp"]
+    assert K.sign_errors("The 2-year fell 3bp.", facts) == []
+
+
+def test_only_real_names_skip_the_number_check():
+    def numbers(text):
+        draft = NoteDraft.model_validate({**GOOD, "summary": text})
+        return invented_numbers(draft, facts_text(FACTS))
+
+    assert numbers("Nasdaq 777% higher; S&P 999 points; a 77-year record.") == [
+        "77", "777", "999"]
+    assert numbers("Nasdaq 100% higher, toward Nasdaq 100,000.") == ["100", "100,000"]
+    assert numbers("The Nasdaq 100, S&P 500, Nasdaq-100 futures, the 2-year and 10y.") == []
+
+
+def test_the_run_bound_is_a_ceiling_the_provider_cannot_pass(tmp_path):
+    cases = frozen(tmp_path, [complete_case("ask:0")])
+    case = cases.cases[0]
+    writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
+    ceiling = writer.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL)
+    # The worst a call can bill: one token per prompt byte, every output token used.
+    from core.desk.prompts import user_message
+
+    prompt_bytes = len((SYSTEM + user_message(NoteKind.ASK, case.facts)).encode())
+    rate_in, rate_out = RATES[MODEL]
+    assert (prompt_bytes * rate_in + 4000 * rate_out) / 1e6 < ceiling
+    # Routing params that change the token limit make the cost unboundable.
+    loose = DeskWriter(api_key="k", model=MODEL, model_rates=RATES,
+                       model_params={MODEL: {"max_tokens": 100_000}})
+    assert loose.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL) is None
+    guard = AICostGuard(tmp_path / "budget.sqlite3", weekly_limit_usd=2.5, timezone="UTC")
+    runner = EvalRunner(writer=DeskWriter(api_key="k", model=MODEL, model_rates=RATES,
+                                          model_params={MODEL: {"max_tokens": 100_000}},
+                                          cost_guard=guard),
+                        guard=guard, ledger=RunLedger(tmp_path / "runs.sqlite3"), rates=RATES)
+    with pytest.raises(RunRefused, match="token limit"):
+        runner.plan(cases, run_id="r", max_calls=1, allowance_usd=1.0)
+
+
+async def test_a_stale_or_second_runner_never_loses_a_paid_draft(tmp_path):
+    cases = frozen(tmp_path, [complete_case(f"ask:{i}") for i in range(2)])
+    provider = Provider()
+    runner, _, ledger = runner_for(tmp_path, provider)
+    out = tmp_path / "run.json"
+    await runner.run(cases, run_id="r", max_calls=2, allowance_usd=1.0, out=out)
+    # Another process (or a stale copy) wipes the results file.
+    out.write_text(json.dumps({"manifest_sha256": cases.sha256, "label": "x", "entries": {}}))
+    second, _, _ = runner_for(tmp_path, provider)
+    results = await second.run(cases, run_id="r", max_calls=2, allowance_usd=1.0, out=out)
+    assert provider.requests == 2
+    assert all(entry["draft"] == NoteDraft.model_validate(GOOD).model_dump(mode="json")
+               for entry in results.entries.values())
+    assert R.load_results(out, cases).entries == results.entries

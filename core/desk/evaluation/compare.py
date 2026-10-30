@@ -59,7 +59,7 @@ def load_results(path: Path, cases: CaseSet) -> Results:
 def save_results(path: Path, results: Results) -> None:
     """Atomic write: a crash leaves the previous file whole."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(results.to_json(), indent=1, ensure_ascii=False) + "\n")
     os.replace(tmp, path)
 
