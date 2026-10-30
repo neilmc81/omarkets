@@ -59,7 +59,7 @@ async def test_service_captures_the_exact_facts_and_envelope():
     await service.tick()
     facts, envelope = service.store.facts("release:20261020T1230:CPI")
     sent = next(f for k, f in calls if k is NoteKind.RELEASE)
-    assert facts == json.loads(json.dumps(sent, default=str, sort_keys=True))
+    assert facts == json.loads(json.dumps(sent, default=str))
     assert envelope == {"model": "fake"}
 
 
@@ -68,8 +68,30 @@ def test_writer_envelope_names_prompt_template_and_routing():
                         model_params={"m1": {"provider": {"order": ["x"]}}})
     env = writer.envelope(NoteKind.RELEASE, WriteResult(draft(), "m2"))
     assert env["prompt_version"].startswith("desk:") and len(env["system_sha256"]) == 64
+    assert len(env["task_sha256"]) == 64 and env["temperature"] == 0.3
     assert env["primary_model"] == "m1" and env["model"] == "m2"
-    assert env["fallback_model"] == "m2" and env["model_params"] == {"provider": {"order": ["x"]}}
+    assert env["fallback_model"] == "m2" and env["model_params"] == {}
+    env = writer.envelope(NoteKind.RELEASE, WriteResult(draft(), "m1"))
+    assert env["model_params"] == {"provider": {"order": ["x"]}}
+
+
+def test_v8_writer_still_rejects_a_draft_without_rates_read():
+    from core.desk.writer import check_draft
+    body = {k: v for k, v in V8.items() if k != "rates_read"}
+    assert check_draft(NoteDraft.model_validate(body)) == "model output was not valid"
+    assert check_draft(NoteDraft.model_validate(V8)) is None
+
+
+def test_malformed_json_row_does_not_break_list_queries():
+    store = DeskStore(":memory:")
+    store.save(note("release:good"))
+    store._db.execute(
+        "INSERT INTO desk_notes (id, kind, status, created_at, payload) VALUES (?,?,?,?,?)",
+        ("release:broken", "release", "ok", AT.isoformat(), "{bad"))
+    window = store.readable(AT - timedelta(1), AT + timedelta(1), 10)
+    assert [n.id for n in window] == ["release:good"]
+    assert store.release_note_ids() == ["release:good"]
+    assert [n.id for n in store.recent()] == ["release:good"]
 
 
 def test_backup_restores_attempts_alerts_once_keys_and_follow_ups(tmp_path):
@@ -89,3 +111,14 @@ def test_backup_restores_attempts_alerts_once_keys_and_follow_ups(tmp_path):
     assert not restored.claim_once("plan:2026-10-20", AT)
     assert restored.get("release:ok").follow_up.verdict == "held"
     assert restored.facts("release:ok") == ({"a": 1}, {"m": "x"})
+
+
+def test_unserialisable_facts_never_lose_the_note():
+    store = DeskStore(":memory:")
+    store.save(note(), {"bad": object.__new__(BadJSON)}, {})
+    assert store.get("release:x").status == "ok" and store.facts("release:x") is None
+
+
+class BadJSON:
+    def __str__(self):
+        raise ValueError("no text form")

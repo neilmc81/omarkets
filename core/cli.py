@@ -301,14 +301,24 @@ def _cmd_desk_backup(target: str | None) -> int:
     if out.exists():
         print(f"omarketsctl: {out} already exists", file=sys.stderr)
         return 1
-    src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
-    dst = sqlite3.connect(str(out))
     try:
-        src.backup(dst)
-        notes = dst.execute("SELECT COUNT(*) FROM desk_notes").fetchone()[0]
-    finally:
-        dst.close()
-        src.close()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        src = sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)
+        dst = sqlite3.connect(str(out))
+        try:
+            src.backup(dst)
+            check = dst.execute("PRAGMA integrity_check").fetchone()[0]
+            notes = dst.execute("SELECT COUNT(*) FROM desk_notes").fetchone()[0]
+        finally:
+            dst.close()
+            src.close()
+    except (OSError, sqlite3.Error) as exc:
+        print(f"omarketsctl: backup failed: {exc}", file=sys.stderr)
+        return 1
+    if check != "ok":
+        print(f"omarketsctl: backup at {out} failed its integrity check: {check}",
+              file=sys.stderr)
+        return 1
     print(f"backed up {notes} notes to {out}")
     print("restore: systemctl --user stop omarkets.service; copy the backup over "
           f"{source} (delete its -wal and -shm files); start the service")

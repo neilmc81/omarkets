@@ -105,6 +105,14 @@ class DeskStore:
              envelope: dict[str, Any] | None = None) -> None:
         """Insert, or replace a failed attempt. A successful note is never overwritten,
         and nor are the facts it was written from."""
+        captured = None
+        if facts is not None:
+            # Serialised before the transaction: a facts problem must never lose
+            # an already-paid note.
+            try:
+                captured = (json.dumps(facts, default=str), json.dumps(envelope or {}))
+            except (TypeError, ValueError):
+                logger.exception("desk note %s: facts not serialisable, not captured", note.id)
         with self._lock, self._db:
             cursor = self._db.execute(
                 "INSERT INTO desk_notes (id, kind, status, created_at, payload)"
@@ -116,12 +124,11 @@ class DeskStore:
                 (note.id, note.kind.value, note.status, note.created_at.isoformat(),
                  note.model_dump_json(exclude={"follow_up"})),
             )
-            if cursor.rowcount == 1 and facts is not None:
+            if cursor.rowcount == 1 and captured is not None:
                 self._db.execute(
                     "INSERT OR REPLACE INTO note_facts (note_id, facts, envelope, captured_at)"
                     " VALUES (?,?,?,?)",
-                    (note.id, json.dumps(facts, default=str, sort_keys=True),
-                     json.dumps(envelope or {}, sort_keys=True), note.created_at.isoformat()),
+                    (note.id, *captured, note.created_at.isoformat()),
                 )
 
     def facts(self, note_id: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
@@ -205,7 +212,7 @@ class DeskStore:
         with self._lock:
             rows = self._db.execute(
                 "SELECT payload, followup FROM desk_notes WHERE status='ok'"
-                " AND json_extract(payload, '$.draft') IS NOT NULL"
+                " AND json_valid(payload) AND json_extract(payload, '$.draft') IS NOT NULL"
                 " AND created_at>=? AND created_at<? ORDER BY created_at DESC, id LIMIT ?",
                 (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat(), limit),
             ).fetchall()
@@ -216,7 +223,7 @@ class DeskStore:
         with self._lock:
             rows = self._db.execute(
                 "SELECT id FROM desk_notes WHERE status='ok' AND id LIKE 'release:%'"
-                " AND json_extract(payload, '$.draft') IS NOT NULL"
+                " AND json_valid(payload) AND json_extract(payload, '$.draft') IS NOT NULL"
             ).fetchall()
         return [row[0] for row in rows]
 
