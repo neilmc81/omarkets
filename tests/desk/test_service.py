@@ -27,6 +27,9 @@ class FakeWriter:
         self.calls: list[tuple[NoteKind, dict]] = []
         self.results = list(results or [])
 
+    def envelope(self, kind, result):
+        return {"model": result.model}
+
     async def write(self, kind, facts):
         self.calls.append((kind, facts))
         if self.results:

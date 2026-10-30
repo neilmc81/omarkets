@@ -111,7 +111,7 @@ function NoteCard({ note, open, onToggle, now, headRef }: { note: Note; open: bo
       <Moves note={note} />
       <h3>What it means</h3><p>{draft.what_it_means}</p>
       <h3>How markets reacted</h3><p>{draft.market_reaction}</p>
-      <h3>Bonds &amp; rates</h3><p>{draft.rates_read}</p>
+      {draft.rates_read && <><h3>Bonds &amp; rates</h3><p>{draft.rates_read}</p></>}
       {draft.watch_next.length > 0 && <><h3>Watch next</h3><ul>{draft.watch_next.map((w) => <li key={w}>{w}</li>)}</ul></>}
       <aside className="t-learn"><b>Learn</b> {draft.learn}</aside>
       {note.headlines.length > 0 && <details className="t-sources"><summary>Headlines considered ({note.headlines.length})</summary>

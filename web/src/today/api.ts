@@ -102,7 +102,7 @@ const draftSchema = z.object({
   summary: z.string(),
   what_it_means: z.string(),
   market_reaction: z.string(),
-  rates_read: z.string(),
+  rates_read: z.string().nullish(),
   watch_next: z.array(z.string()),
   learn: z.string(),
   nq_tone: z.enum(["supportive", "negative", "mixed", "neutral"]),

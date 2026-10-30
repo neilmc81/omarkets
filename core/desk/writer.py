@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -14,12 +15,13 @@ import httpx
 from pydantic import ValidationError
 
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import SYSTEM, user_message
+from core.desk.prompts import PROMPT_VERSION, SYSTEM, TASKS, user_message
 from core.services.ai_budget import BudgetPaused
 
 logger = logging.getLogger(__name__)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+TEMPERATURE = 0.3
 
 #: Phrases that would turn an explanation into trading advice.
 _ADVICE = re.compile(
@@ -52,12 +54,16 @@ def _json_object(text: str) -> dict[str, Any]:
 
 def _draft_text(draft: NoteDraft) -> str:
     return " ".join([draft.headline, draft.summary, draft.what_it_means,
-                     draft.market_reaction, draft.rates_read, draft.learn, *draft.watch_next])
+                     draft.market_reaction, draft.rates_read or "", draft.learn, *draft.watch_next])
 
 
 def check_draft(draft: NoteDraft) -> str | None:
     if _ADVICE.search(_draft_text(draft)):
         return "draft contained trading advice"
+    # The reader accepts a missing rates_read (desk:v9 notes); the v8 prompt
+    # asks for it, so a v8 draft without it is invalid, as before.
+    if draft.rates_read is None:
+        return "model output was not valid"
     return None
 
 
@@ -142,6 +148,22 @@ class DeskWriter:
             raise ValueError(f"no desk model for {kind}")
         return model
 
+    def envelope(self, kind: NoteKind, result: WriteResult) -> dict[str, Any]:
+        """How a note was requested: enough to replay its facts through the same setup."""
+        primary = self.model_for(kind)
+        return {
+            "prompt_version": PROMPT_VERSION,
+            "system_sha256": hashlib.sha256(SYSTEM.encode()).hexdigest(),
+            "task_sha256": hashlib.sha256(TASKS[kind].encode()).hexdigest(),
+            "temperature": TEMPERATURE,
+            "primary_model": primary,
+            "fallback_model": self._fallback,
+            "model": result.model,
+            #: Routing of the model that wrote the note (the fallback's, if it did).
+            "model_params": self._params.get(result.model, {}),
+            "max_output_tokens": self._max_output,
+        }
+
     def _rates_for(self, model: str) -> tuple[float, float]:
         return self._rates.get(model, self._default_rates)
 
@@ -195,7 +217,7 @@ class DeskWriter:
         body = {
             "model": model,
             "max_tokens": self._max_output,
-            "temperature": 0.3,
+            "temperature": TEMPERATURE,
             "response_format": {"type": "json_object"},
             "usage": {"include": True},
             "messages": [

@@ -1,7 +1,7 @@
 """``omarketsctl`` — a minimal operator CLI for Omarkets.
 
-Most commands read the running local API. ``config`` and ``note-costs`` read
-the service's environment and the desk DB directly (read-only), so they work
+Most commands read the running local API. ``config``, ``note-costs`` and
+``desk-backup`` read the service's environment and the desk DB directly (read-only), so they work
 even when the API is down. It contains no market logic.
 """
 
@@ -286,6 +286,45 @@ def _cmd_note_costs() -> int:
     return 0
 
 
+def _cmd_desk_backup(target: str | None) -> int:
+    """Copy the desk DB with SQLite's backup API: consistent while the service runs."""
+    import sqlite3
+    from datetime import UTC, datetime
+
+    settings, _, _, project_dir = _service_settings()
+    source = project_dir / settings.resolved_desk_db_path
+    if not source.exists():
+        print(f"omarketsctl: no desk database at {source}", file=sys.stderr)
+        return 1
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    out = Path(target) if target else source.with_name(f"{source.stem}.{stamp}.backup.sqlite3")
+    if out.exists():
+        print(f"omarketsctl: {out} already exists", file=sys.stderr)
+        return 1
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        src = sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)
+        dst = sqlite3.connect(str(out))
+        try:
+            src.backup(dst)
+            check = dst.execute("PRAGMA integrity_check").fetchone()[0]
+            notes = dst.execute("SELECT COUNT(*) FROM desk_notes").fetchone()[0]
+        finally:
+            dst.close()
+            src.close()
+    except (OSError, sqlite3.Error) as exc:
+        print(f"omarketsctl: backup failed: {exc}", file=sys.stderr)
+        return 1
+    if check != "ok":
+        print(f"omarketsctl: backup at {out} failed its integrity check: {check}",
+              file=sys.stderr)
+        return 1
+    print(f"backed up {notes} notes to {out}")
+    print("restore: systemctl --user stop omarkets.service; copy the backup over "
+          f"{source} (delete its -wal and -shm files); start the service")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="omarketsctl", description="Omarkets operator CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -311,6 +350,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     config.add_argument("--all", action="store_true", help="include settings left at defaults")
     sub.add_parser("note-costs", help="show stored desk-note costs by model and prompt version")
+    backup = sub.add_parser("desk-backup", help="copy the desk database safely (SQLite backup)")
+    backup.add_argument("target", nargs="?", help="output file (default: next to the database)")
     return parser
 
 
@@ -331,6 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         "cross-market": lambda: _cmd_cross_market(settings),
         "config": lambda: _cmd_config(args.all),
         "note-costs": _cmd_note_costs,
+        "desk-backup": lambda: _cmd_desk_backup(args.target),
     }
     return commands[args.command]()
 

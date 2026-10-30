@@ -182,6 +182,9 @@ async def test_tick_stores_follow_up_beside_the_unchanged_note():
         detail = None
         model = "fake"
 
+        def envelope(self, kind, result):
+            return {"model": result.model}
+
         async def write(self, kind, facts):
             return WriteResult(NoteDraft(headline="Inflation ran hotter", summary="Sum.",
                                          what_it_means="Means.", market_reaction="React.",

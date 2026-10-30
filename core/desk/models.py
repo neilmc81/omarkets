@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 
 class NoteKind(StrEnum):
@@ -173,11 +173,14 @@ class NoteDraft(BaseModel):
     summary: str = Field(min_length=3, max_length=700)
     what_it_means: str = Field(min_length=3, max_length=2500)
     market_reaction: str = Field(min_length=3, max_length=1800)
-    #: What bond yields did and why that matters for Nasdaq stocks.
-    rates_read: str = Field(min_length=3, max_length=1800)
+    #: What bond yields did and why that matters. Optional from desk:v9, where
+    #: yields don't matter for the instrument (e.g. crypto).
+    rates_read: str | None = Field(default=None, min_length=3, max_length=1800)
     watch_next: list[str] = Field(default_factory=list)
     learn: str = Field(min_length=3, max_length=1200)
-    nq_tone: Tone
+    #: Stored as ``nq_tone`` so older releases still read new notes; desk:v9
+    #: writes ``tone``.
+    nq_tone: Tone = Field(validation_alias=AliasChoices("nq_tone", "tone"))
 
     @field_validator("watch_next")
     @classmethod

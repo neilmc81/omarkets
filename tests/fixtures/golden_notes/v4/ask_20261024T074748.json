@@ -1,0 +1,139 @@
+{
+ "id": "ask:20261024T074748",
+ "kind": "ask",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "prompt_version": "desk:v4",
+ "why_chosen": "Ask on a Saturday, DeepSeek. Closed vs stale wording.",
+ "facts_stored": [
+  "figures",
+  "moves",
+  "headlines",
+  "upcoming",
+  "rates"
+ ],
+ "facts_not_stored": [
+  "now / session text",
+  "markets_today (quote strip: levels, change today, delayed/stale flags)",
+  "breaking_alerts",
+  "bond_market as sent (rates is stored separately)",
+  "earnings / auction / statement details beyond figures and headlines"
+ ],
+ "note": {
+  "id": "ask:20261024T074748",
+  "kind": "ask",
+  "title": "Market right now",
+  "created_at": "2026-10-24T07:48:30.253644Z",
+  "event_at": null,
+  "figures": [],
+  "moves": [],
+  "headlines": [
+   {
+    "source": "cnbc_top",
+    "title": "What next for France as riots rattle markets? Three questions facing investors ahead of more protests",
+    "published_at": "2026-10-24T06:23:02Z",
+    "url": "https://www.cnbc.com/2026/10/24/france-riots-paris-unrest-debt-budget.html"
+   },
+   {
+    "source": "ecb_press",
+    "title": "Piero Cipollone: Interview with Milano Finanza",
+    "published_at": "2026-10-24T06:00:00Z",
+    "url": "https://www.ecb.europa.eu//press/inter/date/2026/html/ecb.in261024~ee2ba73cf3.en.html"
+   },
+   {
+    "source": "bbc_world",
+    "title": "The rise of AI election ads in US midterms campaign",
+    "published_at": "2026-10-24T05:03:44Z",
+    "url": "https://www.bbc.co.uk/news/videos/cm62y59zw8zko?at_medium=RSS&at_campaign=rss"
+   },
+   {
+    "source": "guardian_world",
+    "title": "John Healey pledges to use budget to harness power of AI to bolster Britain’s security",
+    "published_at": "2026-10-24T05:00:24Z",
+    "url": "https://www.theguardian.com/uk-news/2026/oct/24/john-healey-pledges-to-use-budget-to-harness-power-of-ai-to-bolster-britains-security"
+   },
+   {
+    "source": "guardian_world",
+    "title": "As a divided Israel prepares to go to the polls, can Netanyahu pull off his greatest political trick yet?",
+    "published_at": "2026-10-24T05:00:24Z",
+    "url": "https://www.theguardian.com/news/ng-interactive/2026/oct/24/divided-israel-election-benjamin-netanyahu"
+   },
+   {
+    "source": "cnbc_tech",
+    "title": "What a day in customer service looks like — as AI changes everything",
+    "published_at": "2026-10-24T05:00:01Z",
+    "url": "https://www.cnbc.com/2026/10/24/ai-customer-service-jobs-work.html"
+   },
+   {
+    "source": "guardian_world",
+    "title": "Typhoon Champi kills one and injures more than 500 in Taiwan as it heads to China",
+    "published_at": "2026-10-24T02:22:32Z",
+    "url": "https://www.theguardian.com/world/2026/oct/24/typhoon-champi-kills-one-and-injures-more-than-500-in-taiwan-as-it-heads-to-china"
+   },
+   {
+    "source": "bbc_world",
+    "title": "Australian MP's condition improves after alleged car attack",
+    "published_at": "2026-10-24T01:55:15Z",
+    "url": "https://www.bbc.co.uk/news/articles/c670pr1ryxyno?at_medium=RSS&at_campaign=rss"
+   }
+  ],
+  "upcoming": [],
+  "rates": {
+   "as_of": "2026-10-23T20:59:22Z",
+   "lines": [
+    {
+     "symbol": "US2Y",
+     "label": "2-year yield",
+     "value": 4.686,
+     "value_text": "4.686%",
+     "day_change_bp": 5.1,
+     "week_change_bp": -2.9,
+     "day_text": "+5.1bp",
+     "week_text": "-2.9bp"
+    },
+    {
+     "symbol": "US10Y",
+     "label": "10-year yield",
+     "value": 4.999,
+     "value_text": "4.999%",
+     "day_change_bp": 4.6,
+     "week_change_bp": -8.2,
+     "day_text": "+4.6bp",
+     "week_text": "-8.2bp"
+    },
+    {
+     "symbol": "CURVE",
+     "label": "Curve (10y minus 2y)",
+     "value": 31.3,
+     "value_text": "+31bp",
+     "day_change_bp": -0.5,
+     "week_change_bp": -5.3,
+     "day_text": "-0.5bp",
+     "week_text": "-5.3bp"
+    }
+   ],
+   "curve_bp": 31.3,
+   "curve_text": "+31bp, normal (10-year above 2-year)",
+   "explainer": "Treasury yields are the interest rate the US government pays to borrow. The 2-year follows what traders expect the Fed to do with rates; the 10-year reflects longer-run growth and inflation. Rising yields usually weigh on Nasdaq stocks, because the future profits that tech prices depend on are worth less today when safe bonds pay more. Falling yields usually help."
+  },
+  "draft": {
+   "headline": "Weekend pause: NQ closed slightly up, but yields near 5% are the story",
+   "summary": "Futures are shut for the weekend, so these are stale prices from the last session. NQ ended +0.09% while the S&P fell, and the 10-year yield sits at 4.999% — a headwind for Nasdaq valuations. Tone: mixed.",
+   "what_it_means": "It is Saturday morning, so nothing is trading: futures reopen in about a day and a half, and every price here is stale from the last session. The picture that session left: NQ a touch higher, but the 10-year yield at 4.999% and crude at $103.20 keep the backdrop uncomfortable for tech stocks, whose value rests on profits far in the future. No scheduled events are in the feed yet.",
+   "market_reaction": "In the last session, NQ added +0.09% to 29,167.75 while S&P 500 futures fell -0.41% to 7,672.75 — a split tape. The VIX fear gauge rose +2.21% to 19.45, crude jumped +3.75% to $103.20, gold slipped -1.31% to $4,007.30, and the dollar firmed +0.14% to 101.75. All quotes are delayed and stale; markets are closed.",
+   "rates_read": "The 2-year yield, which tracks Fed expectations, rose +5.1bp to 4.686% but is down -2.9bp on the week. The 10-year, which reflects longer-run growth and inflation, rose +4.6bp to 4.999% and is down -8.2bp on the week. The curve is +31bp, normal. Higher yields on the day weigh on Nasdaq valuations.",
+   "watch_next": [
+    "Futures reopen in about 1 day 14 hours",
+    "Whether the 10-year yield keeps pressing on 5%",
+    "Oil after Friday's +3.75% jump to $103.20",
+    "France protest headlines; market effect unconfirmed"
+   ],
+   "learn": "A bond yield is the return an investor gets for lending money to a government. When yields rise, lenders are demanding more. Tech profits mostly arrive years from now, so a higher yield shrinks what those future profits are worth today.",
+   "nq_tone": "mixed"
+  },
+  "status": "ok",
+  "error": null,
+  "model": "deepseek/deepseek-v4.1-flash-1017 · desk:v4",
+  "cost_usd": 0.001148794416,
+  "unverified_numbers": []
+ }
+}
