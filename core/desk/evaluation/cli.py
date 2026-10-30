@@ -131,6 +131,9 @@ def _run(args: argparse.Namespace, cases: C.CaseSet, settings: Any, project_dir:
         if not args.paid:
             print("plan only: no calls made (add --paid to run)")
             return 0
+        if args.out.exists() and ledger.limits(run_id) is None:
+            raise RunRefused(f"{args.out} exists but run {run_id} is not in {ledger.path}; "
+                             "the ledger may be lost, so these cases may already be paid for")
         results = asyncio.run(runner.run(cases, run_id=run_id, max_calls=args.max_calls,
                                          allowance_usd=args.allowance_usd, out=args.out))
         calls, committed = ledger.usage(run_id)

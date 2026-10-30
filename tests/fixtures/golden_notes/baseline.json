@@ -27,7 +27,7 @@
    "sign_errors": 0,
    "signed_direction": 0,
    "under_length": false,
-   "unverifiable_numbers": 10,
+   "unverifiable_numbers": 9,
    "words": 310
   },
   "premarket:2026-10-27": {
@@ -57,7 +57,7 @@
    "sign_errors": 0,
    "signed_direction": 11,
    "under_length": false,
-   "unverifiable_numbers": 6,
+   "unverifiable_numbers": 5,
    "words": 363
   },
   "release:20261027T1230:DURABLE_GOODS": {

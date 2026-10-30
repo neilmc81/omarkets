@@ -43,6 +43,10 @@ UNKNOWN = "unknown"
 REFUSED = "refused"
 
 
+#: Provider errors the writer settles at $0 (``DeskWriter._call``).
+_UNBILLED = frozenset(f"provider returned HTTP {code}" for code in (400, 401, 402, 403, 404))
+
+
 class RunRefused(RuntimeError):
     """The run cannot start (or continue) within its limits."""
 
@@ -258,7 +262,10 @@ class EvalRunner:
             result = await self._writer.attempt(NoteKind(case.kind), case.facts,
                                                 model=call.model)
             error = result.error or ""
-            if error.startswith("AI budget"):
+            # The cost guard refused, or the provider rejected the request
+            # without billing it (bad key, no credit, unknown model): the writer
+            # settles those at $0. Not an attempt; the run stops.
+            if error.startswith("AI budget") or error in _UNBILLED:
                 status = REFUSED
             elif error.startswith("network error"):
                 status = UNKNOWN
@@ -274,7 +281,7 @@ class EvalRunner:
             })
             results = saved()
             if status == REFUSED:
-                raise RunRefused(f"shared AI budget refused {case.id}: {error}")
+                raise RunRefused(f"{case.id} was not sent or was rejected unbilled: {error}")
             if result.cost_usd is not None and result.cost_usd > call.bound_usd:
                 raise RunRefused(f"{case.id} cost ${result.cost_usd:.4f}, above its bound; "
                                  "stopping")

@@ -15,7 +15,7 @@ import httpx
 from pydantic import ValidationError
 
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import PROMPT_VERSION, SYSTEM, TASKS, facts_text, user_message
+from core.desk.prompts import PROMPT_VERSION, SYSTEM, TASKS, number_sources, user_message
 from core.services.ai_budget import BudgetPaused
 
 logger = logging.getLogger(__name__)
@@ -91,8 +91,9 @@ def _number_forms(token: str) -> set[str]:
 def invented_numbers(draft: NoteDraft, facts: str) -> list[str]:
     """Numbers in the draft that are not in ``facts``, or a rounding of one.
 
-    ``facts`` is the FACTS block only (``facts_text``), never the whole prompt:
-    the system prompt's own numbers ("max 45 words", rule numbers) are not facts.
+    ``facts`` is ``number_sources``: the FACTS block plus the few facts the
+    prompt states (the 10-minute delay), never the whole prompt, whose limits
+    and examples ("max 45 words", rule numbers) are not facts.
     Digits inside names ("2-year", "Nasdaq 100") are not figures and are skipped.
     """
     allowed: set[str] = set()
@@ -223,7 +224,7 @@ class DeskWriter:
             result = retry if retry.draft else WriteResult(
                 None, primary, error=f"{result.error}; fallback {self._fallback}: {retry.error}")
         if result.draft is not None:
-            checked = facts_text(facts)
+            checked = number_sources(facts)
             invented = invented_numbers(result.draft, checked)
             if invented:
                 logger.warning("desk writer %s invented numbers %s; regenerating",
@@ -252,7 +253,7 @@ class DeskWriter:
         if result.draft is None:
             return result
         return replace(result, unverified_numbers=tuple(
-            invented_numbers(result.draft, facts_text(facts))))
+            invented_numbers(result.draft, number_sources(facts))))
 
     async def _call(self, model: str, message: str) -> WriteResult:
         token = None

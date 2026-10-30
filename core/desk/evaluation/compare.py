@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from core.desk.evaluation.cases import CaseSet
 from core.desk.evaluation.checker import RULES, Score, score_draft
 
@@ -65,15 +67,19 @@ def save_results(path: Path, results: Results) -> None:
 
 
 def score_results(cases: CaseSet, results: Results) -> dict[str, Score | None]:
-    """Each case's score, or ``None`` when it has no draft."""
+    """Each case's score, or ``None`` when it has no draft or the draft isn't a
+    valid note (blank or missing fields count as no note, never as a crash)."""
     scores: dict[str, Score | None] = {}
     for case in cases.cases:
         entry: Mapping[str, Any] = results.entries.get(case.id) or {}
         draft = entry.get("draft")
-        scores[case.id] = None if not draft else score_draft(
-            case_id=case.id, kind=case.kind, model=entry.get("model") or "",
-            created_at=case.created_at, draft=draft, facts=case.facts,
-            facts_complete=case.facts_complete, history=cases.history)
+        try:
+            scores[case.id] = None if not draft else score_draft(
+                case_id=case.id, kind=case.kind, model=entry.get("model") or "",
+                created_at=case.created_at, draft=draft, facts=case.facts,
+                facts_complete=case.facts_complete, history=cases.history)
+        except ValidationError:
+            scores[case.id] = None
     return scores
 
 

@@ -112,8 +112,10 @@ reported; otherwise it is worked out from that model's rates.
 
 **Number check.** Every number in the note must appear in the facts the
 writer was given, either exactly or rounded to fewer decimals. Only the FACTS
-block counts: the system prompt's own numbers ("max 45 words", rule numbers)
-are not facts. Digits inside a name are not figures and are skipped: Treasury
+block counts, plus the few facts the prompt itself states (`STATED_FACTS`: the
+10-minute delay, the 18:00 ET reopen, 08:30 ET data, 30 minutes before the
+open). The prompt's limits and examples ("max 45 words", rule numbers) are not
+facts. Digits inside a name are not figures and are skipped: Treasury
 maturities (1, 2, 3, 5, 7, 10, 20, 30 years: "2-year", "10y") and exact index
 names ("Nasdaq 100", "S&P 500", "FTSE 100" and a few others). "Nasdaq 777" or
 "a 77-year record" are still checked. If a number does not match, the note is

@@ -17,7 +17,7 @@ from typing import Any
 
 from core.desk.lessons import TOPICS, _lead
 from core.desk.models import NoteDraft
-from core.desk.prompts import facts_text
+from core.desk.prompts import number_sources
 from core.desk.writer import _number_forms, invented_numbers
 
 #: §7 length targets in words, over every draft field.
@@ -80,10 +80,10 @@ INSTRUMENT_NAMES: dict[str, tuple[str, ...]] = {
     "BTC": ("Bitcoin", "BTC"),
 }
 _LABEL_KEYS = ("market", "name", "label")
-_SIGNED_TEXT = re.compile(r"\s*([+\-−])(\d[\d,]*(?:\.\d+)?)\s*(%|bp|pts?)?\s*")
+_SIGNED_TEXT = re.compile(r"\s*([+\-−])(\d[\d,]*(?:\.\d+)?)\s*(%|bps?|pts?)?\s*")
 _DRAFT_NUMBER = re.compile(
     r"(?<![\d.,])(\d[\d,]*(?:\.\d+)?)(?![\d])"
-    r"(?:\s*(%|bp\b|basis points?|percentage points?|pts?\b))?", re.IGNORECASE)
+    r"(?:\s*(%|bps?\b|basis points?|percentage points?|pts?\b))?", re.IGNORECASE)
 
 
 def _unit(text: str | None) -> str | None:
@@ -385,7 +385,7 @@ def score_draft(*, case_id: str, kind: str, model: str, created_at: str,
         sign_errors=[e for f in fields for e in sign_errors(f, facts)],
         repeated_lesson=repeated_lesson(draft.get("learn"), created_at, history,
                                         note_id=case_id),
-        numbers_not_in_facts=invented_numbers(parsed, facts_text(facts)),
+        numbers_not_in_facts=invented_numbers(parsed, number_sources(facts)),
     )
 
 

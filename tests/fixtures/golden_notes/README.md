@@ -62,9 +62,9 @@ pins them.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | pre-market Oct 27 (Opus) | 336 (200–260) | 10 | 0 | 0 | 0 | 0 | auction | 10 | 12 |
 | review Oct 19 (Opus) | 347 (200–260) | 0 | 0 | 0 | 1 | 0 | – | 12 | 2 |
-| claims Oct 22 (Opus) | 363 (140–180) | 11 | 0 | 0 | 0 | 0 | – | 6 | 12 |
+| claims Oct 22 (Opus) | 363 (140–180) | 11 | 0 | 0 | 0 | 0 | – | 5 | 12 |
 | durable goods Oct 27 (DeepSeek) | 308 (140–180) | 0 | 0 | 0 | 0 | 0 | – | 6 | 1 |
-| move Oct 27 (DeepSeek) | 310 (140–180) | 0 | 0 | 0 | 0 | 0 | vix | 10 | 2 |
+| move Oct 27 (DeepSeek) | 310 (140–180) | 0 | 0 | 0 | 0 | 0 | vix | 9 | 2 |
 | ask Oct 24 (DeepSeek) | 296 (120–160) | 10 | 3 | 0 | 0 | 0 | – | 13 | 14 |
 
 Across all 32 stored notes: 19 explain basis points somewhere and 5 make it the
@@ -93,5 +93,9 @@ instrument; numbers are checked against the facts only, in the checker and in
 the production number check (the system prompt's example numbers no longer
 count as allowed; digits inside names such as "2-year" or "Nasdaq 100" are
 skipped). On these six notes the per-instrument check found no new sign
-errors, and the pre-market's unverifiable count fell from 11 to 10 (a digit
-inside a name: the "100" in "Nasdaq 100").
+errors. Unverifiable counts fell by one for the pre-market (the "100" in
+"Nasdaq 100"), the claims note ("08", from 08:30 ET) and the move note ("30"):
+the last two are facts the prompt itself states (`STATED_FACTS` in
+`core/desk/prompts.py`: the 10-minute delay, the 18:00 ET reopen, 08:30 ET
+data, 30 minutes before the open), which a note may quote; the prompt's limits
+and examples ("max 45 words", rule numbers) are not facts.

@@ -89,8 +89,14 @@ def tally(directory: Path) -> dict[str, dict[str, int]]:
     """Totals per version and criterion. Every score must be 0, 1 or 2."""
     key = json.loads((directory / KEY).read_text())["key"]
     totals: dict[str, dict[str, int]] = {}
+    expected = {(case, letter) for case, letters in key.items() for letter in letters}
+    seen: set[tuple[str, str]] = set()
     with (directory / SCORES).open(newline="") as handle:
         for row in csv.DictReader(handle):
+            place = (row.get("case") or "", row.get("note") or "")
+            if place not in expected or place in seen:
+                raise ValueError(f"unexpected or repeated row: {place[0]} note {place[1]}")
+            seen.add(place)
             label = key[row["case"]][row["note"]]
             for criterion in CRITERIA:
                 value = (row.get(criterion) or "").strip()
@@ -98,4 +104,7 @@ def tally(directory: Path) -> dict[str, dict[str, int]]:
                     raise ValueError(f"{row['case']} note {row['note']}: {criterion} "
                                      f"must be 0, 1 or 2 (got {value!r})")
                 totals.setdefault(label, dict.fromkeys(CRITERIA, 0))[criterion] += int(value)
+    missing = sorted(expected - seen)
+    if missing:
+        raise ValueError("unscored notes: " + ", ".join(f"{c} note {n}" for c, n in missing))
     return totals

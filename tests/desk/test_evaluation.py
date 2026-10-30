@@ -469,7 +469,7 @@ async def test_unknown_cost_keeps_the_bound_and_a_budget_refusal_is_not_an_attem
     tight = frozen(tmp_path / "t", [complete_case("ask:a"), complete_case("ask:b")])
     provider = Provider()
     runner, guard, ledger = runner_for(tmp_path / "t", provider, weekly=estimate(tight) * 1.2)
-    with pytest.raises(RunRefused, match="shared AI budget"):
+    with pytest.raises(RunRefused, match="AI budget"):
         await runner.run(tight, run_id="t", max_calls=2, allowance_usd=1.0,
                          out=tmp_path / "t.json")
     assert provider.requests == 1
@@ -559,3 +559,96 @@ async def test_a_stale_or_second_runner_never_loses_a_paid_draft(tmp_path):
     assert all(entry["draft"] == NoteDraft.model_validate(GOOD).model_dump(mode="json")
                for entry in results.entries.values())
     assert R.load_results(out, cases).entries == results.entries
+
+
+def test_facts_the_prompt_states_may_be_quoted_but_its_limits_may_not():
+    from core.desk.prompts import STATED_FACTS, TASKS, number_sources
+
+    # Every stated fact really is in the prompt the writer sees.
+    prompt = SYSTEM + " ".join(TASKS.values())
+    for phrase in ("10 minutes", "18:00 ET", "08:30 ET", "30 minutes before the US open"):
+        assert phrase in prompt and phrase in STATED_FACTS
+    draft = NoteDraft.model_validate({
+        **GOOD, "summary": "Prices are about 10 minutes delayed; data came at 08:30 ET."})
+    assert invented_numbers(draft, number_sources(FACTS)) == []
+    limits = NoteDraft.model_validate({**GOOD, "summary": "Max 45 words, 2-4 items (rule 13)."})
+    assert invented_numbers(limits, number_sources(FACTS)) == ["13", "2", "4", "45"]
+
+
+def test_a_blank_or_invalid_draft_is_a_regression_not_a_crash(tmp_path, capsys):
+    cases = C.load(SHIPPED)
+
+    def blank(entries):
+        entries["move:20261027T11"]["draft"] = dict.fromkeys(
+            entries["move:20261027T11"]["draft"], "")
+        del entries["ask:20261024T074748"]["draft"]["headline"]
+
+    bad = tmp_path / "blank.json"
+    R.save_results(bad, candidate(cases, blank))
+    assert cli.main(["eval", "compare", str(SHIPPED), str(bad)]) == 1
+    out = capsys.readouterr().out
+    assert "move:20261027T11 no_draft: 0 → 1" in out and "ask:20261024T074748 no_draft" in out
+    assert "FAIL: 2 regression(s)" in out
+
+
+async def test_an_unbilled_provider_rejection_is_not_an_attempt_and_stops_the_run(tmp_path):
+    cases = frozen(tmp_path, [complete_case(f"ask:{i}") for i in range(2)])
+    sent = []
+
+    def rejected(request):
+        sent.append(1)
+        return httpx.Response(402, json={"error": "no credit"})
+
+    runner, guard, ledger = runner_for(tmp_path, rejected)
+    with pytest.raises(RunRefused, match="HTTP 402"):
+        await runner.run(cases, run_id="r", max_calls=2, allowance_usd=1.0,
+                         out=tmp_path / "run.json")
+    assert sent == [1]
+    assert ledger.attempted("r") == {} and ledger.usage("r") == (0, 0)
+    assert [actual for _, actual in charges(guard)] == [0]
+
+
+def test_tally_refuses_a_half_filled_sheet(tmp_path):
+    cases = C.load(SHIPPED)
+    out = tmp_path / "sheet"
+    S.write_sheet(out, cases, R.stored_results(cases), candidate(cases, lambda e: None), seed=1)
+    rows = list(csv.DictReader((out / S.SCORES).open()))
+    for row in rows:
+        row.update(dict.fromkeys(S.CRITERIA, "2"))
+
+    def write(selected):
+        with (out / S.SCORES).open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(selected)
+
+    write(rows[:3])
+    with pytest.raises(ValueError, match="unscored notes"):
+        S.tally(out)
+    write([*rows, rows[0]])
+    with pytest.raises(ValueError, match="repeated"):
+        S.tally(out)
+
+
+def test_paid_run_refuses_when_the_ledger_was_lost(tmp_path, monkeypatch, capsys):
+    cases = frozen(tmp_path, [complete_case("ask:0")])
+    settings = Settings(_env_file=None, openrouter_api_key="k", ai_weekly_budget_usd=2.5,
+                        ai_budget_db_path=tmp_path / "budget.sqlite3", data_dir=tmp_path,
+                        desk_model=MODEL, desk_model_rates=RATES)
+    monkeypatch.setattr(cli, "_eval_settings", lambda: (settings, tmp_path))
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("no request may be sent")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", forbidden)
+    out = tmp_path / "run.json"
+    out.write_text("{}")  # drafts from a run whose ledger is gone
+    assert cli.main(["eval", "run", str(cases.directory), str(out), "--max-calls", "1",
+                     "--allowance-usd", "0.5", "--paid"]) == 1
+    assert "ledger may be lost" in capsys.readouterr().err
+
+
+def test_bps_is_a_basis_point_unit():
+    facts = {"bond_market": {"yields": [{"name": "2-year yield", "change_today": "-1.7bps"}]}}
+    assert K.sign_errors("The 2-year rose 1.7bps.", facts) == ["rose 1.7bps"]
+    assert K.sign_errors("The 2-year rose 1.7%.", facts) == []
