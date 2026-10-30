@@ -26,47 +26,73 @@ class DeskStore:
             Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(self._path, check_same_thread=False)
         self._lock = threading.Lock()
-        with self._lock, self._db:
+        with self._lock:
+            # Not allowed inside a transaction; a no-op for ":memory:".
             self._db.execute("PRAGMA journal_mode=WAL")
+            # One transaction for the whole schema step: SQLite DDL is
+            # transactional, so a new column and its repair land together or not
+            # at all, and IMMEDIATE serialises two processes opening one file.
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                self._migrate()
+                self._db.commit()
+            except BaseException:
+                self._db.rollback()
+                self._db.close()
+                raise
+
+    def _migrate(self) -> None:
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS desk_notes ("
+            " id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,"
+            " created_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 1,"
+            " payload TEXT NOT NULL)"
+        )
+        self._db.execute(
+            "CREATE INDEX IF NOT EXISTS desk_notes_created ON desk_notes(created_at)"
+        )
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(desk_notes)")}
+        if "failure_alerted" not in columns:
             self._db.execute(
-                "CREATE TABLE IF NOT EXISTS desk_notes ("
-                " id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,"
-                " created_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 1,"
-                " payload TEXT NOT NULL)"
+                "ALTER TABLE desk_notes ADD COLUMN failure_alerted INTEGER NOT NULL DEFAULT 0"
             )
-            self._db.execute(
-                "CREATE INDEX IF NOT EXISTS desk_notes_created ON desk_notes(created_at)"
-            )
-            columns = {row[1] for row in self._db.execute("PRAGMA table_info(desk_notes)")}
-            if "failure_alerted" not in columns:
-                self._db.execute(
-                    "ALTER TABLE desk_notes ADD COLUMN failure_alerted INTEGER NOT NULL DEFAULT 0"
-                )
-            self._db.execute(
-                "CREATE TABLE IF NOT EXISTS desk_alerts ("
-                " id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL)"
-            )
-            self._db.execute(
-                "CREATE TABLE IF NOT EXISTS desk_once ("
-                " id TEXT PRIMARY KEY, created_at TEXT NOT NULL)"
-            )
-            if "followup" not in columns:
-                # "Did it hold?" results; kept apart so a written note is never rewritten.
-                self._db.execute("ALTER TABLE desk_notes ADD COLUMN followup TEXT")
-            if "instrument" not in columns:
-                # Which instrument a note is about (None for desk-wide event notes).
-                self._db.execute("ALTER TABLE desk_notes ADD COLUMN instrument TEXT")
-                kinds = ",".join(f"'{k.value}'" for k in INSTRUMENT_KINDS)
-                # Every note written before this column is NQ's.
-                self._db.execute(
-                    f"UPDATE desk_notes SET instrument='NQ' WHERE kind IN ({kinds})")
-            # The exact facts a note was written from, and how it was requested.
-            # Kept out of the note payload so older releases still read the notes.
-            self._db.execute(
-                "CREATE TABLE IF NOT EXISTS note_facts ("
-                " note_id TEXT PRIMARY KEY, facts TEXT NOT NULL, envelope TEXT NOT NULL,"
-                " captured_at TEXT NOT NULL)"
-            )
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS desk_alerts ("
+            " id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL)"
+        )
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS desk_once ("
+            " id TEXT PRIMARY KEY, created_at TEXT NOT NULL)"
+        )
+        if "followup" not in columns:
+            # "Did it hold?" results; kept apart so a written note is never rewritten.
+            self._db.execute("ALTER TABLE desk_notes ADD COLUMN followup TEXT")
+        if "instrument" not in columns:
+            # Which instrument a note is about (None for desk-wide event notes).
+            self._db.execute("ALTER TABLE desk_notes ADD COLUMN instrument TEXT")
+        self._repair_instruments()
+        # The exact facts a note was written from, and how it was requested.
+        # Kept out of the note payload so older releases still read the notes.
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS note_facts ("
+            " note_id TEXT PRIMARY KEY, facts TEXT NOT NULL, envelope TEXT NOT NULL,"
+            " captured_at TEXT NOT NULL)"
+        )
+
+    def _repair_instruments(self) -> None:
+        """Fill in the instrument of every pre-market, move and ask row that has
+        none, from its id, as ``save`` would. Runs on every open: it also mends
+        rows written by an older release that does not know the column."""
+        kinds = sorted(k.value for k in INSTRUMENT_KINDS)
+        rows = self._db.execute(
+            "SELECT id FROM desk_notes WHERE instrument IS NULL"
+            f" AND kind IN ({','.join('?' * len(kinds))})", kinds,
+        ).fetchall()
+        repairs = [(symbol, note_id) for (note_id,) in rows
+                   if (symbol := instrument_of(note_id)) is not None]
+        if repairs:
+            self._db.executemany("UPDATE desk_notes SET instrument=? WHERE id=?", repairs)
+            logger.info("desk store: set the instrument of %d older note(s)", len(repairs))
 
     @staticmethod
     def _note(payload: str, followup: str | None, instrument: str | None = None) -> DeskNote:
