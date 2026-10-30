@@ -19,7 +19,7 @@ from core.desk.evaluation import compare as R
 from core.desk.evaluation import sheet as S
 from core.desk.evaluation.runner import EvalRunner, RunLedger, RunRefused
 from core.desk.models import NoteKind
-from core.desk.prompts import PROMPT_VERSION, SYSTEM, user_message
+from core.desk.prompts import PROMPT_VERSION, NoPromptProfile
 
 #: (settings, project directory) as the running service sees them.
 SettingsFn = Callable[[], tuple[Any, Path]]
@@ -98,15 +98,16 @@ def _render(cases: C.CaseSet, out: Path, settings: Any, model: str | None) -> No
              "--- | --- | --- | --- | --- | ---"]
     for case in cases.cases:
         kind = NoteKind(case.kind)
+        instrument = C.case_instrument(case)
         chosen = model or writer.model_for(kind)
-        message = user_message(kind, case.facts)
+        prompt = writer.prompt(kind, case.facts, instrument=instrument)
         (out / f"{C.file_name(case.id)[:-5]}.txt").write_text(
-            f"SYSTEM\n{SYSTEM}\n\nUSER\n{message}\n")
-        bound = (f"${writer.max_cost(kind, case.facts, model=chosen):.4f}"
+            f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")
+        bound = (f"${writer.max_cost(kind, case.facts, model=chosen, instrument=instrument):.4f}"
                  if chosen in rates else "no price on record")
         index.append(f"{case.id} | {case.kind} | "
                      f"{'complete' if case.facts_complete else 'partial'} | {chosen} | "
-                     f"{len(SYSTEM) + len(message)} | {bound}")
+                     f"{len(prompt.system) + len(prompt.user)} | {bound}")
     (out / "index.md").write_text("\n".join(index) + "\n")
 
 
@@ -150,7 +151,8 @@ def _run(args: argparse.Namespace, cases: C.CaseSet, settings: Any, project_dir:
 def main(args: argparse.Namespace, service_settings: SettingsFn) -> int:
     try:
         return _main(args, service_settings)
-    except (C.ManifestError, FileNotFoundError, FileExistsError, KeyError, ValueError) as exc:
+    except (C.ManifestError, FileNotFoundError, FileExistsError, KeyError, ValueError,
+            NoPromptProfile) as exc:
         print(f"omarketsctl: eval {args.eval_command}: {exc}", file=sys.stderr)
         return 1
 

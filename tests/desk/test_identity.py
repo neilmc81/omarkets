@@ -116,6 +116,7 @@ async def test_ask_quota_is_global_and_checked_inside_the_write_lock():
     service, _, _ = make(MOVE_AT)
     service.ask_daily_limit = 1
     es = ID.Instrument.of("ES")
+    service.instruments = (ID.NQ, es)
     results = await asyncio.gather(service.ask(), service.ask(es), return_exceptions=True)
     assert sum(isinstance(r, RuntimeError) for r in results) == 1
     assert service.store.count_since("ask", "2026-10-20T00:00:00+00:00") == 1
@@ -123,6 +124,7 @@ async def test_ask_quota_is_global_and_checked_inside_the_write_lock():
 
 async def test_ask_reuse_is_per_instrument():
     service, _, _ = make(MOVE_AT)
+    service.instruments = (ID.NQ, ID.Instrument.of("ES"))
     nq = await service.ask()
     assert (await service.ask()).id == nq.id
     es = await service.ask(ID.Instrument.of("ES"))

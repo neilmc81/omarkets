@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.api import desk as desk_api
+from core.desk.identity import NQ
 from core.desk.models import NoteKind
 from core.desk.writer import DeskWriter
 from core.providers.earnings_nasdaq import parse
@@ -66,7 +67,8 @@ async def test_valid_output_is_parsed_and_cost_settled():
         return completion("```json\n" + json.dumps(GOOD) + "\n```")
 
     guard = FakeGuard()
-    result = await writer_with(handler, guard).write(NoteKind.RELEASE, {"figures": [], **FACTS})
+    result = await writer_with(handler, guard).write(
+        NoteKind.RELEASE, {"figures": [], **FACTS}, instrument=None)
     assert result.draft is not None and result.draft.nq_tone == "mixed"
     assert result.cost_usd == 0.012
     assert guard.settled == [("token", 0.012)]
@@ -78,16 +80,19 @@ async def test_valid_output_is_parsed_and_cost_settled():
 
 async def test_trading_advice_is_rejected():
     bad = {**GOOD, "summary": "Traders should go long here."}
-    result = await writer_with(lambda r: completion(json.dumps(bad))).write(NoteKind.MOVE, {})
+    result = await writer_with(lambda r: completion(json.dumps(bad))).write(
+        NoteKind.MOVE, {}, instrument=NQ)
     assert result.draft is None and result.error == "draft contained trading advice"
 
 
 async def test_invalid_output_and_http_errors():
-    result = await writer_with(lambda r: completion("not json")).write(NoteKind.MOVE, {})
+    result = await writer_with(lambda r: completion("not json")).write(
+        NoteKind.MOVE, {}, instrument=NQ)
     assert result.draft is None and result.error == "model output was not valid"
 
     guard = FakeGuard()
-    result = await writer_with(lambda r: httpx.Response(401), guard).write(NoteKind.MOVE, {})
+    result = await writer_with(lambda r: httpx.Response(401), guard).write(
+        NoteKind.MOVE, {}, instrument=NQ)
     assert result.error == "provider returned HTTP 401"
     assert guard.settled == [("token", 0.0)]
 
@@ -99,7 +104,8 @@ async def test_budget_pause_blocks_the_call():
         called.append(request)
         return completion(json.dumps(GOOD))
 
-    result = await writer_with(handler, FakeGuard(paused=True)).write(NoteKind.MOVE, {})
+    result = await writer_with(handler, FakeGuard(paused=True)).write(
+        NoteKind.MOVE, {}, instrument=NQ)
     assert result.draft is None and result.error.startswith("AI budget:")
     assert called == []
 
@@ -107,7 +113,7 @@ async def test_budget_pause_blocks_the_call():
 async def test_missing_key_is_reported_not_called():
     writer = DeskWriter(api_key=None, model="m", input_rate=1, output_rate=1)
     assert not writer.ready
-    result = await writer.write(NoteKind.ASK, {})
+    result = await writer.write(NoteKind.ASK, {}, instrument=NQ)
     assert result.error == "OPENROUTER_API_KEY is not configured"
 
 
@@ -139,7 +145,8 @@ def test_desk_api_returns_503_when_disabled():
 async def test_raw_newlines_inside_strings_are_accepted():
     raw = json.dumps(GOOD).replace("The economy produced", "The economy\nproduced")
     assert "\n" in raw
-    result = await writer_with(lambda r: completion(raw)).write(NoteKind.RELEASE, {})
+    result = await writer_with(lambda r: completion(raw)).write(
+        NoteKind.RELEASE, {}, instrument=None)
     assert result.draft is not None and "\n" in result.draft.what_it_means
 
 
@@ -158,7 +165,7 @@ async def test_truncated_output_is_logged_with_its_token_use(caplog):
         })
 
     with caplog.at_level("WARNING", logger="core.desk.writer"):
-        result = await writer_with(handler).write(NoteKind.PREMARKET, {})
+        result = await writer_with(handler).write(NoteKind.PREMARKET, {}, instrument=NQ)
     assert result.error == "model output was not valid"
     assert seen["body"]["max_tokens"] >= 4000
     assert "finish_reason=length" in caplog.text
@@ -219,7 +226,7 @@ async def test_deepseek_request_carries_pinned_provider_routing():
         bodies.append(json.loads(request.content))
         return completion(json.dumps(GOOD), cost=0.0008)
 
-    result = await split_writer(handler).write(NoteKind.MOVE, {})
+    result = await split_writer(handler).write(NoteKind.MOVE, {}, instrument=NQ)
     assert result.model == DEEPSEEK and result.draft is not None
     assert bodies[0]["model"] == DEEPSEEK
     assert bodies[0]["provider"] == DEEPSEEK_PROVIDER
@@ -227,7 +234,7 @@ async def test_deepseek_request_carries_pinned_provider_routing():
     assert bodies[0]["max_tokens"] >= 4000
 
     bodies.clear()
-    await split_writer(handler).write(NoteKind.REVIEW, {})
+    await split_writer(handler).write(NoteKind.REVIEW, {}, instrument=None)
     assert bodies[0]["model"] == OPUS and "provider" not in bodies[0]
 
 
@@ -242,7 +249,7 @@ async def test_deepseek_failure_falls_back_to_opus():
         return completion(json.dumps(GOOD), cost=0.06)
 
     guard = FakeGuard()
-    result = await split_writer(handler, guard).write(NoteKind.RELEASE, FACTS)
+    result = await split_writer(handler, guard).write(NoteKind.RELEASE, FACTS, instrument=None)
     assert models == [DEEPSEEK, OPUS]
     assert result.draft is not None and result.model == OPUS
     assert result.cost_usd == 0.0605
@@ -257,7 +264,7 @@ async def test_http_and_advice_failures_also_fall_back():
                 return failure()
             return completion(json.dumps(GOOD))
 
-        result = await split_writer(handler).write(NoteKind.ASK, {})
+        result = await split_writer(handler).write(NoteKind.ASK, {}, instrument=NQ)
         assert result.model == OPUS and result.draft is not None
 
 
@@ -274,7 +281,7 @@ async def test_budget_cap_blocks_the_fallback():
         models.append(json.loads(request.content)["model"])
         return httpx.Response(500)
 
-    result = await split_writer(handler, CapGuard()).write(NoteKind.MOVE, {})
+    result = await split_writer(handler, CapGuard()).write(NoteKind.MOVE, {}, instrument=NQ)
     assert models == [DEEPSEEK]
     assert result.draft is None and result.model == DEEPSEEK
     assert "fallback" in result.error and "AI budget" in result.error
@@ -282,7 +289,7 @@ async def test_budget_cap_blocks_the_fallback():
 
 async def test_paused_budget_skips_fallback_entirely():
     result = await split_writer(lambda r: completion(json.dumps(GOOD)),
-                                FakeGuard(paused=True)).write(NoteKind.MOVE, {})
+                                FakeGuard(paused=True)).write(NoteKind.MOVE, {}, instrument=NQ)
     assert result.error.startswith("AI budget:")
 
 
@@ -295,8 +302,8 @@ async def test_each_model_is_priced_at_its_own_rates():
             "usage": {"prompt_tokens": 3000, "completion_tokens": 2000},
         })
 
-    deepseek = await split_writer(handler, guard).write(NoteKind.MOVE, FACTS)
-    opus = await split_writer(handler, guard).write(NoteKind.REVIEW, FACTS)
+    deepseek = await split_writer(handler, guard).write(NoteKind.MOVE, FACTS, instrument=NQ)
+    opus = await split_writer(handler, guard).write(NoteKind.REVIEW, FACTS, instrument=None)
     assert deepseek.cost_usd == pytest.approx((3000 * 0.15 + 2000 * 0.60) / 1e6)
     assert opus.cost_usd == pytest.approx((3000 * 5 + 2000 * 25) / 1e6)
     # The worst-case reservation follows the model too.
@@ -319,10 +326,11 @@ async def test_invented_numbers_regenerate_once_then_flag():
         return completion(json.dumps(replies.pop(0)) if replies else json.dumps(bad))
 
     facts = FACTS
-    result = await split_writer(handler).write(NoteKind.MOVE, facts)
+    result = await split_writer(handler).write(NoteKind.MOVE, facts, instrument=NQ)
     assert result.draft.market_reaction == GOOD["market_reaction"]
     assert result.unverified_numbers == ()
 
-    result = await split_writer(lambda r: completion(json.dumps(bad))).write(NoteKind.MOVE, facts)
+    result = await split_writer(lambda r: completion(json.dumps(bad))).write(
+        NoteKind.MOVE, facts, instrument=NQ)
     assert result.draft is not None and result.unverified_numbers == ("777",)
     assert result.cost_usd == pytest.approx(0.024)

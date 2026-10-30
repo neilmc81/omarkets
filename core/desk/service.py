@@ -49,7 +49,7 @@ from core.desk.models import (
     UpcomingItem,
     WatchCard,
 )
-from core.desk.prompts import PROMPT_VERSION
+from core.desk.prompts import PROMPT_VERSION, has_profile
 from core.desk.store import DeskStore
 from core.desk.writer import DeskWriter
 from core.domain.chart import ChartPin
@@ -150,8 +150,14 @@ class DeskService:
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
-        #: Instruments that get pre-market and move notes (NQ only in production).
+        #: Instruments that get pre-market, move and ask notes (NQ only in production).
+        #: Each needs a prompt profile at the live prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)
+        missing = [i.symbol for i in self.instruments if not has_profile(i.symbol)]
+        if missing:
+            raise ValueError(f"no {PROMPT_VERSION} prompt for {', '.join(missing)}; "
+                             "an instrument needs a reviewed prompt profile before the "
+                             "desk can write for it")
         #: Large-move trigger and whether it was scaled, per (instrument, trade date)
         #: (``_move_trigger``).
         self._trigger: dict[tuple[str, date], tuple[float, bool]] = {}
@@ -958,7 +964,10 @@ class DeskService:
         minutes is returned instead of writing a new one.
 
         Both checks run under the write lock, so two requests at once cannot
-        both pass the daily limit."""
+        both pass the daily limit. An instrument the desk does not write for is
+        refused before anything is stored or sent."""
+        if inst not in self.instruments:
+            raise ValueError(f"the desk does not write for {inst.symbol}")
         async with self._write_lock:
             now = self.clock()
             # A note from the last 15 minutes is still current; reuse it for free.
@@ -1034,7 +1043,10 @@ class DeskService:
     async def _write(self, note_id: str, kind: NoteKind, title: str, now: datetime,
                      facts: dict[str, Any], *, notify: bool = True,
                      instrument: Instrument | None = None, **parts: Any) -> DeskNote:
-        result = await self.writer.write(kind, facts)
+        if (kind in ID.INSTRUMENT_KINDS) != (instrument is not None):
+            raise ValueError(f"{kind.value} note {note_id}: instrument {instrument} "
+                             "does not match its kind")
+        result = await self.writer.write(kind, facts, instrument=instrument)
         note = DeskNote(
             id=note_id, kind=kind, title=title, created_at=self.clock(),
             instrument=instrument.symbol if instrument else None,
@@ -1043,9 +1055,7 @@ class DeskService:
             cost_usd=result.cost_usd,
             unverified_numbers=list(result.unverified_numbers), **parts,
         )
-        envelope = self.writer.envelope(kind, result)
-        if instrument is not None:
-            envelope = {**envelope, "instrument": instrument.symbol}
+        envelope = self.writer.envelope(kind, result, instrument=instrument)
         self.store.save(note, facts, envelope)
         if note.status == "ok":
             logger.info("desk note %s written (cost=%s)", note_id, result.cost_usd)

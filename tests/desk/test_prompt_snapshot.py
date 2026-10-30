@@ -10,8 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.desk.identity import NQ
 from core.desk.models import NoteKind
-from core.desk.prompts import SYSTEM, user_message
+from core.desk.prompts import render
 from tests.desk.test_service import RELEASE, cpi_rows, make
 
 SNAPSHOTS = Path(__file__).parents[1] / "fixtures" / "prompt_snapshots"
@@ -46,4 +47,6 @@ async def facts_for(kind: NoteKind) -> dict:
                                   NoteKind.MOVE, NoteKind.ASK])
 async def test_nq_prompt_snapshot(kind):
     facts = await facts_for(kind)
-    check(f"nq_{kind.value}.txt", f"SYSTEM\n{SYSTEM}\n\nUSER\n{user_message(kind, facts)}\n")
+    # Release notes are desk-wide; they still use NQ's v8 text.
+    prompt = render(kind, None if kind is NoteKind.RELEASE else NQ, facts)
+    check(f"nq_{kind.value}.txt", f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")

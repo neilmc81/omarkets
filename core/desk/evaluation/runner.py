@@ -28,10 +28,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.desk.evaluation.cases import Case, CaseSet
+from core.desk.evaluation.cases import Case, CaseSet, case_instrument
 from core.desk.evaluation.compare import Results, save_results
+from core.desk.identity import Instrument
 from core.desk.models import NoteKind
-from core.desk.prompts import PROMPT_VERSION
+from core.desk.prompts import PROMPT_VERSION, NoPromptProfile
 from core.desk.writer import DeskWriter
 
 #: Recorded before the request; left as-is if the process dies mid-call.
@@ -185,6 +186,8 @@ class PlannedCall:
     case: Case
     model: str
     bound_usd: float
+    #: From the case's envelope; ``None`` for desk-wide event notes.
+    instrument: Instrument | None = None
 
 
 class EvalRunner:
@@ -223,14 +226,19 @@ class EvalRunner:
             if not case.facts_complete:
                 raise RunRefused(f"{case.id} has partial facts; only captured cases can run")
             kind = NoteKind(case.kind)
+            instrument = case_instrument(case)
             model = self._model or self._writer.model_for(kind)
             if model not in self._rates:
                 raise RunRefused(f"no price on record for {model}; can't bound its cost")
-            bound = self._writer.hard_max_cost(kind, case.facts, model=model)
+            try:
+                bound = self._writer.hard_max_cost(kind, case.facts, model=model,
+                                                   instrument=instrument)
+            except NoPromptProfile as exc:
+                raise RunRefused(f"{case.id}: {exc}") from exc
             if bound is None or not math.isfinite(bound) or bound <= 0:
                 raise RunRefused(f"{case.id}: cost bound could not be set for {model} "
                                  "(its routing params change the token limit)")
-            planned.append(PlannedCall(case, model, bound))
+            planned.append(PlannedCall(case, model, bound, instrument))
         calls, committed = self._ledger.usage(run_id)
         if calls + len(planned) > max_calls:
             raise RunRefused(f"{len(planned)} calls planned but only {max_calls - calls} "
@@ -260,7 +268,7 @@ class EvalRunner:
             case = call.case
             self._ledger.begin(run_id, case.id, call.model, call.bound_usd)
             result = await self._writer.attempt(NoteKind(case.kind), case.facts,
-                                                model=call.model)
+                                                instrument=call.instrument, model=call.model)
             error = result.error or ""
             # The cost guard refused, or the provider rejected the request
             # without billing it (bad key, no credit, unknown model): the writer

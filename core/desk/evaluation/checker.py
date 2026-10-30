@@ -15,9 +15,10 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from core.desk.evaluation.cases import instrument_for
 from core.desk.lessons import TOPICS, _lead
-from core.desk.models import NoteDraft
-from core.desk.prompts import number_sources
+from core.desk.models import NoteDraft, NoteKind
+from core.desk.prompts import render
 from core.desk.writer import _number_forms, invented_numbers
 
 #: §7 length targets in words, over every draft field.
@@ -372,7 +373,9 @@ class Score:
 
 def score_draft(*, case_id: str, kind: str, model: str, created_at: str,
                 draft: Mapping[str, Any], facts: Any, facts_complete: bool,
-                history: Sequence[Mapping]) -> Score:
+                history: Sequence[Mapping], instrument: str | None = None) -> Score:
+    """``instrument`` is the symbol the note was written for (NQ when not recorded)."""
+    sources = render(NoteKind(kind), instrument_for(kind, instrument), facts).number_sources
     fields = draft_fields(draft)
     text = " ".join(fields)
     parsed = NoteDraft.model_validate(dict(draft))
@@ -385,7 +388,7 @@ def score_draft(*, case_id: str, kind: str, model: str, created_at: str,
         sign_errors=[e for f in fields for e in sign_errors(f, facts)],
         repeated_lesson=repeated_lesson(draft.get("learn"), created_at, history,
                                         note_id=case_id),
-        numbers_not_in_facts=invented_numbers(parsed, number_sources(facts)),
+        numbers_not_in_facts=invented_numbers(parsed, sources),
     )
 
 
