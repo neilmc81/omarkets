@@ -107,7 +107,7 @@ def test_trigger_falls_back_to_the_fixed_threshold():
 
     service = desk(broken, threshold=0.9)
     assert service._move_trigger(NOW) == (0.9, False)
-    assert service._trigger is None  # a failure is retried, not cached
+    assert service._trigger == {}  # a failure is retried, not cached
     assert desk(ohlc_of([]), threshold=0.9)._move_trigger(NOW) == (0.9, False)
 
 

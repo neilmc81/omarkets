@@ -27,10 +27,11 @@ class FakeWriter:
         self.calls: list[tuple[NoteKind, dict]] = []
         self.results = list(results or [])
 
-    def envelope(self, kind, result):
-        return {"model": result.model}
+    def envelope(self, kind, result, *, instrument):
+        return {"model": result.model,
+                **({"instrument": instrument.symbol} if instrument else {})}
 
-    async def write(self, kind, facts):
+    async def write(self, kind, facts, *, instrument):
         self.calls.append((kind, facts))
         if self.results:
             return self.results.pop(0)
@@ -110,7 +111,7 @@ async def test_old_releases_are_never_backfilled():
 
 async def test_failed_write_backs_off_and_stops_after_three_attempts():
     class FailingReleases(FakeWriter):
-        async def write(self, kind, facts):
+        async def write(self, kind, facts, *, instrument):
             self.calls.append((kind, facts))
             if kind is NoteKind.RELEASE:
                 return WriteResult(None, "fake", None, error="provider returned HTTP 500")
@@ -245,7 +246,7 @@ async def test_premarket_leads_with_this_mornings_data():
 
 async def test_note_that_fails_every_retry_alerts_once():
     class Failing(FakeWriter):
-        async def write(self, kind, facts):
+        async def write(self, kind, facts, *, instrument):
             if kind is NoteKind.RELEASE:
                 return WriteResult(None, "fake", None, error="provider returned HTTP 500")
             return WriteResult(draft("Other note"), "fake", 0.01)

@@ -66,12 +66,14 @@ async def test_service_captures_the_exact_facts_and_envelope():
 def test_writer_envelope_names_prompt_template_and_routing():
     writer = DeskWriter(api_key="k", model="m1", fallback_model="m2",
                         model_params={"m1": {"provider": {"order": ["x"]}}})
-    env = writer.envelope(NoteKind.RELEASE, WriteResult(draft(), "m2"))
+    sent = writer.prompt(NoteKind.RELEASE, {}, instrument=None)
+    env = writer.envelope(NoteKind.RELEASE, WriteResult(draft(), "m2", prompt=sent),
+                          instrument=None)
     assert env["prompt_version"].startswith("desk:") and len(env["system_sha256"]) == 64
     assert len(env["task_sha256"]) == 64 and env["temperature"] == 0.3
     assert env["primary_model"] == "m1" and env["model"] == "m2"
     assert env["fallback_model"] == "m2" and env["model_params"] == {}
-    env = writer.envelope(NoteKind.RELEASE, WriteResult(draft(), "m1"))
+    env = writer.envelope(NoteKind.RELEASE, WriteResult(draft(), "m1"), instrument=None)
     assert env["model_params"] == {"provider": {"order": ["x"]}}
 
 

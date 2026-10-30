@@ -77,7 +77,8 @@ def score_results(cases: CaseSet, results: Results) -> dict[str, Score | None]:
             scores[case.id] = None if not draft else score_draft(
                 case_id=case.id, kind=case.kind, model=entry.get("model") or "",
                 created_at=case.created_at, draft=draft, facts=case.facts,
-                facts_complete=case.facts_complete, history=cases.history)
+                facts_complete=case.facts_complete, history=cases.history,
+                instrument=(case.envelope or {}).get("instrument"))
         except ValidationError:
             scores[case.id] = None
     return scores

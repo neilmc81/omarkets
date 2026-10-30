@@ -24,12 +24,14 @@ from core.desk import calendar as CAL
 from core.desk import facts as F
 from core.desk import followup
 from core.desk import headlines as HL
+from core.desk import identity as ID
 from core.desk import macro as M
 from core.desk import pins as PN
 from core.desk import plan as PL
 from core.desk import playbook as P
 from core.desk import review as R
 from core.desk import watch as W
+from core.desk.identity import NQ, PRODUCTION_INSTRUMENTS, Instrument
 from core.desk.links import ReleaseNotes
 from core.desk.models import (
     BreakingAlert,
@@ -47,7 +49,7 @@ from core.desk.models import (
     UpcomingItem,
     WatchCard,
 )
-from core.desk.prompts import PROMPT_VERSION
+from core.desk.prompts import PROMPT_VERSION, has_profile
 from core.desk.store import DeskStore
 from core.desk.writer import DeskWriter
 from core.domain.chart import ChartPin
@@ -138,6 +140,7 @@ class DeskService:
         poll_seconds: float = 60.0,
         local_tz: ZoneInfo = UTC_ZONE,
         daily_plan: bool = True,
+        instruments: Sequence[str] = PRODUCTION_INSTRUMENTS,
     ) -> None:
         self.sources = sources
         self.store = store
@@ -147,8 +150,17 @@ class DeskService:
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
-        #: Trade date, large-move trigger and whether it was scaled (``_move_trigger``).
-        self._trigger: tuple[date, float, bool] | None = None
+        #: Instruments that get pre-market, move and ask notes (NQ only in production).
+        #: Each needs a prompt profile at the live prompt version.
+        self.instruments = tuple(Instrument.of(s) for s in instruments)
+        missing = [i.symbol for i in self.instruments if not has_profile(i.symbol)]
+        if missing:
+            raise ValueError(f"no {PROMPT_VERSION} prompt for {', '.join(missing)}; "
+                             "an instrument needs a reviewed prompt profile before the "
+                             "desk can write for it")
+        #: Large-move trigger and whether it was scaled, per (instrument, trade date)
+        #: (``_move_trigger``).
+        self._trigger: dict[tuple[str, date], tuple[float, bool]] = {}
         self.ask_daily_limit = ask_daily_limit
         self.enabled = enabled
         self.poll_seconds = poll_seconds
@@ -498,10 +510,11 @@ class DeskService:
         if is_trading_day(session.trade_date):
             start = session.rth_opens_at - PREMARKET_LEAD
             if start <= now < session.rth_opens_at + timedelta(hours=1):
-                note_id = f"premarket:{session.trade_date.isoformat()}"
-                if self._should_try(note_id):
-                    jobs.append((note_id, NoteKind.PREMARKET,
-                                 lambda n=note_id: self.build_premarket(n, now)))
+                for inst in self.instruments:
+                    pid = ID.note_id(NoteKind.PREMARKET, session.trade_date.isoformat(), inst)
+                    if self._should_try(pid):
+                        jobs.append((pid, NoteKind.PREMARKET,
+                                     lambda n=pid, i=inst: self.build_premarket(n, now, i)))
 
         # Economic releases and Fed events.
         events = self.sources.calendar_events(now - LOOKBACK - timedelta(hours=1), now)
@@ -557,26 +570,29 @@ class DeskService:
                                  lambda a=auction, r=read, n=note_id:
                                  self.build_auction(n, a, r, now)))
 
-        # Large NQ move.
-        move = await self._large_move(now)
-        if move is not None:
-            note_id = f"move:{move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}"
-            recent_moves = self.store.count_since("move", (now - timedelta(hours=3)).isoformat())
-            if recent_moves == 0 and self._should_try(note_id):
-                jobs.append((note_id, NoteKind.MOVE,
-                             lambda m=move, n=note_id: self.build_move(n, m, now)))
+        # Large moves: at most one note per instrument every 3 hours.
+        for inst in self.instruments:
+            move = await self._large_move(now, inst)
+            if move is None:
+                continue
+            mid = ID.note_id(NoteKind.MOVE, f"{move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}", inst)
+            recent_moves = self.store.count_since(
+                "move", (now - timedelta(hours=3)).isoformat(), instrument=inst.symbol)
+            if recent_moves == 0 and self._should_try(mid):
+                jobs.append((mid, NoteKind.MOVE,
+                             lambda m=move, n=mid, i=inst: self.build_move(n, m, now, i)))
         return jobs
 
-    async def _large_move(self, now: datetime) -> Move | None:
+    async def _large_move(self, now: datetime, inst: Instrument = NQ) -> Move | None:
         if session_phase(now) not in {SessionPhase.RTH, SessionPhase.OVERNIGHT}:
             return None
         # Quotes are delayed; measure the last hour of observed quote time.
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history,
-            start=now - timedelta(minutes=75), end=now, symbols=("NQ",),
+            start=now - timedelta(minutes=75), end=now, symbols=(inst.symbol,),
             min_window=timedelta(minutes=30),
         )
-        threshold, _ = await asyncio.to_thread(self._move_trigger, now)
+        threshold, _ = await asyncio.to_thread(self._move_trigger, now, inst)
         if moves and abs(moves[0].change) >= threshold:
             return moves[0]
         return None
@@ -633,57 +649,63 @@ class DeskService:
             return {}
         return {"macro_trends": trends} if trends else {}
 
-    def _move_size(self, now: datetime) -> MoveSize | None:
+    def _move_size(self, now: datetime, inst: Instrument = NQ) -> MoveSize | None:
         if self.sources.ohlc is None:
             return None
         try:
-            return move_size("NQ", self.sources.ohlc, now=now)
+            return move_size(inst.symbol, self.sources.ohlc, now=now)
         except Exception:  # noqa: BLE001 - move size is optional context
-            logger.exception("NQ move size unavailable")
+            logger.exception("%s move size unavailable", inst.symbol)
             return None
 
-    def _move_trigger(self, now: datetime) -> tuple[float, bool]:
-        """The one-hour NQ move that triggers a note, and whether it is scaled to
-        the typical daily range (once per trade date) or the configured fixed
-        threshold. A storage failure is retried on the next poll, not cached."""
-        day = active_session(now).trade_date
-        if self._trigger is not None and self._trigger[0] == day:
-            return self._trigger[1], self._trigger[2]
-        size = self._move_size(now)
+    def _move_trigger(self, now: datetime, inst: Instrument = NQ) -> tuple[float, bool]:
+        """The one-hour move that triggers an instrument's note, and whether it is
+        scaled to its typical daily range (once per instrument and trade date) or
+        the configured fixed threshold. A storage failure is retried on the next
+        poll, not cached."""
+        key = (inst.symbol, active_session(now).trade_date)
+        if key in self._trigger:
+            return self._trigger[key]
+        size = self._move_size(now, inst)
         if size is None:
             return self.move_threshold_pct, False
-        scaled = size.typical_range_pct is not None
-        self._trigger = (day, size.trigger_pct(self.move_threshold_pct), scaled)
-        return self._trigger[1], scaled
+        # Only the current session is ever read; drop older entries.
+        self._trigger = {k: v for k, v in self._trigger.items() if k[1] == key[1]}
+        self._trigger[key] = (size.trigger_pct(self.move_threshold_pct),
+                              size.typical_range_pct is not None)
+        return self._trigger[key]
 
-    def _nq_context(self, now: datetime) -> dict[str, Any]:
-        """Where NQ is against its key levels and how big its moves normally are."""
+    def _nq_context(self, now: datetime, inst: Instrument = NQ) -> dict[str, Any]:
+        """Where the instrument is against its key levels and how big its moves
+        normally are."""
         state = self.sources.market_state()
-        trigger, scaled = self._move_trigger(now)
-        normal = F.normal_move(self._move_size(now), state.instruments.get("VXN"),
+        trigger, scaled = self._move_trigger(now, inst)
+        normal = F.normal_move(self._move_size(now, inst), state.instruments.get("VXN"),
                                state.instruments.get("VIX"), trigger_pct=trigger,
                                trigger_scaled=scaled)
-        return {**self._location(now), **({"normal_move_size": normal} if normal else {})}
+        return {**self._location(now, inst),
+                **({"normal_move_size": normal} if normal else {})}
 
-    def _location(self, now: datetime) -> dict[str, Any]:
-        """NQ against its overnight, prior-day and prior-week levels, if measurable."""
+    def _location(self, now: datetime, inst: Instrument = NQ) -> dict[str, Any]:
+        """The instrument against its overnight, prior-day and prior-week levels,
+        if measurable."""
         if self.sources.ohlc is None:
             return {}
-        nq = self.sources.market_state().instruments.get("NQ")
+        nq = self.sources.market_state().instruments.get(inst.symbol)
         quote_at = getattr(nq, "timestamp", None)
         # A quote from before this session (e.g. just after the 18:00 ET reopen)
         # would be compared with the new session's levels and an old settle.
         if quote_at is None or quote_at < active_session(now).opens_at:
             return {}
         try:
-            levels = key_levels("NQ", nq, self.sources.ohlc, now=now)
+            levels = key_levels(inst.symbol, nq, self.sources.ohlc, now=now)
         except Exception:  # noqa: BLE001 - price location is optional context
-            logger.exception("NQ key levels unavailable")
+            logger.exception("%s key levels unavailable", inst.symbol)
             return {}
         location = F.price_location(levels, getattr(nq, "value", None), quote_at)
         if location is None:
             return {}
-        return {"nq_price_location": {**location, "as_of": et(quote_at)}}
+        return {f"{inst.symbol.lower()}_price_location": {**location, "as_of": et(quote_at)}}
 
     def _delayed(self) -> frozenset[str]:
         state = self.sources.market_state()
@@ -810,7 +832,8 @@ class DeskService:
                                  event_at=week.last_close, moves=moves, upcoming=upcoming[:8],
                                  rates=rates)
 
-    async def build_premarket(self, note_id: str, now: datetime) -> DeskNote:
+    async def build_premarket(self, note_id: str, now: datetime,
+                              inst: Instrument = NQ) -> DeskNote:
         common, rates = await asyncio.to_thread(self._common, now)
         session = active_session(now)
         upcoming = [i for i in await self.upcoming(now, days=2)
@@ -839,16 +862,18 @@ class DeskService:
                 "figures": self._figure_facts(sized),
                 "reaction_after_release": self._moves_facts(moves),
             })
-        facts = {**common, **(await asyncio.to_thread(self._nq_context, now)),
+        facts = {**common, **(await asyncio.to_thread(self._nq_context, now, inst)),
                  **(await asyncio.to_thread(self._macro_trends, now, rates)),
                  "released_this_morning": released_facts,
                  "still_scheduled_today": self._upcoming_facts(upcoming),
                  "overnight_headlines": self._headline_facts(headlines),
                  "us_open": et(session.rth_opens_at)}
         title = f"Pre-market · {session.trade_date:%A %b %d}"
+        if inst != NQ:
+            title = f"{inst.symbol} pre-market · {session.trade_date:%A %b %d}"
         return await self._write(note_id, NoteKind.PREMARKET, title, now, facts,
                                  figures=figures, headlines=headlines, upcoming=upcoming,
-                                 rates=rates)
+                                 rates=rates, instrument=inst)
 
     async def build_release(self, note_id: str, slot: F.ReleaseSlot, now: datetime) -> DeskNote:
         common, rates = await asyncio.to_thread(self._common, now)
@@ -906,7 +931,8 @@ class DeskService:
                                  facts, event_at=row.expected_at, moves=moves,
                                  headlines=headlines, rates=rates)
 
-    async def build_move(self, note_id: str, move: Move, now: datetime) -> DeskNote:
+    async def build_move(self, note_id: str, move: Move, now: datetime,
+                         inst: Instrument = NQ) -> DeskNote:
         common, rates = await asyncio.to_thread(self._common, now)
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history, start=move.start_at, end=move.end_at,
@@ -918,8 +944,8 @@ class DeskService:
         direction = "up" if move.change > 0 else "down"
         facts = {
             **common,
-            **(await asyncio.to_thread(self._nq_context, now)),
-            "the_move": {"market": "Nasdaq 100 futures", "change": move.text,
+            **(await asyncio.to_thread(self._nq_context, now, inst)),
+            "the_move": {"market": inst.label, "change": move.text,
                          "from": et(move.start_at), "to": et(move.end_at)},
             "other_markets_same_window": self._moves_facts(moves),
             "headlines_around_the_move": self._headline_facts(headlines),
@@ -927,57 +953,75 @@ class DeskService:
                                       for n in recent],
             "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:4]),
         }
-        title = f"NQ {direction} {move.text.lstrip('+-')} in the last hour"
+        title = f"{inst.symbol} {direction} {move.text.lstrip('+-')} in the last hour"
         return await self._write(note_id, NoteKind.MOVE, title, now, facts,
                                  event_at=move.start_at, moves=moves, headlines=headlines,
-                                 rates=rates)
+                                 rates=rates, instrument=inst)
 
-    async def ask(self) -> DeskNote:
-        """Explain the market right now, on request. Bounded per New York day;
-        a note from the last 15 minutes is returned instead of writing a new one."""
-        now = self.clock()
-        # A note from the last 15 minutes is still current; reuse it for free.
-        fresh = self.store.latest_ok(
-            "ask", (now - ASK_REUSE).astimezone(UTC).isoformat())
-        if fresh is not None:
-            return fresh
-        day_start = datetime.combine(now.astimezone(NEW_YORK).date(), time(0), tzinfo=NEW_YORK)
-        if self.store.count_since("ask", day_start.astimezone(UTC).isoformat()) \
-                >= self.ask_daily_limit:
-            raise RuntimeError(f"Daily limit of {self.ask_daily_limit} on-demand notes reached")
+    async def ask(self, inst: Instrument = NQ) -> DeskNote:
+        """Explain the market right now, on request. Bounded per New York day
+        across all instruments; a note for the same instrument from the last 15
+        minutes is returned instead of writing a new one.
+
+        Both checks run under the write lock, so two requests at once cannot
+        both pass the daily limit. An instrument the desk does not write for is
+        refused before anything is stored or sent."""
+        if inst not in self.instruments:
+            raise ValueError(f"the desk does not write for {inst.symbol}")
+        async with self._write_lock:
+            now = self.clock()
+            # A note from the last 15 minutes is still current; reuse it for free.
+            fresh = self.store.latest_ok(
+                "ask", (now - ASK_REUSE).astimezone(UTC).isoformat(), instrument=inst.symbol)
+            if fresh is not None:
+                return fresh
+            day_start = datetime.combine(now.astimezone(NEW_YORK).date(), time(0),
+                                         tzinfo=NEW_YORK)
+            if self.store.count_since("ask", day_start.astimezone(UTC).isoformat()) \
+                    >= self.ask_daily_limit:
+                raise RuntimeError(
+                    f"Daily limit of {self.ask_daily_limit} on-demand notes reached")
+            aid = ID.note_id(NoteKind.ASK, f"{now:%Y%m%dT%H%M%S}", inst)
+            return await self._produce_locked(aid, NoteKind.ASK, lambda: self._ask(aid, now, inst))
+
+    async def _ask(self, aid: str, now: datetime, inst: Instrument) -> DeskNote:
         common, rates = await asyncio.to_thread(self._common, now)
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history, start=now - timedelta(hours=2), end=now,
             delayed=self._delayed(), min_window=timedelta(minutes=30),
         )
         headlines = self.headlines(now - timedelta(hours=6), now)
-        facts = {**common, **(await asyncio.to_thread(self._nq_context, now)),
+        facts = {**common, **(await asyncio.to_thread(self._nq_context, now, inst)),
                  "last_two_hours": self._moves_facts(moves),
                  "recent_headlines": self._headline_facts(headlines),
                  "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:5])}
-        note_id = f"ask:{now:%Y%m%dT%H%M%S}"
-        return await self._produce(note_id, NoteKind.ASK, lambda: self._write(
-            note_id, NoteKind.ASK, "Market right now", now, facts, moves=moves,
-            headlines=headlines, rates=rates, notify=False))
+        return await self._write(aid, NoteKind.ASK, "Market right now", now, facts, moves=moves,
+                                 headlines=headlines, rates=rates, notify=False,
+                                 instrument=inst)
 
     # ------------------------------------------------------------------ writing
 
     async def _produce(self, note_id: str, kind: NoteKind,
                        build: Callable[[], Awaitable[DeskNote]]) -> DeskNote | None:
         async with self._write_lock:
-            if self.store.has_ok(note_id):
-                return self.store.get(note_id)
-            try:
-                note = await build()
-            except Exception as exc:  # noqa: BLE001 - one bad note must not stop the desk
-                logger.exception("desk note %s failed", note_id)
-                note = DeskNote(id=note_id, kind=kind, title=note_id,
-                                created_at=self.clock(), status="failed",
-                                error=f"build failed ({type(exc).__name__})")
-                self.store.save(note)
-            if note.status == "failed":
-                await self._alert_if_given_up(note)
-            return note
+            return await self._produce_locked(note_id, kind, build)
+
+    async def _produce_locked(self, note_id: str, kind: NoteKind,
+                              build: Callable[[], Awaitable[DeskNote]]) -> DeskNote | None:
+        """:meth:`_produce` for a caller already holding the write lock."""
+        if self.store.has_ok(note_id):
+            return self.store.get(note_id)
+        try:
+            note = await build()
+        except Exception as exc:  # noqa: BLE001 - one bad note must not stop the desk
+            logger.exception("desk note %s failed", note_id)
+            note = DeskNote(id=note_id, kind=kind, title=note_id,
+                            created_at=self.clock(), status="failed",
+                            error=f"build failed ({type(exc).__name__})")
+            self.store.save(note)
+        if note.status == "failed":
+            await self._alert_if_given_up(note)
+        return note
 
     async def _alert_if_given_up(self, note: DeskNote) -> None:
         """One desktop alert when a note has failed its last retry."""
@@ -997,16 +1041,23 @@ class DeskService:
             logger.warning("desk failure notification failed for %s", note.id)
 
     async def _write(self, note_id: str, kind: NoteKind, title: str, now: datetime,
-                     facts: dict[str, Any], *, notify: bool = True, **parts: Any) -> DeskNote:
-        result = await self.writer.write(kind, facts)
+                     facts: dict[str, Any], *, notify: bool = True,
+                     instrument: Instrument | None = None, **parts: Any) -> DeskNote:
+        if (kind in ID.INSTRUMENT_KINDS) != (instrument is not None):
+            symbol = instrument.symbol if instrument else None
+            raise ValueError(f"{kind.value} note {note_id}: instrument {symbol} "
+                             "does not match its kind")
+        result = await self.writer.write(kind, facts, instrument=instrument)
         note = DeskNote(
             id=note_id, kind=kind, title=title, created_at=self.clock(),
+            instrument=instrument.symbol if instrument else None,
             draft=result.draft, status="ok" if result.draft else "failed",
             error=result.error, model=f"{result.model} · {PROMPT_VERSION}",
             cost_usd=result.cost_usd,
             unverified_numbers=list(result.unverified_numbers), **parts,
         )
-        self.store.save(note, facts, self.writer.envelope(kind, result))
+        envelope = self.writer.envelope(kind, result, instrument=instrument)
+        self.store.save(note, facts, envelope)
         if note.status == "ok":
             logger.info("desk note %s written (cost=%s)", note_id, result.cost_usd)
             if notify and self.notify is not None:

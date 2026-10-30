@@ -19,6 +19,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.desk.identity import INSTRUMENT_KINDS, LEGACY, Instrument
+from core.desk.models import NoteKind
+
 MANIFEST = "manifest.json"
 HISTORY = "lesson_history.json"
 CASES = "cases"
@@ -43,6 +46,20 @@ class Case:
     envelope: dict[str, Any] | None
     #: The note as stored: ``{"prompt_version", "model", "draft"}``.
     baseline: dict[str, Any]
+
+
+def instrument_for(kind: str, symbol: str | None) -> Instrument | None:
+    """The instrument a note of ``kind`` was written for: ``symbol``, or NQ when
+    it was not recorded (every note before Phase 1 slice 3). ``None`` for
+    desk-wide event notes."""
+    if NoteKind(kind) not in INSTRUMENT_KINDS:
+        return None
+    return Instrument.of(symbol or LEGACY)
+
+
+def case_instrument(case: Case) -> Instrument | None:
+    """The instrument from the case's captured envelope (see ``instrument_for``)."""
+    return instrument_for(case.kind, (case.envelope or {}).get("instrument"))
 
 
 def _sha(data: bytes) -> str:

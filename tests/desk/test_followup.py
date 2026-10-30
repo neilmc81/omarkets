@@ -182,10 +182,10 @@ async def test_tick_stores_follow_up_beside_the_unchanged_note():
         detail = None
         model = "fake"
 
-        def envelope(self, kind, result):
+        def envelope(self, kind, result, *, instrument):
             return {"model": result.model}
 
-        async def write(self, kind, facts):
+        async def write(self, kind, facts, *, instrument):
             return WriteResult(NoteDraft(headline="Inflation ran hotter", summary="Sum.",
                                          what_it_means="Means.", market_reaction="React.",
                                          rates_read="Yields.", learn="Learn.", nq_tone="negative"),
@@ -193,7 +193,8 @@ async def test_tick_stores_follow_up_beside_the_unchanged_note():
 
     clock = {"now": CLOSE + timedelta(minutes=12)}
     store = DeskStore(":memory:")
-    original = note().model_copy(update={"draft": (await Writer().write(None, None)).draft})
+    original = note().model_copy(update={"draft": (await Writer().write(
+        None, None, instrument=None)).draft})
     store.save(original)
     service = DeskService(
         sources=DeskSources(market_state=lambda: SimpleNamespace(instruments={}),

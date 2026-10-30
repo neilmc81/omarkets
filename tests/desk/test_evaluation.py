@@ -30,8 +30,9 @@ from core.desk.evaluation.runner import (
     RunLedger,
     RunRefused,
 )
+from core.desk.identity import NQ
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import SYSTEM, facts_text
+from core.desk.prompts import SYSTEM, facts_text, render
 from core.desk.writer import DeskWriter, invented_numbers
 from core.services.ai_budget import AICostGuard
 from tests.desk import golden as G
@@ -112,7 +113,7 @@ async def test_production_writer_regenerates_on_a_prompt_only_number():
         sent.append(1)
         return completion(json.dumps(bad if len(sent) == 1 else GOOD))
 
-    result = await split_writer(handler).write(NoteKind.MOVE, FACTS)
+    result = await split_writer(handler).write(NoteKind.MOVE, FACTS, instrument=NQ)
     assert len(sent) == 2 and result.unverified_numbers == ()
 
 
@@ -126,12 +127,12 @@ async def test_attempt_is_one_call_without_fallback_or_regeneration():
     writer = DeskWriter(api_key="k", model=MODEL, fallback_model="other/model",
                         model_rates=RATES, client=httpx.AsyncClient(
                             transport=httpx.MockTransport(handler)))
-    result = await writer.attempt(NoteKind.MOVE, FACTS)
+    result = await writer.attempt(NoteKind.MOVE, FACTS, instrument=NQ)
     assert sent == [MODEL] and result.unverified_numbers == ("777",)
     sent.clear()
     writer._client = httpx.AsyncClient(transport=httpx.MockTransport(
         lambda r: sent.append(1) or completion("not json")))
-    result = await writer.attempt(NoteKind.MOVE, FACTS)
+    result = await writer.attempt(NoteKind.MOVE, FACTS, instrument=NQ)
     assert result.draft is None and sent == [1]
 
 
@@ -352,13 +353,13 @@ def runner_for(tmp_path, provider: Provider, *, weekly: float = 2.5,
 def bound(cases: C.CaseSet) -> float:
     """The run ledger's ceiling for one call."""
     writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
-    return writer.hard_max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL)
+    return writer.hard_max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL, instrument=NQ)
 
 
 def estimate(cases: C.CaseSet) -> float:
     """What the shared cost guard reserves for one call."""
     writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
-    return writer.max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL)
+    return writer.max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL, instrument=NQ)
 
 
 def charges(guard: AICostGuard) -> list[tuple[int, int | None]]:
@@ -525,17 +526,16 @@ def test_the_run_bound_is_a_ceiling_the_provider_cannot_pass(tmp_path):
     cases = frozen(tmp_path, [complete_case("ask:0")])
     case = cases.cases[0]
     writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
-    ceiling = writer.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL)
+    ceiling = writer.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL, instrument=NQ)
     # The worst a call can bill: one token per prompt byte, every output token used.
-    from core.desk.prompts import user_message
-
-    prompt_bytes = len((SYSTEM + user_message(NoteKind.ASK, case.facts)).encode())
+    sent = render(NoteKind.ASK, NQ, case.facts)
+    prompt_bytes = len((sent.system + sent.user).encode())
     rate_in, rate_out = RATES[MODEL]
     assert (prompt_bytes * rate_in + 4000 * rate_out) / 1e6 < ceiling
     # Routing params that change the token limit make the cost unboundable.
     loose = DeskWriter(api_key="k", model=MODEL, model_rates=RATES,
                        model_params={MODEL: {"max_tokens": 100_000}})
-    assert loose.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL) is None
+    assert loose.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL, instrument=NQ) is None
     guard = AICostGuard(tmp_path / "budget.sqlite3", weekly_limit_usd=2.5, timezone="UTC")
     runner = EvalRunner(writer=DeskWriter(api_key="k", model=MODEL, model_rates=RATES,
                                           model_params={MODEL: {"max_tokens": 100_000}},
@@ -562,17 +562,18 @@ async def test_a_stale_or_second_runner_never_loses_a_paid_draft(tmp_path):
 
 
 def test_facts_the_prompt_states_may_be_quoted_but_its_limits_may_not():
-    from core.desk.prompts import STATED_FACTS, TASKS, number_sources
+    from core.desk.prompts import STATED_FACTS, TASKS
 
+    sources = render(NoteKind.MOVE, NQ, FACTS).number_sources
     # Every stated fact really is in the prompt the writer sees.
     prompt = SYSTEM + " ".join(TASKS.values())
     for phrase in ("10 minutes", "18:00 ET", "08:30 ET", "30 minutes before the US open"):
         assert phrase in prompt and phrase in STATED_FACTS
     draft = NoteDraft.model_validate({
         **GOOD, "summary": "Prices are about 10 minutes delayed; data came at 08:30 ET."})
-    assert invented_numbers(draft, number_sources(FACTS)) == []
+    assert invented_numbers(draft, sources) == []
     limits = NoteDraft.model_validate({**GOOD, "summary": "Max 45 words, 2-4 items (rule 13)."})
-    assert invented_numbers(limits, number_sources(FACTS)) == ["13", "2", "4", "45"]
+    assert invented_numbers(limits, sources) == ["13", "2", "4", "45"]
 
 
 def test_a_blank_or_invalid_draft_is_a_regression_not_a_crash(tmp_path, capsys):
