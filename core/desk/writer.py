@@ -15,7 +15,7 @@ import httpx
 from pydantic import ValidationError
 
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import PROMPT_VERSION, SYSTEM, TASKS, user_message
+from core.desk.prompts import PROMPT_VERSION, SYSTEM, TASKS, facts_text, user_message
 from core.services.ai_budget import BudgetPaused
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,11 @@ def check_draft(draft: NoteDraft) -> str | None:
 
 
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+#: Digits that are part of a name, not a figure: bond maturities ("2-year",
+#: "10y") and index names ("Nasdaq 100", "S&P 500", "FTSE 100").
+_NAMED = re.compile(r"\b\d{1,2}(?:-year|y)\b"
+                    r"|\b(?:Nasdaq|S&P|Russell|FTSE|DAX|CAC|Stoxx|IBEX)[ -]?\d{2,4}\b",
+                    re.IGNORECASE)
 
 
 def _number_forms(token: str) -> set[str]:
@@ -78,12 +83,18 @@ def _number_forms(token: str) -> set[str]:
             for p in range(places + 1)}
 
 
-def invented_numbers(draft: NoteDraft, prompt: str) -> list[str]:
-    """Numbers in the draft that are not in the prompt, or a rounding of one."""
+def invented_numbers(draft: NoteDraft, facts: str) -> list[str]:
+    """Numbers in the draft that are not in ``facts``, or a rounding of one.
+
+    ``facts`` is the FACTS block only (``facts_text``), never the whole prompt:
+    the system prompt's own numbers ("max 45 words", rule numbers) are not facts.
+    Digits inside names ("2-year", "Nasdaq 100") are not figures and are skipped.
+    """
     allowed: set[str] = set()
-    for match in _NUMBER.finditer(prompt):
+    for match in _NUMBER.finditer(facts):
         allowed |= _number_forms(match.group())
-    return sorted({m.group() for m in _NUMBER.finditer(_draft_text(draft))
+    text = _NAMED.sub(" ", _draft_text(draft))
+    return sorted({m.group() for m in _NUMBER.finditer(text)
                    if format(Decimal(m.group().replace(",", "")).normalize(), "f") not in allowed})
 
 
@@ -167,6 +178,10 @@ class DeskWriter:
     def _rates_for(self, model: str) -> tuple[float, float]:
         return self._rates.get(model, self._default_rates)
 
+    def max_cost(self, kind: NoteKind, facts: dict[str, Any], *, model: str) -> float:
+        """The most one call for this note can cost (what the cost guard reserves)."""
+        return self._bound(model, len(SYSTEM) + len(user_message(kind, facts)))
+
     def _bound(self, model: str, prompt_chars: int) -> float:
         # ~3 characters per token is conservative for English/JSON; +20% margin.
         rate_in, rate_out = self._rates_for(model)
@@ -189,20 +204,36 @@ class DeskWriter:
             result = retry if retry.draft else WriteResult(
                 None, primary, error=f"{result.error}; fallback {self._fallback}: {retry.error}")
         if result.draft is not None:
-            invented = invented_numbers(result.draft, SYSTEM + message)
+            checked = facts_text(facts)
+            invented = invented_numbers(result.draft, checked)
             if invented:
                 logger.warning("desk writer %s invented numbers %s; regenerating",
                                result.model, invented)
                 again = await self._call(result.model, message)
                 spent.append(again.cost_usd)
                 if again.draft is not None:
-                    second = invented_numbers(again.draft, SYSTEM + message)
+                    second = invented_numbers(again.draft, checked)
                     if len(second) <= len(invented):
                         result, invented = again, second
                 if invented:
                     logger.warning("desk note flagged: unverified numbers %s", invented)
                 result = replace(result, unverified_numbers=tuple(invented))
         return replace(result, cost_usd=_total(*spent))
+
+    async def attempt(self, kind: NoteKind, facts: dict[str, Any], *,
+                      model: str | None = None) -> WriteResult:
+        """Exactly one call, for the evaluation runner: no fallback, no regeneration.
+
+        Invented numbers are flagged on the result, never retried.
+        """
+        model = model or self.model_for(kind)
+        if not self.ready:
+            return WriteResult(None, model, error=self.detail)
+        result = await self._call(model, user_message(kind, facts))
+        if result.draft is None:
+            return result
+        return replace(result, unverified_numbers=tuple(
+            invented_numbers(result.draft, facts_text(facts))))
 
     async def _call(self, model: str, message: str) -> WriteResult:
         token = None

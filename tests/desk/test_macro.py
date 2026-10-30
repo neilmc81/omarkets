@@ -148,16 +148,16 @@ def test_writer_trends_leave_out_missing_and_duplicated_cards():
 
 
 def test_writer_trend_numbers_pass_the_number_check():
-    from core.desk.models import NoteDraft, NoteKind
-    from core.desk.prompts import SYSTEM, user_message
+    from core.desk.models import NoteDraft
+    from core.desk.prompts import facts_text
     from core.desk.writer import invented_numbers
 
-    message = user_message(NoteKind.PRIMER, {"macro_trends": M.writer_trends(fixture_board())})
+    facts = {"macro_trends": M.writer_trends(fixture_board())}
     draft = NoteDraft(
         headline="Inflation is still rising", summary="CPI is 3.7%, up over 3 months.",
         what_it_means="Unemployment is 4.2%.", market_reaction="Quiet.",
         rates_read="Yields flat.", learn="CPI measures prices.", nq_tone="neutral")
-    assert invented_numbers(draft, SYSTEM + message) == []
+    assert invented_numbers(draft, facts_text(facts)) == []
 
 
 def test_writer_last_release_names_a_different_figure_and_an_older_date():

@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 from core.analysis.move_size import MoveSize
 from core.desk import facts as F
-from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import SYSTEM, user_message
+from core.desk.models import NoteDraft
+from core.desk.prompts import facts_text
 from core.desk.service import DeskService, DeskSources
 from core.desk.store import DeskStore
 from core.desk.writer import invented_numbers
@@ -68,13 +68,12 @@ def test_vxn_and_vix_compared_only_when_quoted_together():
 
 def test_normal_move_numbers_pass_the_writer_number_check():
     facts = F.normal_move(size(), index(26.4), index(18.39), trigger_pct=0.8, trigger_scaled=True)
-    message = user_message(NoteKind.MOVE, {"normal_move_size": facts})
     draft = NoteDraft(
         headline="NQ is having a quiet day", summary="NQ has moved 170 points, 40% of normal.",
         what_it_means="A typical day is 451 points; VXN is 26.40, 8.01 above VIX.",
         market_reaction="Realised volatility is 17.2% a year.", rates_read="Yields flat.",
         learn="VXN measures expected Nasdaq swings.", nq_tone="neutral")
-    assert invented_numbers(draft, SYSTEM + message) == []
+    assert invented_numbers(draft, facts_text({"normal_move_size": facts})) == []
 
 
 def desk(ohlc, instruments=None, threshold=0.8):

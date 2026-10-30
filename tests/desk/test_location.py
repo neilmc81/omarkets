@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from core.analysis.levels import key_levels
 from core.desk import facts as F
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import SYSTEM, user_message
+from core.desk.prompts import facts_text
 from core.desk.service import DeskService, DeskSources
 from core.desk.store import DeskStore
 from core.desk.writer import invented_numbers
@@ -67,13 +67,13 @@ def test_no_price_or_no_levels_gives_nothing(memory_repo):
 
 def test_quoted_levels_pass_the_writer_number_check(memory_repo):
     seed(memory_repo)
-    message = user_message(NoteKind.PREMARKET, {"nq_price_location": location(memory_repo)})
+    facts = {"nq_price_location": location(memory_repo)}
     draft = NoteDraft(
         headline="NQ is below yesterday's high", summary="NQ sits 785 points below 29,960.",
         what_it_means="It is 25 points above the prior settle of 29,150.00.",
         market_reaction="Still below last week's high of 30,212.", rates_read="Yields flat.",
         learn="A settle is the official close.", nq_tone="neutral")
-    assert invented_numbers(draft, SYSTEM + message) == []
+    assert invented_numbers(draft, facts_text(facts)) == []
 
 
 def service(ohlc, instruments):

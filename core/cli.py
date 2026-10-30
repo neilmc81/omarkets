@@ -2,7 +2,8 @@
 
 Most commands read the running local API. ``config``, ``note-costs`` and
 ``desk-backup`` read the service's environment and the desk DB directly (read-only), so they work
-even when the API is down. It contains no market logic.
+even when the API is down. ``eval`` is the offline desk-note evaluation toolkit
+(``core/desk/evaluation``); only ``eval run --paid`` makes paid calls. It contains no market logic.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from core.config import effective
 from core.config.settings import Settings
+from core.desk.evaluation import cli as evaluation
 
 
 def _get(settings: Settings, path: str) -> dict:
@@ -325,6 +327,11 @@ def _cmd_desk_backup(target: str | None) -> int:
     return 0
 
 
+def _eval_settings() -> tuple[Settings, Path]:
+    settings, _, _, project_dir = _service_settings()
+    return settings, project_dir
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="omarketsctl", description="Omarkets operator CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -352,6 +359,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("note-costs", help="show stored desk-note costs by model and prompt version")
     backup = sub.add_parser("desk-backup", help="copy the desk database safely (SQLite backup)")
     backup.add_argument("target", nargs="?", help="output file (default: next to the database)")
+    evaluation.add_parser(sub)
     return parser
 
 
@@ -373,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         "config": lambda: _cmd_config(args.all),
         "note-costs": _cmd_note_costs,
         "desk-backup": lambda: _cmd_desk_backup(args.target),
+        "eval": lambda: evaluation.main(args, _eval_settings),
     }
     return commands[args.command]()
 

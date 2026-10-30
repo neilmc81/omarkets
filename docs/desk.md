@@ -110,10 +110,48 @@ reserves its own budget, so the weekly cap can stop it. The note records the
 model that actually wrote it. Cost is OpenRouter's `usage.cost` when it is
 reported; otherwise it is worked out from that model's rates.
 
-**Number check.** Every number in the note must appear in the prompt, either
-exactly or rounded to fewer decimals. If a number does not, the note is
+**Number check.** Every number in the note must appear in the facts the
+writer was given, either exactly or rounded to fewer decimals. Only the FACTS
+block counts: the system prompt's own numbers ("max 45 words", rule numbers)
+are not facts. Digits inside a name ("2-year", "10y", "Nasdaq 100", "S&P 500")
+are not figures and are skipped. If a number does not match, the note is
 regenerated once. If invented numbers remain, the note is saved with them
 listed in `unverified_numbers`.
+
+**Evaluation (development only).** `omarketsctl eval` compares prompt versions
+on frozen cases (`core/desk/evaluation/`). Nothing in it runs inside the
+service, and only `eval run --paid` makes paid calls.
+
+- `capture DIR NOTE_ID…` copies stored notes into case files without writing
+  to the desk database: the facts from `note_facts` (complete) or, for notes
+  written before facts capture, only the fields the note kept (partial).
+  `freeze DIR --name …` records each file's SHA-256 in `manifest.json`; every
+  other command refuses a case set whose files changed, went missing or gained
+  an extra file, and a frozen set is never re-frozen.
+- `check DIR [RESULTS]` scores drafts on the mechanical §7 rules: direction
+  word next to a signed number, closed called stale, missing called absent,
+  basis points as percent, wrong direction for a measured change (checked per
+  instrument: "NQ slipped 0.06%" against NQ's own change), repeated lesson,
+  length over or under target, and numbers not in the facts (counted only for
+  complete facts; otherwise shown as unverifiable).
+- `compare DIR CANDIDATE [--baseline RESULTS]` exits 1 if the candidate is
+  worse on any rule in any case, or has no draft where the baseline had one.
+  `stored` (the default baseline) means the drafts the cases were captured with.
+- `sheet DIR FIRST SECOND OUT` writes a blind hand-scoring sheet (coverage,
+  attribution, windows, usefulness; 0–2 each), with the two versions under
+  letters shuffled per case and the key in a separate file; `tally OUT` adds up
+  the filled-in scores.
+- `render DIR OUT` writes each case's exact prompt and cost bound, offline.
+- `run DIR RESULTS --max-calls N --allowance-usd X` prints the plan and makes no
+  calls; with `--paid` it makes one attempt per case: no fallback model, no
+  regeneration. Each run has its own call count and dollar allowance, fixed
+  when the run is created and kept in `data/desk-eval-runs.sqlite3`; every
+  attempt is recorded before it is sent, so a crash or restart never repeats a
+  case or lifts a limit, and a call whose cost is unknown keeps its full bound.
+  Each call also reserves its bound on the shared weekly AI budget. The run
+  refuses to start if a cost bound can't be set (a model with no price on
+  record, no shared budget with limits, partial facts) or if the worst case
+  doesn't fit the calls and dollars left.
 
 ## Did it hold? (release, Fed and earnings notes)
 
