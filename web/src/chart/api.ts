@@ -206,7 +206,9 @@ export const fetchLevels = (symbol: string, signal?: AbortSignal) =>
   get(`/api/v1/levels/${encodeURIComponent(symbol)}`, levelsSchema, signal);
 export const fetchRiskTone = (signal?: AbortSignal) => get("/api/v1/risk-tone", riskToneSchema, signal);
 export const fetchPins = (range: ChartRange, signal?: AbortSignal) => get(`/api/v1/chart/pins?range=${range}`, pinsSchema, signal);
-export const fetchSparklines = (signal?: AbortSignal) => get("/api/v1/sparklines", sparklinesSchema, signal);
+/** 24-hour sparklines for `symbols`, or for the desk strip when none are named. */
+export const fetchSparklines = (signal?: AbortSignal, symbols?: readonly string[]) =>
+  get(`/api/v1/sparklines${symbols?.length ? `?symbols=${symbols.map(encodeURIComponent).join(",")}` : ""}`, sparklinesSchema, signal);
 export const fetchChartInstruments = (signal?: AbortSignal) => get("/api/v1/chart/instruments", chartInstrumentsSchema, signal);
 export const fetchFocus = (signal?: AbortSignal) => get("/api/v1/chart/focus", chartFocusSchema, signal);
 export const fetchWatchlist = (signal?: AbortSignal) => get("/api/v1/watchlist", watchlistSchema, signal);

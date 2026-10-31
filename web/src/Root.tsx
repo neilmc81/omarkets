@@ -9,6 +9,7 @@ import { askDesk } from "./today/api";
 import { Today } from "./today/Today";
 import { NavigateContext } from "./shell/Explain";
 import { feedsStatus } from "./shell/feeds";
+import { useFocusStrip } from "./shell/focus";
 import { pageFromLocation, pageSearch, PAGES, type Page } from "./shell/routes";
 import { ShellHeader } from "./shell/Shell";
 import { StatusPanel } from "./shell/StatusPanel";
@@ -26,6 +27,8 @@ export function Root() {
   const [statusOpen, setStatusOpen] = useState(false);
   const closeStatus = useCallback(() => setStatusOpen(false), []);
   const { desk, error, health, healthError, reload } = useDesk();
+  // The global focus (NQ by default): Today's market section and the header follow it.
+  const focus = useFocusStrip();
 
   const go = useCallback((next: Page, note?: string | null) => {
     const search = note ? `?note=${encodeURIComponent(note)}` : pageSearch(next);
@@ -50,7 +53,7 @@ export function Root() {
   }, []);
 
   const canExplain = Boolean(desk?.writer_ready);
-  const feeds = feedsStatus({ desk, deskError: error, health, healthError });
+  const feeds = feedsStatus({ desk, deskError: error, health, healthError, quotes: focus.data?.quotes });
   const ask = async () => {
     if (asking || !canExplain) return;
     go("today");
@@ -75,9 +78,9 @@ export function Root() {
   return <NavigateContext.Provider value={navigate}>
     <div className="today shell">
       <ShellHeader page={page} onPage={go} onExplain={() => void ask()} canExplain={canExplain} asking={asking}
-        feeds={feeds} statusOpen={statusOpen} onStatus={() => setStatusOpen((open) => !open)} />
+        feeds={feeds} focus={focus.data} statusOpen={statusOpen} onStatus={() => setStatusOpen((open) => !open)} />
       {statusOpen && <StatusPanel feeds={feeds} health={health} healthError={healthError} desk={desk} deskError={error} onClose={closeStatus} />}
-      {page === "today" && <Today desk={desk} error={askError ?? error} openId={openId} onOpen={setOpenId} />}
+      {page === "today" && <Today desk={desk} error={askError ?? error} openId={openId} onOpen={setOpenId} focus={focus} />}
       {page === "chart" && <ChartPage />}
       {page === "calendar" && <CalendarPage />}
       {page === "macro" && <MacroPage />}
