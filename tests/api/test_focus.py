@@ -7,6 +7,7 @@ Reading or switching the focus never reaches the desk writer or writes a note.
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
@@ -173,6 +174,28 @@ def test_today_strip_is_capped(store):
 
 
 # ------------------------------------------------------------------ gate
+
+
+def test_focus_is_read_off_the_event_loop(store, monkeypatch):
+    """The store lock and SQLite read never run on the event loop, so a busy
+    workspace writer can't stall every other request."""
+    on_loop: list[bool] = []
+    real = focus.read_focus
+
+    def spy(state):
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(True)
+        except RuntimeError:
+            on_loop.append(False)
+        return real(state)
+
+    monkeypatch.setattr(focus, "read_focus", spy)
+    monkeypatch.setattr(shell, "read_focus", spy)
+    with TestClient(app_for(store)) as c:
+        for path in ("/api/v1/focus/strip", "/api/v1/shell/status", "/api/v1/shell/context"):
+            assert c.get(path).status_code == 200
+    assert on_loop == [False, False, False]
 
 
 def test_focus_cycle_moves_today_and_the_shell_together(store):

@@ -15,6 +15,7 @@ note or spend on AI. The desk itself stays on its own instruments.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -62,7 +63,7 @@ def read_focus(state: object) -> GlobalFocus:
     try:
         focus = store.focus()
         watchlist = store.watchlist()
-    except sqlite3.Error:
+    except (sqlite3.Error, OSError, ValueError):
         logger.warning("focus: workspace store unreadable; using NQ and the desk strip")
         return DEFAULT
     return GlobalFocus(symbol=focus[0] if focus else DEFAULT_FOCUS,
@@ -83,8 +84,9 @@ class FocusStrip(BaseModel):
     quotes: list[Quote]
 
 
-def focus_strip(state: object, market: object | None) -> FocusStrip:
-    focus = read_focus(state)
+def focus_strip(state: object, market: object | None,
+                focus: GlobalFocus | None = None) -> FocusStrip:
+    focus = focus or read_focus(state)
     symbols = focus_symbols(focus.symbol, focus.watchlist.symbols, TODAY_STRIP_SIZE)
     quotes = F.quote_strip(market, symbols) if market is not None else []
     generated_at: datetime | None = getattr(market, "generated_at", None)
@@ -102,7 +104,8 @@ async def get_focus_strip(request: Request) -> FocusStrip:
             market = service.current_state()
         except Exception:  # noqa: BLE001 - a broken feed leaves an empty strip, not a 500
             logger.warning("focus: market state unavailable", exc_info=True)
-    return focus_strip(request.app.state, market)
+    focus = await asyncio.to_thread(read_focus, request.app.state)
+    return focus_strip(request.app.state, market, focus)
 
 
 __all__ = ["DEFAULT", "TODAY_STRIP_SIZE", "FocusStrip", "GlobalFocus", "focus_strip",

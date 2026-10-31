@@ -5,6 +5,7 @@ import { feedsStatus } from "../../../web/src/shell/feeds";
 import { deskSchema } from "../../../web/src/today/api";
 import { desk, draft, note, ok } from "../deskFixtures";
 import { health } from "../fixtures";
+import { focusOf } from "../chartFixtures";
 
 // The canvas chart has its own test; jsdom cannot draw it.
 vi.mock("../../../web/src/chart/SessionChart", () => ({ SessionChart: ({ label }: { label: string }) => <div role="img" aria-label={label} /> }));
@@ -28,8 +29,13 @@ const instruments = { generated_at: "2026-10-22T15:00:00Z", count: 3, instrument
     { status: "stale", feed_status: "stale", expected_delay_seconds: 0, market_closed: true }),
 ] };
 
+// The global focus strip: NQ with the desk's own tiles.
+const strip = { generated_at: null, focus: focusOf("NQ").instrument, watchlist_name: "Default",
+  symbols: desk.quotes.map((q) => q.symbol), quotes: desk.quotes };
+
 function serve(body: unknown = desk) {
   const fetcher = vi.fn((url: string) => url === "/health" ? ok(health)
+    : url === "/api/v1/focus/strip" ? ok(strip)
     : url === "/api/v1/instruments" ? ok(instruments)
     : url === "/api/v1/desk/ask" ? ok({ ...note, id: "ask:1", kind: "ask" })
       : url === "/api/v1/desk/learn" ? ok({ count: 0, entries: [] })
@@ -205,6 +211,11 @@ describe("feeds status", () => {
     expect(feedsStatus({ desk: parsed, deskError: null, health, healthError: null, quotes: [btc] }).lines.join(" "))
       .toMatch(/Stale quotes: Bitcoin/);
     expect(feedsStatus({ desk: parsed, deskError: null, health, healthError: null, quotes: [] })).toMatchObject({ tone: "ok" });
+  });
+  it("reports a focus that can't be read as an issue", () => {
+    const status = feedsStatus({ desk: parsed, deskError: null, health, healthError: null, focusError: "HTTP 503" });
+    expect(status).toMatchObject({ tone: "warn", label: "1 issue" });
+    expect(status.lines[0]).toBe("Focus: HTTP 503 · showing NQ and the desk's tiles");
   });
   it("does not count closed-market quotes as issues, but still counts a failing provider", () => {
     const closed = { ...parsed, quotes: parsed.quotes.map((q) => ({ ...q, stale: false, closed: true, closed_text: "Markets closed" })) };

@@ -21,6 +21,7 @@ than a 500, because a missing section must never blank the whole shell.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import UTC, datetime
@@ -102,7 +103,7 @@ async def shell_status(request: Request) -> ShellStatus:
         except Exception:  # pragma: no cover
             pass
 
-    focus = read_focus(request.app.state)
+    focus = await asyncio.to_thread(read_focus, request.app.state)
     result = build_status(
         now=now,
         focus=focus.symbol,
@@ -134,8 +135,9 @@ async def shell_context(request: Request) -> ShellContext:
     market_state = _market_state(request, now)
     cross = build_cross_market_state(market_state, now=now) if market_state else None
     events, _ = _calendar(request)
+    focus = await asyncio.to_thread(read_focus, request.app.state)
     result = build_context(now=now, cross=cross, market=market_state, events=events, diagnostics=[],
-                           focus=read_focus(request.app.state).symbol)
+                           focus=focus.symbol)
     _log_slow_projection("context", started)
     return result
 

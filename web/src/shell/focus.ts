@@ -71,7 +71,9 @@ export function useFocusStrip(everyMs = 30_000): FocusState {
         (data) => { if (mine === latest) setState({ data, error: null }); },
         (err: Error) => {
           if (mine !== latest || current.signal.aborted || err.name === "AbortError") return;
-          setState((prev) => ({ ...prev, error: err.message || "Focus unavailable" }));
+          // Drop the old focus: Today and the header fall back to NQ and the desk
+          // strip rather than keep showing an instrument the core can't confirm.
+          setState({ data: null, error: err.message || "Focus unavailable" });
         });
     };
     load();

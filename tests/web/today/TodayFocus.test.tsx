@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Root } from "../../../web/src/Root";
-import { bars, btcBars, chartInstruments, esBars, esLevels, focusOf, levels, pins, watchlist } from "../chartFixtures";
+import { bars, btcBars, calendar, chartInstruments, esBars, esLevels, focusOf, levels, pins, watchlist } from "../chartFixtures";
 import { desk, ok } from "../deskFixtures";
 
 // Global focus: Today's market section and the header follow the focus the
@@ -26,15 +26,15 @@ const stripFor = (symbol: string) => {
     symbols, quotes: symbols.map(quote) };
 };
 
-function serve() {
-  const store = { symbol: "NQ" };
+function serve(start = "NQ") {
+  const store = { symbol: start, stripDown: false };
   const fetcher = vi.fn((url: string, init?: RequestInit): Promise<unknown> => {
     if (url === "/api/v1/chart/focus" && init?.method === "PUT") {
       store.symbol = JSON.parse(String(init.body)).symbol;
       return ok(focusOf(store.symbol));
     }
     const answers: Array<[string, () => unknown]> = [
-      ["/api/v1/focus/strip", () => stripFor(store.symbol)],
+      ["/api/v1/session", () => calendar],
       ["/api/v1/chart/focus", () => focusOf(store.symbol)],
       ["/api/v1/chart/instruments", () => chartInstruments],
       ["/api/v1/watchlist", () => watchlist],
@@ -47,6 +47,9 @@ function serve() {
       ["/api/v1/desk", () => desk],
     ];
     const path = url.split("?")[0];
+    if (path === "/api/v1/focus/strip") return store.stripDown
+      ? Promise.resolve({ ok: false, status: 503, json: async () => ({ detail: "workspace store unavailable" }) })
+      : ok(stripFor(store.symbol));
     for (const [route, answer] of answers) if (path === route) return ok(answer());
     return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "not in this test" }) });
   });
@@ -127,5 +130,41 @@ describe("Today follows the global focus", () => {
     await screen.findByRole("region", { name: "NQ session chart" });
     expect(await screen.findByText("29,700.00")).toBeInTheDocument(); // the desk's NQ tile
     expect(screen.queryByRole("link", { name: /^Focus:/ })).toBeNull();
+  });
+
+  it("a focus without release pins never asks for them and shows none on the timeline", async () => {
+    const { fetcher } = serve("BTC");
+    render(<Root />);
+    await expectToday("BTC");
+    const timeline = await screen.findByRole("region", { name: "Session timeline" });
+    expect(within(timeline).queryByText("Jobless claims")).toBeNull();
+    expect(urls(fetcher).filter((u) => u.startsWith("/api/v1/chart/pins"))).toEqual([]);
+  });
+
+  it("NQ's timeline carries the release pins", async () => {
+    serve();
+    render(<Root />);
+    await expectToday("NQ");
+    const timeline = await screen.findByRole("region", { name: "Session timeline" });
+    expect(await within(timeline).findByText("Jobless claims")).toBeInTheDocument();
+  });
+
+  it("drops a saved focus when a later read fails, then picks it up again", async () => {
+    const { store } = serve("ES");
+    render(<Root />);
+    await expectToday("ES");
+
+    // The strip breaks; the next read (after a save) must not keep ES on screen.
+    store.stripDown = true;
+    await pickOnChart("BTC");
+    await screen.findByRole("region", { name: "NQ session chart" });
+    expect(screen.queryByRole("region", { name: "ES session chart" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "BTC session chart" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Focus:/ })).toBeNull();
+    expect(await screen.findByText("29,700.00")).toBeInTheDocument(); // the desk's NQ tile
+
+    store.stripDown = false;
+    await pickOnChart("ES");
+    await expectToday("ES");
   });
 });

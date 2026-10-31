@@ -7,7 +7,8 @@ export type FeedsStatus = { tone: FeedsTone; label: string; lines: string[] };
 // Summarises the core's own health and desk flags for the header dot. It only
 // reads statuses the core reports; it judges nothing about the market.
 // `quotes` is the focus strip Today shows; without it, the desk's tiles.
-export function feedsStatus(input: { desk: Desk | null; deskError: string | null; health: HealthResponse | null; healthError: string | null; quotes?: Quote[] }): FeedsStatus {
+// `focusError` is why the focus strip couldn't be read (Today then falls back to NQ).
+export function feedsStatus(input: { desk: Desk | null; deskError: string | null; health: HealthResponse | null; healthError: string | null; quotes?: Quote[]; focusError?: string | null }): FeedsStatus {
   const { desk, deskError, health, healthError } = input;
   if (!desk && !health && !deskError && !healthError) return { tone: "pending", label: "Connecting…", lines: ["Waiting for the Omarkets core."] };
   if (!desk && !health) return { tone: "down", label: "Omarkets unavailable", lines: [deskError ?? healthError ?? "No response from the core."] };
@@ -17,6 +18,7 @@ export function feedsStatus(input: { desk: Desk | null; deskError: string | null
   let down = false;
   if (deskError) problems.push(`Desk: ${deskError} · showing last loaded data`);
   if (healthError) problems.push(`Health check: ${healthError}`);
+  if (input.focusError) problems.push(`Focus: ${input.focusError} · showing NQ and the desk's tiles`);
   if (health) {
     if (!health.database_ok) {
       down = true;

@@ -263,12 +263,19 @@ export function Today({ desk, error, openId, onOpen, focus }: {
   const strip = focus?.data ?? null;
   const instrument = strip?.focus ?? NQ_FALLBACK;
   const symbol = instrument.symbol;
+  // While the first focus read is in flight, nothing NQ-only is fetched or drawn.
+  const focusPending = Boolean(focus && !focus.data && !focus.error);
   const quotes = strip ? strip.quotes : desk?.quotes ?? null;
   const tiles = strip ? strip.symbols : null;
   const calendar = usePoll(fetchSession, "session", 60_000);
-  const todayPins = usePoll((signal) => fetchPins("1d", signal), "1d", 300_000);
-  const levels = usePoll((signal) => instrument.levels ? fetchLevels(symbol, signal) : Promise.resolve(null),
-    instrument.levels ? symbol : `${symbol}:off`, instrument.levels ? 60_000 : 3_600_000);
+  // Release pins measure NQ's first 15 minutes, so only instruments that carry
+  // them ask, and not before the focus is known (it may not be NQ).
+  const pinsOn = instrument.release_pins && !focusPending;
+  const todayPins = usePoll((signal) => pinsOn ? fetchPins("1d", signal) : Promise.resolve(null),
+    pinsOn ? "1d" : `${symbol}:off`, pinsOn ? 300_000 : 3_600_000);
+  const levelsOn = instrument.levels && !focusPending;
+  const levels = usePoll((signal) => levelsOn ? fetchLevels(symbol, signal) : Promise.resolve(null),
+    levelsOn ? symbol : `${symbol}:off`, levelsOn ? 60_000 : 3_600_000);
   const risk = usePoll(fetchRiskTone, "risk", 30_000);
   const sparklines = usePoll((signal) => fetchSparklines(signal, tiles ?? undefined), `sparklines:${tiles?.join(",") ?? ""}`, 300_000);
   const shownLevels = levels.data?.symbol === symbol ? levels.data : null;
@@ -326,12 +333,13 @@ export function Today({ desk, error, openId, onOpen, focus }: {
       <p className="t-muted t-alerts-note">Matched by simple keyword rules on trusted sources; headlines, not confirmed analysis.</p>
     </section>}
     {!desk && !error && <p className="t-muted" role="status">Connecting…</p>}
-    {calendar.data ? <SessionTimeline calendar={calendar.data} pins={todayPins.data?.pins ?? []} now={now} />
+    {calendar.data ? <SessionTimeline calendar={calendar.data} pins={pinsOn ? todayPins.data?.pins ?? [] : []} now={now} />
       : desk && <p className="t-session">{desk.session_text}</p>}
     {quotes && <QuoteStrip quotes={quotes} sparklines={sparklines.data} asOf={(iso) => `As of ${etTime(iso)} · ${localTime(iso)}`} />}
     <RiskBanner tone={risk.data} error={risk.error} />
     <div className="t-market">
-      <TodayChart key={symbol} instrument={instrument} levels={shownLevels} />
+      {focusPending ? <section className="t-panel today-chart" aria-busy="true"><p className="t-muted">Loading the focus…</p></section>
+        : <TodayChart key={symbol} instrument={instrument} levels={shownLevels} />}
       <aside className="t-market-side">
         <NextEventCard event={desk?.next_event} now={now} />
         <KeyLevelsCard instrument={instrument} levels={shownLevels} error={levels.error} />

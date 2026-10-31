@@ -53,7 +53,7 @@ export function Root() {
   }, []);
 
   const canExplain = Boolean(desk?.writer_ready);
-  const feeds = feedsStatus({ desk, deskError: error, health, healthError, quotes: focus.data?.quotes });
+  const feeds = feedsStatus({ desk, deskError: error, health, healthError, quotes: focus.data?.quotes, focusError: focus.error });
   const ask = async () => {
     if (asking || !canExplain) return;
     go("today");
