@@ -33,6 +33,8 @@ DEFAULT = ("market", "Market moves")
 LABELS = {key: label for key, label, _ in TOPICS}
 #: Lessons shown under "Most taught".
 MOST_TAUGHT = 3
+#: How many of the latest lessons a note is told not to repeat (desk:v9).
+RECENT = 5
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s")
 _SUBJECT = re.compile(r"^(?:(?:an?|the)\s+)?([^,]{2,40}?)\s+(?:is|are|means|measures|compares)\b",
@@ -45,6 +47,27 @@ def _lead(text: str) -> str:
     if colon and len(head) <= 50:
         return head
     return _SENTENCE.split(text, maxsplit=1)[0]
+
+
+def _clip(text: str, limit: int = 120) -> str:
+    """``text`` cut to ``limit`` characters at a word boundary."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit + 1]
+    return (head.rsplit(" ", 1)[0] if " " in head else text[:limit]).rstrip(" ,;.")
+
+
+def recent_lessons(learns: Iterable[str], limit: int = RECENT) -> list[str]:
+    """What the latest lessons taught (each one's term, see ``_lead``), newest
+    first and without repeats; ``learns`` is the Learn box texts, newest first."""
+    found: list[str] = []
+    for text in learns:
+        lead = _clip(" ".join(_lead(text or "").split()).strip(" ."))
+        if lead and lead.casefold() not in {f.casefold() for f in found}:
+            found.append(lead)
+        if len(found) == limit:
+            break
+    return found
 
 
 def topic(text: str) -> str:

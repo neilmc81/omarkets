@@ -19,7 +19,7 @@ from core.desk.evaluation import compare as R
 from core.desk.evaluation import sheet as S
 from core.desk.evaluation.runner import EvalRunner, RunLedger, RunRefused
 from core.desk.models import NoteKind
-from core.desk.prompts import PROMPT_VERSION, NoPromptProfile
+from core.desk.prompts import VERSIONS, NoPromptProfile
 
 #: (settings, project directory) as the running service sees them.
 SettingsFn = Callable[[], tuple[Any, Path]]
@@ -52,6 +52,7 @@ def add_parser(sub: Any) -> None:
     p.add_argument("directory", type=Path)
     p.add_argument("out", type=Path)
     p.add_argument("--model", help="one model for every case (default: production routing)")
+    _prompt_arg(p)
     p = cmd.add_parser("sheet", help="blind hand-scoring sheet for two results files")
     p.add_argument("directory", type=Path)
     p.add_argument("first")
@@ -69,12 +70,20 @@ def add_parser(sub: Any) -> None:
     p.add_argument("--run-id", help="default: the results file name")
     p.add_argument("--ledger", type=Path, help="run ledger (default: data dir)")
     p.add_argument("--paid", action="store_true", help="actually make the paid calls")
+    _prompt_arg(p)
 
 
-def _writer(settings: Any, guard: Any = None, *, api_key: str | None = None):
+def _prompt_arg(p: Any) -> None:
+    p.add_argument("--prompt", choices=VERSIONS,
+                   help="prompt version (default: the service's desk_prompt_version)")
+
+
+def _writer(settings: Any, guard: Any = None, *, api_key: str | None = None,
+            prompt: str | None = None):
     from core.desk.writer import DeskWriter
 
     return DeskWriter(
+        prompt_version=prompt or settings.desk_prompt_version,
         api_key=api_key, models={kind: settings.desk_model_for(kind) for kind in NoteKind},
         model_params=settings.resolved_desk_model_params,
         model_rates=settings.resolved_desk_model_rates,
@@ -95,21 +104,23 @@ def _guard(settings: Any, project_dir: Path):
         openrouter_background_request_limit=settings.ai_openrouter_background_request_limit)
 
 
-def _render(cases: C.CaseSet, out: Path, settings: Any, model: str | None) -> None:
+def _render(cases: C.CaseSet, out: Path, settings: Any, model: str | None,
+            prompt_version: str | None = None) -> None:
     out.mkdir(parents=True, exist_ok=True)
-    writer = _writer(settings)
+    writer = _writer(settings, prompt=prompt_version)
     rates = settings.resolved_desk_model_rates
-    index = [f"# Rendered prompts ({PROMPT_VERSION}, cases {cases.name})", "",
+    index = [f"# Rendered prompts ({writer.prompt_version}, cases {cases.name})", "",
              "case | kind | facts | model | prompt chars | cost bound",
              "--- | --- | --- | --- | --- | ---"]
     for case in cases.cases:
         kind = NoteKind(case.kind)
         instrument = C.case_instrument(case)
         chosen = model or writer.model_for(kind)
-        prompt = writer.prompt(kind, case.facts, instrument=instrument)
+        facts = C.prompt_facts(case, cases.history, writer.prompt_version)
+        prompt = writer.prompt(kind, facts, instrument=instrument)
         (out / f"{C.file_name(case.id)[:-5]}.txt").write_text(
             f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")
-        bound = (f"${writer.max_cost(kind, case.facts, model=chosen, instrument=instrument):.4f}"
+        bound = (f"${writer.max_cost(kind, facts, model=chosen, instrument=instrument):.4f}"
                  if chosen in rates else "no price on record")
         index.append(f"{case.id} | {case.kind} | "
                      f"{'complete' if case.facts_complete else 'partial'} | {chosen} | "
@@ -123,7 +134,9 @@ def _run(args: argparse.Namespace, cases: C.CaseSet, settings: Any, project_dir:
     guard = _guard(settings, project_dir)
     key = settings.openrouter_api_key
     api_key = key.get_secret_value() if hasattr(key, "get_secret_value") else key
-    runner = EvalRunner(writer=_writer(settings, guard, api_key=api_key), guard=guard,
+    writer = _writer(settings, guard, api_key=api_key, prompt=args.prompt)
+    print(f"prompt {writer.prompt_version}")
+    runner = EvalRunner(writer=writer, guard=guard,
                         ledger=ledger, rates=settings.resolved_desk_model_rates, model=args.model)
     try:
         planned = runner.plan(cases, run_id=run_id, max_calls=args.max_calls,
@@ -224,7 +237,7 @@ def _main(args: argparse.Namespace, service_settings: SettingsFn) -> int:
         return 0
     settings, project_dir = service_settings()
     if command == "render":
-        _render(cases, args.out, settings, args.model)
+        _render(cases, args.out, settings, args.model, args.prompt)
         print(f"rendered {len(cases.cases)} prompt(s) into {args.out} (no calls made)")
         return 0
     return _run(args, cases, settings, project_dir)

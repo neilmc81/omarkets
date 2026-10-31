@@ -689,10 +689,12 @@ def price_location(levels: Any, price: float | None,
     not be measured are left out; with no price or no measured level there is
     nothing to say and the result is ``None``. The overnight range is "so far"
     while the window is running or the latest quote (``quote_at``, delayed)
-    has not reached its end.
+    has not reached its end. Fields are named for the instrument
+    (``nq_price``/``nq_is`` for NQ, ``es_price``/``es_is`` for ES).
     """
     if price is None or not isfinite(price):
         return None
+    sym = levels.symbol.lower()
     by_key = {level.key: level for level in levels.levels}
     rows: list[dict[str, Any]] = []
     overnight_so_far = False
@@ -703,7 +705,7 @@ def price_location(levels: Any, price: float | None,
         gap = round(price - level.value, 2)
         side = "above" if gap > 0 else "below" if gap < 0 else "at"
         row = {"level": level.label, "value": level.value_text,
-               "nq_is": side if gap == 0 else f"{abs(gap):,.2f} points {side}"}
+               f"{sym}_is": side if gap == 0 else f"{abs(gap):,.2f} points {side}"}
         if level.window_start is not None and level.window_end is not None:
             row["measured"] = f"{_when(level.window_start)} to {_when(level.window_end)}"
         rows.append(row)
@@ -713,7 +715,7 @@ def price_location(levels: Any, price: float | None,
                 and quote_at < level.window_end)
     if not rows:
         return None
-    return {"nq_price": _value_text(levels.symbol, price), "levels": rows,
+    return {f"{sym}_price": _value_text(levels.symbol, price), "levels": rows,
             **({"overnight_so_far": True} if overnight_so_far else {})}
 
 

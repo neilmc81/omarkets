@@ -16,9 +16,16 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from core.desk.evaluation.cases import instrument_for
-from core.desk.lessons import TOPICS, _lead
+from core.desk.lessons import RECENT, TOPICS, _lead
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import render
+from core.desk.prompts import (
+    PROMPT_VERSION,
+    PROMPTS,
+    NoPromptProfile,
+    facts_text,
+    has_profile,
+    render,
+)
 from core.desk.writer import _number_forms, invented_numbers
 
 #: §7 length targets in words, over every draft field.
@@ -29,7 +36,7 @@ LENGTH_TARGETS: dict[str, tuple[int, int]] = {
     "ask": (120, 160),
 }
 #: A lesson whose topic was taught in this many earlier notes counts as a repeat.
-REPEAT_WINDOW = 5
+REPEAT_WINDOW = RECENT
 
 #: Every counted rule, in report order. ``compare`` fails if any of them gets worse.
 RULES: tuple[str, ...] = (
@@ -373,9 +380,22 @@ class Score:
 
 def score_draft(*, case_id: str, kind: str, model: str, created_at: str,
                 draft: Mapping[str, Any], facts: Any, facts_complete: bool,
-                history: Sequence[Mapping], instrument: str | None = None) -> Score:
-    """``instrument`` is the symbol the note was written for (NQ when not recorded)."""
-    sources = render(NoteKind(kind), instrument_for(kind, instrument), facts).number_sources
+                history: Sequence[Mapping], instrument: str | None = None,
+                prompt_version: str | None = None) -> Score:
+    """``instrument`` is the symbol the note was written for (NQ when not recorded);
+    ``prompt_version`` the prompt that wrote it, whose stated facts a number may
+    also come from (the production default for older or unrecorded versions)."""
+    target = instrument_for(kind, instrument)
+    version = prompt_version if prompt_version in PROMPTS else PROMPT_VERSION
+    if target is not None and not has_profile(target.symbol, version=version):
+        # An instrument the default can't write for (ES at desk:v8): the
+        # newest version that has its profile.
+        version = next((v for v in reversed(PROMPTS) if has_profile(target.symbol, version=v)),
+                       version)
+    try:
+        sources = render(NoteKind(kind), target, facts, version=version).number_sources
+    except NoPromptProfile:
+        sources = facts_text(facts)  # no prompt at all: only the facts are allowed
     fields = draft_fields(draft)
     text = " ".join(fields)
     parsed = NoteDraft.model_validate(dict(draft))

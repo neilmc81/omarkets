@@ -269,6 +269,7 @@ _KEY_SETTINGS = {
     "desk_enabled",
     "desk_fallback_model",
     "desk_move_threshold_pct",
+    "desk_prompt_version",
     "openrouter_api_key",
 }
 

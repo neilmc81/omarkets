@@ -82,3 +82,18 @@ def test_rebuild_an_ask_note_records_its_limits(tmp_path):
     assert case.baseline == {"prompt_version": "desk:v8", "model": "m",
                              "draft": draft().model_dump(mode="json")}
     assert {"markets_today", "nq_vs_es", "recent_headlines"} <= case.facts.keys()
+
+
+def test_a_rebuilt_case_records_the_version_that_wrote_the_note(tmp_path):
+    db = tmp_path / "desk.sqlite3"
+    store = DeskStore(db)
+    for note_id, model in (("ask:20261020T150000", "m · desk:v4"),
+                           ("ask:20261020T140000", "m")):
+        store.save(DeskNote(id=note_id, kind=NoteKind.ASK, title="Market right now",
+                            created_at=AT, draft=draft(), model=model))
+    store.close()
+    service, _, _ = make(AT)
+    v4, unrecorded = RB.rebuild(["ask:20261020T150000", "ask:20261020T140000"], desk_db=db,
+                                sources_at=lambda moment: service.sources)
+    assert v4.envelope["prompt_version"] == v4.baseline["prompt_version"] == "desk:v4"
+    assert unrecorded.envelope["prompt_version"] is None

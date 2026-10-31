@@ -28,11 +28,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.desk.evaluation.cases import Case, CaseSet, case_instrument
+from core.desk.evaluation.cases import Case, CaseSet, case_instrument, prompt_facts
 from core.desk.evaluation.compare import Results, save_results
 from core.desk.identity import Instrument
 from core.desk.models import NoteKind
-from core.desk.prompts import PROMPT_VERSION, NoPromptProfile
+from core.desk.prompts import NoPromptProfile
 from core.desk.writer import DeskWriter
 
 #: Recorded before the request; left as-is if the process dies mid-call.
@@ -66,26 +66,63 @@ class RunLimits:
 
 
 class RunLedger:
-    """Per-run call and dollar accounting that survives restarts."""
+    """Per-run call and dollar accounting that survives restarts.
+
+    Each run records the prompt version its calls are written at, claimed by
+    the first admission and checked by every later one in the same
+    transaction, so a resumed run or a second worker can't mix versions.
+    """
 
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(self.path), check_same_thread=False, timeout=5)
+        self._db = sqlite3.connect(str(self.path), check_same_thread=False, timeout=5,
+                                   isolation_level=None)
         self._lock = threading.Lock()
-        with self._lock, self._db:
+        with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL")
-            self._db.execute(
-                "CREATE TABLE IF NOT EXISTS eval_runs ("
-                " run_id TEXT PRIMARY KEY, manifest_sha256 TEXT NOT NULL,"
-                " max_calls INTEGER NOT NULL, allowance_micro INTEGER NOT NULL,"
-                " created_at TEXT NOT NULL)")
-            self._db.execute(
-                "CREATE TABLE IF NOT EXISTS eval_calls ("
-                " run_id TEXT NOT NULL REFERENCES eval_runs(run_id), case_id TEXT NOT NULL,"
-                " model TEXT NOT NULL, reserved_micro INTEGER NOT NULL, actual_micro INTEGER,"
-                " status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,"
-                " entry TEXT, PRIMARY KEY (run_id, case_id))")
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                self._db.execute(
+                    "CREATE TABLE IF NOT EXISTS eval_runs ("
+                    " run_id TEXT PRIMARY KEY, manifest_sha256 TEXT NOT NULL,"
+                    " max_calls INTEGER NOT NULL, allowance_micro INTEGER NOT NULL,"
+                    " created_at TEXT NOT NULL, prompt_version TEXT)")
+                self._db.execute(
+                    "CREATE TABLE IF NOT EXISTS eval_calls ("
+                    " run_id TEXT NOT NULL REFERENCES eval_runs(run_id),"
+                    " case_id TEXT NOT NULL, model TEXT NOT NULL,"
+                    " reserved_micro INTEGER NOT NULL, actual_micro INTEGER,"
+                    " status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,"
+                    " entry TEXT, PRIMARY KEY (run_id, case_id))")
+                self._migrate()
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def _migrate(self) -> None:
+        """Bring a ledger from an earlier slice up to date: add ``eval_calls.entry``
+        (slice 2's first ledgers lacked it) and ``eval_runs.prompt_version``, set
+        from the results already recorded when they agree on one version."""
+        def columns(table: str) -> set[str]:
+            return {row[1] for row in self._db.execute(f"PRAGMA table_info({table})")}
+
+        if "entry" not in columns("eval_calls"):
+            self._db.execute("ALTER TABLE eval_calls ADD COLUMN entry TEXT")
+        if "prompt_version" in columns("eval_runs"):
+            return
+        self._db.execute("ALTER TABLE eval_runs ADD COLUMN prompt_version TEXT")
+        for (run_id,) in self._db.execute("SELECT run_id FROM eval_runs").fetchall():
+            versions = self._recorded_versions(run_id)
+            if len(versions) == 1:
+                self._db.execute("UPDATE eval_runs SET prompt_version=? WHERE run_id=?",
+                                 (versions.pop(), run_id))
+
+    def _recorded_versions(self, run_id: str) -> set[str]:
+        rows = self._db.execute("SELECT entry FROM eval_calls WHERE run_id=? AND "
+                                "entry IS NOT NULL", (run_id,)).fetchall()
+        return {json.loads(entry).get("prompt_version") for (entry,) in rows} - {None}
 
     def limits(self, run_id: str) -> RunLimits | None:
         with self._lock:
@@ -93,16 +130,56 @@ class RunLedger:
                                    "FROM eval_runs WHERE run_id=?", (run_id,)).fetchone()
         return RunLimits(*row) if row else None
 
-    def open_run(self, run_id: str, limits: RunLimits) -> None:
-        """Create the run, or check a restart asks for exactly the same limits."""
-        with self._lock, self._db:
-            self._db.execute("INSERT OR IGNORE INTO eval_runs VALUES (?,?,?,?,?)",
-                             (run_id, limits.manifest_sha256, limits.max_calls,
-                              limits.allowance_micro, datetime.now(UTC).isoformat()))
-        recorded = self.limits(run_id)
-        if recorded != limits:
-            raise RunRefused(f"run {run_id} was created with {recorded}; a restart cannot "
-                             "change its cases or limits")
+    def open_run(self, run_id: str, limits: RunLimits, prompt_version: str | None = None) -> None:
+        """Create the run, or check a restart asks for exactly the same limits and
+        prompt version."""
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                self._db.execute(
+                    "INSERT OR IGNORE INTO eval_runs (run_id, manifest_sha256, max_calls,"
+                    " allowance_micro, created_at, prompt_version) VALUES (?,?,?,?,?,?)",
+                    (run_id, limits.manifest_sha256, limits.max_calls, limits.allowance_micro,
+                     datetime.now(UTC).isoformat(), prompt_version))
+                row = self._db.execute("SELECT manifest_sha256, max_calls, allowance_micro "
+                                       "FROM eval_runs WHERE run_id=?", (run_id,)).fetchone()
+                if RunLimits(*row) != limits:
+                    raise RunRefused(f"run {run_id} was created with {RunLimits(*row)}; a "
+                                     "restart cannot change its cases or limits")
+                if prompt_version is not None:
+                    self._claim_version(run_id, prompt_version)
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def _claim_version(self, run_id: str, prompt_version: str) -> None:
+        """Inside a write transaction: set the run's version if it has none, or
+        refuse a different one (or results already written at another). A run
+        with calls but no version (an old ledger whose results named none) is
+        refused: what it was written at is unknown."""
+        row = self._db.execute("SELECT prompt_version FROM eval_runs WHERE run_id=?",
+                               (run_id,)).fetchone()
+        if row is None:
+            raise RunRefused(f"unknown run {run_id}")
+        if row[0] is None and self._usage(run_id)[0]:
+            raise RunRefused(f"run {run_id} has calls recorded before prompt versions were "
+                             "kept, so its version is unknown; start a new run")
+        other = ({row[0]} if row[0] else set()) | self._recorded_versions(run_id)
+        other.discard(prompt_version)
+        if other:
+            raise RunRefused(f"run {run_id} has {', '.join(sorted(other))} results; a "
+                             f"restart cannot switch it to {prompt_version}")
+        if row[0] is None:
+            self._db.execute("UPDATE eval_runs SET prompt_version=? WHERE run_id=?",
+                             (prompt_version, run_id))
+
+    def prompt_version(self, run_id: str) -> str | None:
+        """The prompt version the run is written at (``None`` before its first call)."""
+        with self._lock:
+            row = self._db.execute("SELECT prompt_version FROM eval_runs WHERE run_id=?",
+                                   (run_id,)).fetchone()
+        return row[0] if row else None
 
     def usage(self, run_id: str) -> tuple[int, int]:
         """(calls made, dollars committed in micro-USD): actual cost, else the bound."""
@@ -122,8 +199,17 @@ class RunLedger:
                                     "WHERE run_id=? AND status!=?", (run_id, REFUSED)).fetchall()
         return dict(rows)
 
-    def begin(self, run_id: str, case_id: str, model: str, bound_usd: float) -> None:
-        """Admit one attempt, atomically against the run's limits, before sending it."""
+    def prompt_versions(self, run_id: str) -> set[str]:
+        """The run's prompt version and those of the results recorded so far."""
+        with self._lock:
+            row = self._db.execute("SELECT prompt_version FROM eval_runs WHERE run_id=?",
+                                   (run_id,)).fetchone()
+            return ({row[0]} if row and row[0] else set()) | self._recorded_versions(run_id)
+
+    def begin(self, run_id: str, case_id: str, model: str, bound_usd: float, *,
+              prompt_version: str | None = None) -> None:
+        """Admit one attempt, atomically against the run's limits and its prompt
+        version (when given), before sending it."""
         bound = _micro(bound_usd)
         with self._lock:
             self._db.execute("BEGIN IMMEDIATE")
@@ -133,6 +219,8 @@ class RunLedger:
                     (run_id,)).fetchone()
                 if limits is None:
                     raise RunRefused(f"unknown run {run_id}")
+                if prompt_version is not None:
+                    self._claim_version(run_id, prompt_version)
                 prior = self._db.execute(
                     "SELECT status FROM eval_calls WHERE run_id=? AND case_id=?",
                     (run_id, case_id)).fetchone()
@@ -146,18 +234,19 @@ class RunLedger:
                         f"run {run_id}: ${(committed + bound) / 1e6:.4f} would exceed its "
                         f"${limits[1] / 1e6:.4f} allowance")
                 self._db.execute(
-                    "INSERT OR REPLACE INTO eval_calls VALUES (?,?,?,?,NULL,?,?,NULL,NULL)",
+                    "INSERT OR REPLACE INTO eval_calls (run_id, case_id, model,"
+                    " reserved_micro, status, started_at) VALUES (?,?,?,?,?,?)",
                     (run_id, case_id, model, bound, PENDING, datetime.now(UTC).isoformat()))
-                self._db.commit()
+                self._db.execute("COMMIT")
             except BaseException:
-                self._db.rollback()
+                self._db.execute("ROLLBACK")
                 raise
 
     def finish(self, run_id: str, case_id: str, status: str, cost_usd: float | None,
                entry: dict[str, Any]) -> None:
         """Record the outcome and the result itself (the draft, or the error)."""
         actual = None if cost_usd is None else _micro(cost_usd)
-        with self._lock, self._db:
+        with self._lock:
             self._db.execute(
                 "UPDATE eval_calls SET status=?, actual_micro=?, finished_at=?, entry=? "
                 "WHERE run_id=? AND case_id=? AND status=?",
@@ -188,6 +277,8 @@ class PlannedCall:
     bound_usd: float
     #: From the case's envelope; ``None`` for desk-wide event notes.
     instrument: Instrument | None = None
+    #: What the call is written from (``cases.prompt_facts``).
+    facts: dict[str, Any] | None = None
 
 
 class EvalRunner:
@@ -218,6 +309,10 @@ class EvalRunner:
         if recorded is not None and recorded != limits:
             raise RunRefused(f"run {run_id} was created with {recorded}; a restart cannot "
                              "change its cases or limits")
+        other = self._ledger.prompt_versions(run_id) - {self._writer.prompt_version}
+        if other:
+            raise RunRefused(f"run {run_id} has {', '.join(sorted(other))} results; a restart "
+                             f"cannot switch it to {self._writer.prompt_version}")
         done = self._ledger.attempted(run_id)
         planned = []
         for case in cases.cases:
@@ -227,18 +322,19 @@ class EvalRunner:
                 raise RunRefused(f"{case.id} has partial facts; only captured cases can run")
             kind = NoteKind(case.kind)
             instrument = case_instrument(case)
+            facts = prompt_facts(case, cases.history, self._writer.prompt_version)
             model = self._model or self._writer.model_for(kind)
             if model not in self._rates:
                 raise RunRefused(f"no price on record for {model}; can't bound its cost")
             try:
-                bound = self._writer.hard_max_cost(kind, case.facts, model=model,
+                bound = self._writer.hard_max_cost(kind, facts, model=model,
                                                    instrument=instrument)
             except NoPromptProfile as exc:
                 raise RunRefused(f"{case.id}: {exc}") from exc
             if bound is None or not math.isfinite(bound) or bound <= 0:
                 raise RunRefused(f"{case.id}: cost bound could not be set for {model} "
                                  "(its routing params change the token limit)")
-            planned.append(PlannedCall(case, model, bound, instrument))
+            planned.append(PlannedCall(case, model, bound, instrument, facts))
         calls, committed = self._ledger.usage(run_id)
         if calls + len(planned) > max_calls:
             raise RunRefused(f"{len(planned)} calls planned but only {max_calls - calls} "
@@ -255,8 +351,10 @@ class EvalRunner:
         after each call."""
         planned = self.plan(cases, run_id=run_id, max_calls=max_calls,
                             allowance_usd=allowance_usd)
-        self._ledger.open_run(run_id, RunLimits(cases.sha256, max_calls, _micro(allowance_usd)))
-        label = f"{PROMPT_VERSION} run {run_id}"
+        version = self._writer.prompt_version
+        self._ledger.open_run(run_id, RunLimits(cases.sha256, max_calls, _micro(allowance_usd)),
+                              version)
+        label = f"{self._writer.prompt_version} run {run_id}"
 
         def saved() -> Results:
             results = self._ledger.results(run_id, cases.sha256, label)
@@ -266,8 +364,12 @@ class EvalRunner:
         results = saved()
         for call in planned:
             case = call.case
-            self._ledger.begin(run_id, case.id, call.model, call.bound_usd)
-            result = await self._writer.attempt(NoteKind(case.kind), case.facts,
+            self._ledger.begin(run_id, case.id, call.model, call.bound_usd,
+                               prompt_version=version)
+            # ``{}`` is a real answer: every captured fact was one this version
+            # doesn't take.
+            facts = call.facts if call.facts is not None else case.facts
+            result = await self._writer.attempt(NoteKind(case.kind), facts,
                                                 instrument=call.instrument, model=call.model)
             error = result.error or ""
             # The cost guard refused, or the provider rejected the request
@@ -281,7 +383,7 @@ class EvalRunner:
                 status = DONE
             self._ledger.finish(run_id, case.id, status,
                                 0.0 if status == REFUSED else result.cost_usd, {
-                "model": result.model, "prompt_version": PROMPT_VERSION,
+                "model": result.model, "prompt_version": self._writer.prompt_version,
                 "draft": result.draft.model_dump(mode="json") if result.draft else None,
                 "error": result.error, "cost_usd": result.cost_usd,
                 "bound_usd": call.bound_usd,
