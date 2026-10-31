@@ -3,7 +3,7 @@
 ``build_instrument_state`` and ``build_market_state`` are pure functions: given
 observations, a policy, and an injected ``now``, they are fully deterministic.
 These tests cover the live/stale/unavailable boundaries, change computation,
-and the guarantee that the market state always contains all 18 instruments.
+and the guarantee that the market state always contains all 19 instruments.
 """
 
 from __future__ import annotations
@@ -262,12 +262,12 @@ def test_market_state_always_contains_all_instruments_even_when_empty() -> None:
     policy = StalePolicy()
     state = build_market_state({}, policy=policy, now=NOW, provider="fake")
 
-    assert len(state.instruments) == 18
+    assert len(state.instruments) == 19
     assert set(state.instruments) == set(INSTRUMENTS)
     assert all(s.status is DataStatus.UNAVAILABLE for s in state.instruments.values())
     assert state.live_count == 0
     assert state.stale_count == 0
-    assert state.unavailable_count == 18
+    assert state.unavailable_count == 19
 
 
 def test_market_state_counters_sum_to_instrument_count_and_match_statuses() -> None:
@@ -282,8 +282,8 @@ def test_market_state_counters_sum_to_instrument_count_and_match_statuses() -> N
     }
     state = build_market_state(observations, policy=policy, now=NOW, provider="fake")
 
-    assert len(state.instruments) == 18
-    assert state.live_count + state.stale_count + state.unavailable_count == 18
+    assert len(state.instruments) == 19
+    assert state.live_count + state.stale_count + state.unavailable_count == 19
 
     counted_live = sum(1 for s in state.instruments.values() if s.status is DataStatus.LIVE)
     counted_stale = sum(1 for s in state.instruments.values() if s.status is DataStatus.STALE)
@@ -310,7 +310,7 @@ def test_stale_instrument_is_not_counted_as_live() -> None:
     assert state.instruments["NQ"].status is DataStatus.STALE
     assert state.live_count == 0
     assert state.stale_count == 1
-    assert state.unavailable_count == 17
+    assert state.unavailable_count == 18
 
 
 def test_market_state_preserves_provider_and_generated_at() -> None:

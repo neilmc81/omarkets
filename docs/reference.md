@@ -681,7 +681,7 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | `/api/v1/desk/notes` | GET | Written notes by time: `from`, `to` (UTC offset required; half-open; default the 7 days before now), `limit` (1–500, default 100). Returns `{from, to, limit, truncated, notes: [{id, kind, at, headline, summary, tone}]}`, newest first; failed and draftless notes are left out |
 | `/api/v1/desk/notes/{id}` | GET | One desk note |
 | `/api/v1/desk/calendar` | GET | Calendar page: `week=this\|next` (New York Monday–Monday), `all` (default false: medium importance and up), `tz` (IANA zone the days are grouped in; default the desk's reader zone, 422 if unknown). Returns `{generated_at, week, start, end, tz, all, hidden, days: [{date, label, rows}], stale, coverage}`; see "Calendar page" below. 503 without the desk |
-| `/api/v1/desk/ask` | POST | Write an "Explain the market now" note |
+| `/api/v1/desk/ask` | POST | Write an "Explain the market now" note; `?instrument=` (default NQ) must be in `desk_instruments` |
 | `/api/v1/desk/playbook` | GET | How NQ reacted to each indicator's beats and misses; each release carries `note_id` (null when no note), `surprise`/`surprise_text` (actual minus forecast at the reporting precision), and each bucket `nq_15m_avg` (average first-15-minute NQ move, null when none measured) |
 | `/api/v1/desk/macro` | GET | Macro page: `{generated_at, groups: [{key, title, cards}]}` in four groups (inflation, jobs, growth, fed); see "Macro page" below. 503 without the desk |
 | `/api/v1/desk/news` | GET | News page: headlines from the last `hours` (1–72, default 24), newest first, one per title, tagged by fixed rules: `{generated_at, start, items, hidden, alerts}`; see "News page" below. 503 without the desk |

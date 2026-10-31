@@ -82,7 +82,7 @@ async def test_fetch_snapshot_returns_one_observation_per_instrument() -> None:
     batch = await provider.fetch_snapshot()
 
     assert len(batch) == len(provider.instruments)
-    assert len(batch) == 18
+    assert len(batch) == 19
     assert {o.symbol for o in batch} == {i.symbol for i in provider.instruments}
 
 
@@ -179,7 +179,7 @@ async def test_stream_updates_yields_complete_batches_and_reports_healthy() -> N
 
     assert len(batches) == 3
     for batch in batches:
-        assert len(batch) == 18
+        assert len(batch) == 19
         assert {o.symbol for o in batch} == {i.symbol for i in provider.instruments}
         assert all(o.timestamp == FROZEN for o in batch)
 

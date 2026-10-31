@@ -22,6 +22,7 @@ from pydantic_settings import (
 )
 
 from core.config.timezone import system_timezone
+from core.desk.identity import LEGACY, PRODUCTION_INSTRUMENTS, Instrument
 from core.desk.models import NoteKind
 from core.domain.economics import EconomicsMode
 from core.services.economics import EconomicPolling
@@ -265,6 +266,12 @@ class Settings(BaseSettings):
     #: Prompt version new notes are written with (``core/desk/prompts.py``).
     #: desk:v9 goes live only after its paid acceptance test and Neil's read.
     desk_prompt_version: Literal["desk:v8", "desk:v9"] = "desk:v8"
+    #: Instruments that get their own notes, e.g.
+    #: ``OMARKETS_DESK_INSTRUMENTS='["NQ", "ES"]'``. NQ gets pre-market, move and
+    #: ask notes; every other instrument move and ask only. NQ is always on.
+    #: Each needs a prompt profile at ``desk_prompt_version`` (ES: desk:v9), or
+    #: the service refuses to start (``core.main.check_desk_instruments``).
+    desk_instruments: list[str] = Field(default_factory=lambda: list(PRODUCTION_INSTRUMENTS))
     #: NQ move over about an hour that earns its own "why is NQ moving" note, used
     #: until there is enough history to scale it (``core/analysis/move_size.py``).
     desk_move_threshold_pct: float = Field(default=0.8, gt=0, allow_inf_nan=False)
@@ -277,6 +284,16 @@ class Settings(BaseSettings):
     #: Active Omarchy theme directory the UI takes its palette from. Defaults
     #: to ``$XDG_STATE_HOME/omarchy/current/theme``.
     omarchy_theme_dir: Path | None = None
+
+    @field_validator("desk_instruments")
+    @classmethod
+    def _desk_instruments(cls, value: list[str]) -> list[str]:
+        symbols = list(dict.fromkeys(value))
+        for symbol in symbols:
+            Instrument.of(symbol)  # ValueError names a malformed symbol
+        if LEGACY not in symbols:
+            raise ValueError(f"{LEGACY} is the desk's own instrument and cannot be left out")
+        return symbols
 
     @property
     def resolved_desk_db_path(self) -> Path:

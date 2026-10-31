@@ -19,8 +19,12 @@ from core.desk.models import NoteKind
 LEGACY = "NQ"
 #: Note kinds written per instrument. Every other kind is desk-wide.
 INSTRUMENT_KINDS = frozenset({NoteKind.PREMARKET, NoteKind.MOVE, NoteKind.ASK})
-#: Instruments the production desk writes for. Tests may pass others.
+#: Instruments the production desk writes for by default (``desk_instruments``
+#: adds others). Tests may pass others.
 PRODUCTION_INSTRUMENTS: tuple[str, ...] = ("NQ",)
+#: What every instrument but NQ gets: move and ask notes, no daily pre-market
+#: (the pre-market is written by the premium model; docs/PLAN.md §7 cost policy).
+SECONDARY_KINDS = frozenset({NoteKind.MOVE, NoteKind.ASK})
 
 _SYMBOL = re.compile(r"[A-Z][A-Z0-9]{0,9}")
 
@@ -75,9 +79,17 @@ def parse_note_id(value: str) -> NoteRef:
     return NoteRef(kind, LEGACY, rest)
 
 
+def instrument_kinds(instrument: Instrument | str) -> frozenset[NoteKind]:
+    """The note kinds the desk writes for an instrument: NQ gets all of
+    :data:`INSTRUMENT_KINDS`, every other instrument :data:`SECONDARY_KINDS`."""
+    symbol = instrument.symbol if isinstance(instrument, Instrument) else instrument
+    return INSTRUMENT_KINDS if symbol == LEGACY else SECONDARY_KINDS
+
+
 def instrument_of(value: str) -> str | None:
     return parse_note_id(value).instrument
 
 
-__all__ = ["INSTRUMENT_KINDS", "LEGACY", "NQ", "PRODUCTION_INSTRUMENTS", "Instrument",
-           "NoteRef", "instrument_of", "note_id", "parse_note_id"]
+__all__ = ["INSTRUMENT_KINDS", "LEGACY", "NQ", "PRODUCTION_INSTRUMENTS", "SECONDARY_KINDS",
+           "Instrument", "NoteRef", "instrument_kinds", "instrument_of", "note_id",
+           "parse_note_id"]

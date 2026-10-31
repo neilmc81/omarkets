@@ -63,6 +63,7 @@ class ProviderRegistry:
 DEFAULT_ROUTES: dict[str, str] = {
     "NQ": "cnbc",
     "ES": "cnbc",
+    "YM": "cnbc",
     "US2Y": "cnbc",
     "US10Y": "cnbc",
     "DXY": "cnbc",

@@ -24,6 +24,7 @@ from datetime import datetime
 
 from core.desk import explainers as X
 from core.domain.chart import KeyLevel, KeyLevels
+from core.domain.instruments import get_instrument
 from core.domain.sessions import active_session, previous_session, previous_week_sessions
 from core.storage.base import OhlcBucket
 
@@ -48,12 +49,12 @@ LABELS: dict[str, str] = {
 }
 
 
-def _price(value: float | None) -> str:
-    return "unavailable" if value is None else f"{value:,.2f}"
+def _price(value: float | None, decimals: int = 2) -> str:
+    return "unavailable" if value is None else f"{value:,.{decimals}f}"
 
 
-def _signed(value: float) -> str:
-    return f"{'+' if value > 0 else '-' if value < 0 else ''}{abs(value):,.2f}"
+def _signed(value: float, decimals: int = 2) -> str:
+    return f"{'+' if value > 0 else '-' if value < 0 else ''}{abs(value):,.{decimals}f}"
 
 
 class _Window:
@@ -79,10 +80,11 @@ class _Window:
 
 def _level(key: str, value: float | None, *, start: datetime | None = None,
            end: datetime | None = None, partial: bool = False,
-           reason: str | None = None, text: str | None = None) -> KeyLevel:
+           reason: str | None = None, text: str | None = None,
+           decimals: int = 2) -> KeyLevel:
     return KeyLevel(
         key=key, label=LABELS[key], value=value,
-        value_text=text if text is not None and value is not None else _price(value),
+        value_text=text if text is not None and value is not None else _price(value, decimals),
         explainer=EXPLAINERS[key], window_start=start, window_end=end, partial=partial,
         unavailable_reason=None if value is not None else (reason or "not available"),
     )
@@ -92,6 +94,9 @@ def key_levels(symbol: str, instrument, ohlc: OhlcFn, *, now: datetime) -> KeyLe
     """Key levels for ``symbol``; ``instrument`` is its current market state (or None)."""
     contract = getattr(instrument, "contract_code", None)
     settle = getattr(instrument, "previous_close", None)
+    # Levels are written in the venue's own quote precision (YM: whole points).
+    definition = get_instrument(symbol)
+    decimals = definition.price_precision if definition is not None else 2
 
     def read(start: datetime, end: datetime) -> _Window:
         if end <= start:
@@ -115,18 +120,19 @@ def key_levels(symbol: str, instrument, ohlc: OhlcFn, *, now: datetime) -> KeyLe
 
     levels = [
         _level("overnight_high", overnight.high, start=session.opens_at, end=overnight_end,
-               partial=partial, reason=overnight.reason),
+               partial=partial, reason=overnight.reason, decimals=decimals),
         _level("overnight_low", overnight.low, start=session.opens_at, end=overnight_end,
-               partial=partial, reason=overnight.reason),
-        _level("prior_settle", settle, reason="the quote source has not sent a previous settle"),
+               partial=partial, reason=overnight.reason, decimals=decimals),
+        _level("prior_settle", settle, reason="the quote source has not sent a previous settle",
+               decimals=decimals),
         _level("prior_day_high", day.high, start=prior.opens_at, end=prior.closes_at,
-               reason=day.reason),
+               reason=day.reason, decimals=decimals),
         _level("prior_day_low", day.low, start=prior.opens_at, end=prior.closes_at,
-               reason=day.reason),
+               reason=day.reason, decimals=decimals),
         _level("prior_week_high", week.high, start=week_start, end=week_end,
-               reason=week.reason),
+               reason=week.reason, decimals=decimals),
         _level("prior_week_low", week.low, start=week_start, end=week_end,
-               reason=week.reason),
+               reason=week.reason, decimals=decimals),
     ]
 
     # Gap: the cash-open price once it exists, otherwise where it would open now.
@@ -143,9 +149,9 @@ def key_levels(symbol: str, instrument, ohlc: OhlcFn, *, now: datetime) -> KeyLe
         reason = "no prior settle"
     elif price is not None:
         gap = round(price - settle, 2)
-        text = f"{_signed(gap)} ({_signed(round(gap / settle * 100, 2))}%)"
+        text = f"{_signed(gap, decimals)} ({_signed(round(gap / settle * 100, 2))}%)"
     levels.append(_level("gap_vs_settle", gap, start=gap_start, end=gap_end,
-                         partial=gap_partial, reason=reason, text=text))
+                         partial=gap_partial, reason=reason, text=text, decimals=decimals))
 
     return KeyLevels(
         symbol=symbol, generated_at=now, trade_date=session.trade_date, contract=contract,
