@@ -24,6 +24,7 @@ from core.api import (
     shell,
     theme,
     websocket,
+    workspace,
 )
 from core.api.availability import RequestTimingMiddleware, monitor_event_loop
 from core.config.settings import Settings
@@ -44,6 +45,7 @@ def create_app(
     desk_service=None,
     theme_source=None,
     ai_budget=None,
+    workspace_store=None,
     frontend_dist: object | None = None,
     version: str = __version__,
 ) -> FastAPI:
@@ -100,6 +102,7 @@ def create_app(
     app.state.economics = economic_service
     app.state.news = news_service
     app.state.desk = desk_service
+    app.state.workspace = workspace_store
     from core.theme.omarchy import OmarchyTheme
 
     app.state.theme = theme_source or OmarchyTheme()
@@ -108,6 +111,7 @@ def create_app(
     app.state.provider_registry = build_registry()
     app.include_router(desk.router)
     app.include_router(chart.router)
+    app.include_router(workspace.router)
     app.include_router(explainers.router)
     app.include_router(theme.router)
     app.include_router(economics.router)

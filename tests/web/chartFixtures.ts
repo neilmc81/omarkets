@@ -1,4 +1,4 @@
-import type { Bars, KeyLevels, Pins, RiskTone, SessionCalendar, Sparklines } from "../../web/src/chart/api";
+import type { Bars, ChartInstrument, KeyLevels, Pins, RiskTone, SessionCalendar, Sparklines } from "../../web/src/chart/api";
 
 // Thursday Oct 22 2026: session opened Wed 18:00 ET (22:00 UTC).
 const session = {
@@ -86,3 +86,32 @@ export const sparklines: Sparklines = {
   generated_at: "2026-10-22T13:45:00Z", interval: "15m",
   lines: [{ symbol: "NQ", points: [{ time: "2026-10-22T12:00:00Z", value: 29_100 }, { time: "2026-10-22T12:15:00Z", value: null }, { time: "2026-10-22T12:30:00Z", value: 29_150 }, { time: "2026-10-22T12:45:00Z", value: 29_140 }] }],
 };
+
+// Chart focus and the watchlist (core/api/workspace.py).
+const chartInstrument = (symbol: string, label: string, extra: Partial<ChartInstrument> = {}): ChartInstrument => ({
+  symbol, label, unit: "index points", price_precision: 2, levels: false, release_pins: false, ...extra,
+});
+export const chartInstruments: { instruments: ChartInstrument[] } = {
+  instruments: [
+    chartInstrument("NQ", "Nasdaq 100 futures", { levels: true, release_pins: true }),
+    chartInstrument("ES", "S&P 500 futures", { levels: true }),
+    chartInstrument("US2Y", "2-year yield", { unit: "percent", price_precision: 3 }),
+    chartInstrument("US10Y", "10-year yield", { unit: "percent", price_precision: 3 }),
+    chartInstrument("DXY", "US dollar", { price_precision: 3 }),
+    chartInstrument("BTC", "Bitcoin", { unit: "USD" }),
+  ],
+};
+export const focusOf = (symbol: string) => ({
+  symbol, updated_at: null, instrument: chartInstruments.instruments.find((i) => i.symbol === symbol)!,
+});
+export const watchlist = { name: "Desk strip", symbols: ["NQ", "ES", "US10Y", "US2Y", "DXY", "VIX", "WTI", "GOLD"], updated_at: null };
+
+// Bitcoin: a UTC day with no cash hours.
+export const btcBars: Bars = {
+  ...bars, symbol: "BTC", label: "Bitcoin", unit: "USD", feed_status: "live", delayed: false, sources: ["binance"], contracts: [],
+  sessions: [{ trade_date: "2026-10-22", opens_at: "2026-10-22T00:00:00Z", closes_at: "2026-10-23T00:00:00Z",
+    rth_opens_at: null, rth_closes_at: null, early_close: false, segments: [] }],
+  bars: [{ time: "2026-10-22T12:25:00Z", open: 110_000, high: 110_300, low: 109_900, close: 110_250, count: 40, change_pct: 0,
+    delayed: false, source: "binance", contract: null }],
+};
+export const esLevels: KeyLevels = { ...levels, symbol: "ES", contract: "ESZ26" };

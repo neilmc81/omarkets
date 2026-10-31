@@ -126,7 +126,7 @@ class OvernightShade implements ISeriesPrimitive<Time> {
 
 type Hover = { kind: "pin"; pin: Pin; x: number; y: number } | { kind: "level"; level: KeyLevel; x: number; y: number };
 
-export function SessionChart({ bars, levels = [], pins = [], overlays = [], height, label, onStatus }: {
+export function SessionChart({ bars, levels = [], pins = [], overlays = [], height, label, onStatus, precision }: {
   bars: Bars | null;
   levels?: KeyLevel[];
   pins?: Pin[];
@@ -135,6 +135,8 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   label: string;
   /** Called with the hovered bar's one-line readout (ET time and OHLC). */
   onStatus?: (text: string | null) => void;
+  /** Decimals the core says the instrument quotes; the chart's default (2) when unset. */
+  precision?: number;
 }) {
   const library = useExplainers();
   const container = useRef<HTMLDivElement>(null);
@@ -153,8 +155,8 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   useEffect(() => { hoverRef.current = hover; }, [hover]);
 
   // Latest data for the crosshair handler without re-subscribing.
-  const latest = useRef({ bars, levels, pins, onStatus, pinned });
-  useEffect(() => { latest.current = { bars, levels, pins, onStatus, pinned }; });
+  const latest = useRef({ bars, levels, pins, onStatus, pinned, precision });
+  useEffect(() => { latest.current = { bars, levels, pins, onStatus, pinned, precision }; });
 
   useEffect(() => {
     const element = container.current;
@@ -191,7 +193,7 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
     interacted.current = false;
 
     const onMove = (param: MouseEventParams<Time>) => {
-      const { bars: data, levels: lines, pins: marks, onStatus: status, pinned: sticky } = latest.current;
+      const { bars: data, levels: lines, pins: marks, onStatus: status, pinned: sticky, precision: digits } = latest.current;
       if (sticky) return;
       if (param.time === undefined || !param.point || !data) {
         setHover(null);
@@ -201,7 +203,7 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
       const time = param.time as number;
       const step = STEP[data.interval];
       const bar = data.bars.find((b) => seconds(b.time) === time);
-      status?.(bar && bar.count ? `${etDayClock(time)} ET · O ${fmt(bar.open)} H ${fmt(bar.high)} L ${fmt(bar.low)} C ${fmt(bar.close)}${bar.delayed ? " · delayed" : ""}`
+      status?.(bar && bar.count ? `${etDayClock(time)} ET · O ${fmt(bar.open, digits)} H ${fmt(bar.high, digits)} L ${fmt(bar.low, digits)} C ${fmt(bar.close, digits)}${bar.delayed ? " · delayed" : ""}`
         : `${etDayClock(time)} ET · no quotes in this bar`);
       const times = data.bars.map((b) => seconds(b.time));
       const pin = marks.find((p) => pinBarTime(p, times, step) === time);
@@ -292,6 +294,12 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
     }
   }, [bars, palette]);
 
+  // The price scale's decimals follow the instrument (e.g. three for yields).
+  useEffect(() => {
+    if (precision === undefined) return;
+    candlesRef.current?.applyOptions({ priceFormat: { type: "price", precision, minMove: 1 / 10 ** precision } });
+  }, [precision]);
+
   // Level lines.
   useEffect(() => {
     const candles = candlesRef.current;
@@ -367,6 +375,6 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   </div>;
 }
 
-function fmt(value: number | null): string {
-  return value === null ? "—" : value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmt(value: number | null, digits = 2): string {
+  return value === null ? "—" : value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }

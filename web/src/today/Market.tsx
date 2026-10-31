@@ -217,7 +217,7 @@ export function ChartState({ bars }: { bars: { data: Bars | null; error: string 
   const data = bars.data;
   if (data && data.market_closed) return <p className="t-muted" role="status">Markets closed · showing the last session.</p>;
   if (data && data.status !== "live") return <p className="t-error" role="status">
-    {data.status === "stale" ? "Stale: no fresh NQ quote recently; the chart ends at the last stored quote." : "NQ quotes unavailable right now; the chart shows stored quotes only."}
+    {data.status === "stale" ? `Stale: no fresh ${data.symbol} quote recently; the chart ends at the last stored quote.` : `${data.symbol} quotes unavailable right now; the chart shows stored quotes only.`}
   </p>;
   return null;
 }

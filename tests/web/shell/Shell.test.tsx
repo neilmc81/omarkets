@@ -69,7 +69,7 @@ describe("shared shell", () => {
     window.history.replaceState(null, "", "/?section=overview");
     render(<Root />);
     expect(current()).toHaveTextContent("Chart");
-    expect(screen.getByRole("region", { name: "NQ chart" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "NQ chart" })).toBeInTheDocument();
   });
 
   it("opens the system status panel from the feeds dot and closes it with Esc", async () => {
