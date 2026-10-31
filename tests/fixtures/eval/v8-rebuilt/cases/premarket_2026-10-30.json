@@ -1,0 +1,343 @@
+{
+ "id": "premarket:2026-10-30",
+ "kind": "premarket",
+ "title": "Pre-market · Friday Oct 30",
+ "created_at": "2026-10-30T13:00:32.965851+00:00",
+ "facts": {
+  "now": "Fri Oct 30, 09:00 ET",
+  "session": "Futures trading overnight · US open in 29m",
+  "markets_today": [
+   {
+    "market": "Nasdaq 100 futures",
+    "level": "28,794.50",
+    "change_today": "-2.60%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 08:50 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "S&P 500 futures",
+    "level": "7,669.25",
+    "change_today": "-1.10%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 08:50 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "10-year yield",
+    "level": "4.937%",
+    "change_today": "-5.2bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 09:00 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "2-year yield",
+    "level": "4.604%",
+    "change_today": "-5.2bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 09:00 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "US dollar",
+    "level": "101.81",
+    "change_today": "-0.22%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 09:00 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "VIX fear gauge",
+    "level": "18.63",
+    "change_today": "+8.31%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 09:00 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "Crude oil",
+    "level": "$104.19",
+    "change_today": "+2.15%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 08:50 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "Gold",
+    "level": "$3,965.30",
+    "change_today": "-1.64%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 08:50 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   }
+  ],
+  "breaking_alerts": [],
+  "bond_market": {
+   "yields": [
+    {
+     "name": "2-year yield",
+     "level": "4.604%",
+     "change_today": "-5.2bp",
+     "change_past_week": "-5.4bp"
+    },
+    {
+     "name": "10-year yield",
+     "level": "4.937%",
+     "change_today": "-5.2bp",
+     "change_past_week": "-2.0bp"
+    },
+    {
+     "name": "Curve (10y minus 2y)",
+     "level": "+33bp",
+     "change_today": "+0.0bp",
+     "change_past_week": "+3.4bp"
+    }
+   ],
+   "curve": "+33bp, normal (10-year above 2-year)"
+  },
+  "nq_price_location": {
+   "nq_price": "28,794.50",
+   "levels": [
+    {
+     "level": "Prior settle",
+     "value": "29,562.00",
+     "nq_is": "767.50 points below"
+    },
+    {
+     "level": "Overnight high",
+     "value": "29,176.50",
+     "nq_is": "382.00 points below",
+     "measured": "Thu Oct 29 18:00 ET to Fri Oct 30 09:00 ET"
+    },
+    {
+     "level": "Overnight low",
+     "value": "28,764.00",
+     "nq_is": "30.50 points above",
+     "measured": "Thu Oct 29 18:00 ET to Fri Oct 30 09:00 ET"
+    },
+    {
+     "level": "Prior day high",
+     "value": "29,789.75",
+     "nq_is": "995.25 points below",
+     "measured": "Wed Oct 28 18:00 ET to Thu Oct 29 17:00 ET"
+    },
+    {
+     "level": "Prior day low",
+     "value": "29,120.00",
+     "nq_is": "325.50 points below",
+     "measured": "Wed Oct 28 18:00 ET to Thu Oct 29 17:00 ET"
+    },
+    {
+     "level": "Prior week high",
+     "value": "30,112.75",
+     "nq_is": "1,318.25 points below",
+     "measured": "Sun Oct 18 18:00 ET to Fri Oct 23 17:00 ET"
+    },
+    {
+     "level": "Prior week low",
+     "value": "28,992.75",
+     "nq_is": "198.25 points below",
+     "measured": "Sun Oct 18 18:00 ET to Fri Oct 23 17:00 ET"
+    }
+   ],
+   "overnight_so_far": true,
+   "as_of": "Fri Oct 30, 08:50 ET"
+  },
+  "normal_move_size": {
+   "typical_daily_range": "500 points (1.68%)",
+   "typical_measured_over": "median of the last 16 complete sessions",
+   "session_range_so_far": "Fri Oct 30 session: 412 points (1.43%), 85% of a typical day",
+   "realised_volatility": "18.1% a year",
+   "vxn": "25.18",
+   "vxn_as_of": "Thu Oct 29 16:15 ET",
+   "large_move_trigger": "0.92% in one hour, scaled to the typical daily range"
+  },
+  "nq_vs_es": {
+   "comparable": true,
+   "nq_change_today": "-2.60%",
+   "es_change_today": "-1.10%",
+   "nq_minus_es": "-1.50 percentage points",
+   "reading": "NQ did worse than ES",
+   "as_of": "Fri Oct 30, 08:50 ET"
+  },
+  "megacap_participation": {
+   "summary": "not available: no live megacap quotes",
+   "flat_means": "within 0.05% of the baseline",
+   "stocks": [
+    {
+     "stock": "NVDA",
+     "status": "stale",
+     "change_today": "-0.80%",
+     "as_of": "Thu Oct 29, 16:15 ET"
+    },
+    {
+     "stock": "MSFT",
+     "status": "stale",
+     "change_today": "+0.00%",
+     "as_of": "Thu Oct 29, 16:00 ET"
+    },
+    {
+     "stock": "AAPL",
+     "status": "stale",
+     "change_today": "+1.48%",
+     "as_of": "Thu Oct 29, 16:00 ET"
+    },
+    {
+     "stock": "AMZN",
+     "status": "stale",
+     "change_today": "+0.00%",
+     "as_of": "Thu Oct 29, 16:00 ET"
+    },
+    {
+     "stock": "META",
+     "status": "stale",
+     "change_today": "+1.99%",
+     "as_of": "Thu Oct 29, 16:00 ET"
+    },
+    {
+     "stock": "GOOGL",
+     "status": "stale",
+     "change_today": "+0.00%",
+     "as_of": "Thu Oct 29, 16:00 ET"
+    },
+    {
+     "stock": "AVGO",
+     "status": "stale",
+     "change_today": "+0.00%",
+     "as_of": "Thu Oct 29, 16:00 ET"
+    },
+    {
+     "stock": "TSLA",
+     "status": "stale",
+     "change_today": "+0.00%",
+     "as_of": "Thu Oct 29, 16:00 ET"
+    }
+   ]
+  },
+  "released_this_morning": [],
+  "still_scheduled_today": [],
+  "overnight_headlines": [
+   {
+    "time": "Fri Oct 30, 08:31 ET",
+    "source": "cnbc_top",
+    "headline": "Swiss central bank posts bumper $23bn profit as gold, foreign assets soar"
+   },
+   {
+    "time": "Fri Oct 30, 08:27 ET",
+    "source": "cnbc_tech",
+    "headline": "The big questions remaining after Anthropic’s blockbuster IPO prospectus"
+   },
+   {
+    "time": "Fri Oct 30, 08:06 ET",
+    "source": "guardian_world",
+    "headline": "Gulf states must rethink trillion-dollar defence in light of US-Iran war, says report"
+   },
+   {
+    "time": "Fri Oct 30, 07:30 ET",
+    "source": "cnbc_earnings",
+    "headline": "Musk and Zuckerberg echo Trump's push to rebrand AI as 'super intelligence' on earnings calls. Others did not"
+   },
+   {
+    "time": "Fri Oct 30, 07:29 ET",
+    "source": "cnbc_top",
+    "headline": "Russian strikes plunge Ukrainian city into blackout as Zelenskyy warns of more missile attacks"
+   },
+   {
+    "time": "Fri Oct 30, 07:00 ET",
+    "source": "cnbc_top",
+    "headline": "Tech giants need legacy businesses to keep growing as they pour trillions into the AI buildout"
+   },
+   {
+    "time": "Fri Oct 30, 06:57 ET",
+    "source": "guardian_world",
+    "headline": "BP profits hit 18-year high as Iran war drives up oil refining margins"
+   },
+   {
+    "time": "Fri Oct 30, 06:36 ET",
+    "source": "cnbc_tech",
+    "headline": "Tech scare trade hits Nasdaq futures while crypto reels from its biggest-ever hack"
+   },
+   {
+    "time": "Fri Oct 30, 06:09 ET",
+    "source": "cnbc_top",
+    "headline": "Euro zone economy slows to 0.4% growth in Q3 as crisis-hit France contracts"
+   },
+   {
+    "time": "Fri Oct 30, 05:00 ET",
+    "source": "ecb_press",
+    "headline": "Results of the ECB Survey of Professional Forecasters for the fourth quarter of 2026"
+   },
+   {
+    "time": "Fri Oct 30, 05:00 ET",
+    "source": "npr_world",
+    "headline": "Israel is in a political deadlock. What comes next?"
+   },
+   {
+    "time": "Fri Oct 30, 04:46 ET",
+    "source": "npr_world",
+    "headline": "After monthslong pause, U.S. could renew conflict with Iran after midterms"
+   }
+  ],
+  "us_open": "Fri Oct 30, 09:30 ET"
+ },
+ "facts_complete": true,
+ "envelope": {
+  "prompt_version": "desk:v8",
+  "reconstructed": {
+   "built_at": "2026-10-30T13:00:32.965851+00:00",
+   "limits": [
+    "facts rebuilt offline by the slice-4 builders, not captured when written",
+    "quotes, headlines and alerts after the note's time are excluded",
+    "macro_trends omitted: only the current macro state is stored",
+    "earnings and Treasury auction calendars omitted (network sources)",
+    "calendar rows as stored at rebuild time (later revisions can show)",
+    "levels use hourly bars up to the note's time (bars cannot be cut by arrival)"
+   ]
+  },
+  "instrument": "NQ"
+ },
+ "baseline": {
+  "prompt_version": "desk:v8",
+  "model": "anthropic/claude-opus-5.5",
+  "draft": {
+   "headline": "Nasdaq futures down 2.59% after tech earnings news; no US data this morning",
+   "summary": "No US economic data came out this morning, and none is scheduled today. NQ is down 2.59% and sits just above its overnight low. Headlines point to sharp drops in Amazon and Intel after earnings. The mood into the open is negative.",
+   "what_it_means": "With no data on the calendar, today is about company news. Headlines say Amazon slid 7% and Intel plunged 25% after earnings. One headline calls it a \"tech scare trade.\" Treat these as headlines, not confirmed figures. Big Nasdaq 100 members can move the whole index. A record $6.3 billion Binance crypto hack is also in the news. Oil at $104.24 keeps inflation worries alive, and headlines link high refining profits to the Iran war.",
+   "market_reaction": "NQ is at 28,797.00, down 2.59%. S&P 500 futures are down 1.10%, so tech is leading the drop. NQ is 33.00 points above its overnight low. It is below yesterday's low and below last week's low of 28,992.75. The 2.59% fall is bigger than NQ's typical full-day range of 1.68%. The VIX fear gauge rose 8.26% to 18.62. Oil rose 2.20%, gold fell 1.63% and the dollar slipped 0.22%.",
+   "rates_read": "The 2-year yield fell 5.0bp to 4.606%, and the 10-year also fell 5.0bp to 4.939%. Falling yields usually help Nasdaq stocks, yet NQ fell anyway. That suggests rates are not driving today's drop, and company news looks more important. Yields falling while stocks drop can mean money is moving to the safety of bonds, but the facts don't confirm why. The curve (10-year minus 2-year) held at +33bp.",
+   "watch_next": [
+    "Whether Amazon and Intel losses hold once the 09:30 cash open starts",
+    "How other big tech names trade in the first hour",
+    "Whether falling yields start to cushion tech stocks",
+    "Updates on the Binance hack and crypto-linked stocks"
+   ],
+   "learn": "Index weight: the Nasdaq 100 gives bigger companies more weight. A big drop in a giant like Amazon pulls the whole index down more than a drop in a small company would. That's why a few earnings reports can move NQ much more than the S&P 500.",
+   "nq_tone": "negative"
+  }
+ }
+}

@@ -99,7 +99,22 @@ _WORLD_KEYWORDS = re.compile(
 _AUCTION_WORDS = re.compile(r"\b(auction|treasur(y|ies)|bonds?|notes?|yields?|TIPS)\b",
                             re.IGNORECASE)
 
+#: Headlines given to the writer per list, after ranking.
+HEADLINE_CAP = 12
+#: A scheduled event this long before a large move's window still counts as in it.
+MOVE_EVENT_LEAD = timedelta(minutes=15)
+
 Notify = Callable[[str, str], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class NewsLine:
+    """A headline for the writer: whether its time is a real publication time
+    (else when Omarkets received it) and whether it has a market category."""
+
+    headline: Headline
+    published: bool
+    categorised: bool
 Job = tuple[str, NoteKind, Callable[[], Awaitable[DeskNote]]]
 
 
@@ -368,10 +383,22 @@ class DeskService:
             return []
         return await self.earnings.between(start, end)
 
-    def headlines(self, since: datetime, until: datetime, *, limit: int = 25,
+    def headlines(self, since: datetime, until: datetime, *, limit: int = HEADLINE_CAP,
                   match: re.Pattern[str] | None = None) -> list[Headline]:
+        return [line.headline for line in self.news_lines(since, until, limit=limit,
+                                                          match=match)]
+
+    def news_lines(self, since: datetime, until: datetime, *, limit: int = HEADLINE_CAP,
+                   match: re.Pattern[str] | None = None) -> list[NewsLine]:
+        """Headlines in ``[since, until]``, one per title, ranked before the cap.
+
+        Headlines with a market-moving category (``headlines.categorise``) come
+        first, then the rest; within each, newest first, then source and title,
+        so equal times always rank the same way. A headline without a
+        publication time is placed by when it was received, and says so.
+        """
         seen: set[str] = set()
-        result: list[Headline] = []
+        result: list[NewsLine] = []
         for event in self.sources.news_events():
             published = event.published_at or event.received_at
             if published is None or not (since <= published <= until):
@@ -386,9 +413,13 @@ class DeskService:
             if key in seen:
                 continue
             seen.add(key)
-            result.append(Headline(source=source, title=title[:300],
-                                   published_at=published, url=event.source_url))
-        result.sort(key=lambda h: h.published_at, reverse=True)
+            result.append(NewsLine(
+                Headline(source=source, title=title[:300], published_at=published,
+                         url=event.source_url),
+                published=event.published_at is not None,
+                categorised=HL.categorise(title, source) is not None))
+        result.sort(key=lambda n: (not n.categorised, -n.headline.published_at.timestamp(),
+                                   n.headline.source, n.headline.title))
         return result[:limit]
 
     # ------------------------------------------------------------------ scheduling
@@ -597,13 +628,13 @@ class DeskService:
             return moves[0]
         return None
 
-    def _earnings_headlines(self, row: EarningsDate, now: datetime) -> list[Headline]:
+    def _earnings_headlines(self, row: EarningsDate, now: datetime) -> list[NewsLine]:
         names = {row.symbol, row.company.split(" ")[0]}
         pattern = re.compile(
             r"\b(" + "|".join(re.escape(n) for n in names) + r")\b.*\b(earn|result|revenue|"
             r"guidance|forecast|quarter|profit|sales|beat|miss)", re.IGNORECASE,
         )
-        return self.headlines(row.expected_at - timedelta(minutes=30), now, match=pattern)
+        return self.news_lines(row.expected_at - timedelta(minutes=30), now, match=pattern)
 
     # ------------------------------------------------------------------ builders
 
@@ -613,11 +644,7 @@ class DeskService:
         return {
             "now": et(now),
             "session": self.session_text(now),
-            "markets_today": [
-                {"market": q.label, "level": q.value_text, "change_today": q.change_text,
-                 "delayed": q.delayed, "stale": q.stale}
-                for q in F.quote_strip(state)
-            ],
+            "markets_today": F.market_rows(state),
             "breaking_alerts": [
                 {"what": a.label, "headline": a.headline, "source": a.source,
                  "published": et(a.published_at)}
@@ -680,11 +707,15 @@ class DeskService:
         normally are."""
         state = self.sources.market_state()
         trigger, scaled = self._move_trigger(now, inst)
-        normal = F.normal_move(self._move_size(now, inst), state.instruments.get("VXN"),
-                               state.instruments.get("VIX"), trigger_pct=trigger,
-                               trigger_scaled=scaled)
+        gauge, benchmark = F.VOL_INDEXES.get(inst.symbol, (None, None))
+        normal = F.normal_move(
+            self._move_size(now, inst),
+            state.instruments.get(gauge) if gauge else None,
+            state.instruments.get(benchmark) if benchmark else None,
+            trigger_pct=trigger, trigger_scaled=scaled, gauge=gauge or "", benchmark=benchmark)
         return {**self._location(now, inst),
-                **({"normal_move_size": normal} if normal else {})}
+                **({"normal_move_size": normal} if normal else {}),
+                **F.participation(state, inst.symbol)}
 
     def _location(self, now: datetime, inst: Instrument = NQ) -> dict[str, Any]:
         """The instrument against its overnight, prior-day and prior-week levels,
@@ -745,9 +776,12 @@ class DeskService:
         ]
 
     @staticmethod
-    def _headline_facts(headlines: list[Headline]) -> list[dict[str, Any]]:
-        return [{"time": et(h.published_at), "source": h.source, "headline": h.title}
-                for h in headlines]
+    def _headline_facts(lines: list[NewsLine]) -> list[dict[str, Any]]:
+        """``time`` is when the source published it; ``received`` (instead) is
+        when Omarkets first saw a headline that carries no publication time."""
+        return [{("time" if n.published else "received"): et(n.headline.published_at),
+                 "source": n.headline.source, "headline": n.headline.title}
+                for n in lines]
 
     @staticmethod
     def _upcoming_facts(items: list[UpcomingItem]) -> list[dict[str, Any]]:
@@ -768,7 +802,7 @@ class DeskService:
                  "past_week_moves": self._moves_facts(week_moves),
                  "this_week": self._upcoming_facts(upcoming),
                  "recent_headlines": self._headline_facts(
-                     self.headlines(now - timedelta(days=2), now, limit=20))}
+                     self.news_lines(now - timedelta(days=2), now))}
         return await self._write(note_id, NoteKind.PRIMER, "The week ahead", now, facts,
                                  moves=week_moves, upcoming=upcoming, rates=rates)
 
@@ -779,7 +813,7 @@ class DeskService:
             F.measure_moves, self.sources.history, start=auction.at,
             end=auction.at + RELEASE_WINDOW, delayed=self._delayed(),
         )
-        headlines = self.headlines(auction.at - timedelta(minutes=10), now,
+        news = self.news_lines(auction.at - timedelta(minutes=10), now,
                                    match=_AUCTION_WORDS)
         facts = {
             **common,
@@ -801,11 +835,11 @@ class DeskService:
                 "rule": "strong/weak = bid-to-cover at least 5% above/below the recent average",
             },
             "reaction_after_results": self._moves_facts(moves),
-            "headlines_since_results": self._headline_facts(headlines),
+            "headlines_since_results": self._headline_facts(news),
         }
         title = f"Treasury auction · {auction.label}"
         return await self._write(note_id, NoteKind.AUCTION, title, now, facts,
-                                 event_at=auction.at, moves=moves, headlines=headlines,
+                                 event_at=auction.at, moves=moves, headlines=_titles(news),
                                  rates=rates)
 
     async def build_review(self, note_id: str, week: R.ReviewWeek, now: datetime) -> DeskNote:
@@ -838,7 +872,7 @@ class DeskService:
         session = active_session(now)
         upcoming = [i for i in await self.upcoming(now, days=2)
                     if i.at and i.at < session.rth_closes_at + timedelta(hours=8)]
-        headlines = self.headlines(now - timedelta(hours=14), now)
+        news = self.news_lines(now - timedelta(hours=14), now)
         # Data already released this morning (usually 08:30 ET), with its reaction.
         day_start = datetime.combine(now.astimezone(NEW_YORK).date(), time(0), tzinfo=NEW_YORK)
         released = F.release_slots(
@@ -866,13 +900,13 @@ class DeskService:
                  **(await asyncio.to_thread(self._macro_trends, now, rates)),
                  "released_this_morning": released_facts,
                  "still_scheduled_today": self._upcoming_facts(upcoming),
-                 "overnight_headlines": self._headline_facts(headlines),
+                 "overnight_headlines": self._headline_facts(news),
                  "us_open": et(session.rth_opens_at)}
         title = f"Pre-market · {session.trade_date:%A %b %d}"
         if inst != NQ:
             title = f"{inst.symbol} pre-market · {session.trade_date:%A %b %d}"
         return await self._write(note_id, NoteKind.PREMARKET, title, now, facts,
-                                 figures=figures, headlines=headlines, upcoming=upcoming,
+                                 figures=figures, headlines=_titles(news), upcoming=upcoming,
                                  rates=rates, instrument=inst)
 
     async def build_release(self, note_id: str, slot: F.ReleaseSlot, now: datetime) -> DeskNote:
@@ -883,7 +917,7 @@ class DeskService:
             F.measure_moves, self.sources.history, start=slot.at, end=slot.at + window,
             delayed=self._delayed(),
         )
-        headlines = self.headlines(slot.at - timedelta(minutes=10), now)
+        news = self.news_lines(slot.at - timedelta(minutes=10), now)
         statement = None
         for row in self.sources.calendar_events(slot.at - timedelta(minutes=1),
                                                 slot.at + timedelta(minutes=1)):
@@ -899,14 +933,14 @@ class DeskService:
                       "what_it_is": F.explainer(slot.primary_code)},
             "figures": self._figure_facts(figures),
             "reaction_after_release": self._moves_facts(moves),
-            "headlines_since_release": self._headline_facts(headlines),
+            "headlines_since_release": self._headline_facts(news),
             "next_events": self._upcoming_facts((await self.upcoming(now, days=3))[:5]),
             **(await asyncio.to_thread(self._macro_trends, now, rates)),
         }
         if statement:
             facts["fed_statement_text"] = statement
         return await self._write(note_id, kind, slot.title, now, facts, event_at=slot.at,
-                                 figures=figures, moves=moves, headlines=headlines,
+                                 figures=figures, moves=moves, headlines=_titles(news),
                                  rates=rates)
 
     async def build_earnings(self, note_id: str, row: EarningsDate, now: datetime) -> DeskNote:
@@ -915,7 +949,7 @@ class DeskService:
             F.measure_moves, self.sources.history, start=row.expected_at,
             end=min(now, row.expected_at + timedelta(minutes=60)), delayed=self._delayed(),
         )
-        headlines = self._earnings_headlines(row, now)
+        news = self._earnings_headlines(row, now)
         facts = {
             **common,
             **(await asyncio.to_thread(self._nq_context, now)),
@@ -924,12 +958,12 @@ class DeskService:
                         "eps_forecast": (f"${row.eps_forecast:.2f}"
                                          if row.eps_forecast is not None else "not available"),
                         "fiscal_quarter": row.fiscal_quarter},
-            "results_headlines": self._headline_facts(headlines),
+            "results_headlines": self._headline_facts(news),
             "nq_reaction": self._moves_facts(moves),
         }
         return await self._write(note_id, NoteKind.EARNINGS, f"{row.company} earnings", now,
                                  facts, event_at=row.expected_at, moves=moves,
-                                 headlines=headlines, rates=rates)
+                                 headlines=_titles(news), rates=rates)
 
     async def build_move(self, note_id: str, move: Move, now: datetime,
                          inst: Instrument = NQ) -> DeskNote:
@@ -938,7 +972,7 @@ class DeskService:
             F.measure_moves, self.sources.history, start=move.start_at, end=move.end_at,
             delayed=self._delayed(),
         )
-        headlines = self.headlines(move.start_at - timedelta(minutes=60), now)
+        news = self.news_lines(move.start_at - timedelta(minutes=60), now)
         recent = [n for n in self.store.recent(5)
                   if n.created_at >= now - timedelta(hours=3) and n.draft is not None]
         direction = "up" if move.change > 0 else "down"
@@ -947,15 +981,19 @@ class DeskService:
             **(await asyncio.to_thread(self._nq_context, now, inst)),
             "the_move": {"market": inst.label, "change": move.text,
                          "from": et(move.start_at), "to": et(move.end_at)},
+            "events_in_move_window": F.events_in_window(
+                self.sources.calendar_events(move.start_at - MOVE_EVENT_LEAD - timedelta(hours=1),
+                                             move.end_at),
+                start=move.start_at, end=move.end_at, lead=MOVE_EVENT_LEAD),
             "other_markets_same_window": self._moves_facts(moves),
-            "headlines_around_the_move": self._headline_facts(headlines),
+            "headlines_around_the_move": self._headline_facts(news),
             "recent_omarkets_notes": [{"title": n.title, "summary": n.draft.summary}
                                       for n in recent],
             "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:4]),
         }
         title = f"{inst.symbol} {direction} {move.text.lstrip('+-')} in the last hour"
         return await self._write(note_id, NoteKind.MOVE, title, now, facts,
-                                 event_at=move.start_at, moves=moves, headlines=headlines,
+                                 event_at=move.start_at, moves=moves, headlines=_titles(news),
                                  rates=rates, instrument=inst)
 
     async def ask(self, inst: Instrument = NQ) -> DeskNote:
@@ -990,13 +1028,13 @@ class DeskService:
             F.measure_moves, self.sources.history, start=now - timedelta(hours=2), end=now,
             delayed=self._delayed(), min_window=timedelta(minutes=30),
         )
-        headlines = self.headlines(now - timedelta(hours=6), now)
+        news = self.news_lines(now - timedelta(hours=6), now)
         facts = {**common, **(await asyncio.to_thread(self._nq_context, now, inst)),
                  "last_two_hours": self._moves_facts(moves),
-                 "recent_headlines": self._headline_facts(headlines),
+                 "recent_headlines": self._headline_facts(news),
                  "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:5])}
         return await self._write(aid, NoteKind.ASK, "Market right now", now, facts, moves=moves,
-                                 headlines=headlines, rates=rates, notify=False,
+                                 headlines=_titles(news), rates=rates, notify=False,
                                  instrument=inst)
 
     # ------------------------------------------------------------------ writing
@@ -1068,6 +1106,10 @@ class DeskService:
         else:
             logger.warning("desk note %s failed: %s", note_id, result.error)
         return note
+
+
+def _titles(news: Sequence[NewsLine]) -> list[Headline]:
+    return [n.headline for n in news]
 
 
 def _duration(delta: timedelta) -> str:

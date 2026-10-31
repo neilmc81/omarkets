@@ -42,10 +42,11 @@ def _change_fields(state: InstrumentState | None) -> tuple[Value, Value, Value]:
     purposes: its last value may still be shown, but it must not drive a fresh
     "NQ outperforming" claim.
     """
-    if state is None or state.status is not DataStatus.LIVE or state.value is None:
+    # ``!=``/``==`` rather than ``is``: a plain-string status compares equal.
+    if state is None or state.status != DataStatus.LIVE or state.value is None:
         reason = (
             "instrument stale; relative strength withheld"
-            if state is not None and state.status is DataStatus.STALE
+            if state is not None and state.status == DataStatus.STALE
             else "instrument unavailable"
         )
         return Value.unavailable(reason), Value.unavailable(reason), Value.unavailable(reason)
@@ -130,6 +131,35 @@ def relative_strength(
     return Value.available(difference), label
 
 
+def _baseline(state: InstrumentState) -> str | None:
+    if state.baseline_period is not None:
+        return state.baseline_period
+    return (state.timestamp.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+            if state.timestamp else None)
+
+
+def compare_nq_es(
+    nq: InstrumentState | None,
+    es: InstrumentState | None,
+    *,
+    tolerance_pct: float = DEFAULT_TOLERANCE_PCT,
+) -> tuple[Value, RelativeStrength]:
+    """NQ minus ES today, only when both legs are live and comparable: the same
+    source, quote times within a minute and the same baseline period."""
+    compatible = (
+        nq is not None and es is not None
+        and nq.timestamp is not None and es.timestamp is not None
+        and abs((nq.timestamp - es.timestamp).total_seconds()) <= 60
+        and nq.source is not None and nq.source == es.source
+        and _baseline(nq) == _baseline(es)
+    )
+    if not compatible:
+        return (Value.unavailable("NQ/ES source times or baseline periods incompatible"),
+                RelativeStrength.UNKNOWN)
+    return relative_strength(_change_fields(nq)[2], _change_fields(es)[2],
+                             tolerance_pct=tolerance_pct)
+
+
 def build_cross_market_state(
     market: MarketState,
     *,
@@ -143,26 +173,7 @@ def build_cross_market_state(
 
     _nq_price, nq_change, nq_change_pct = _change_fields(nq)
     _es_price, es_change, es_change_pct = _change_fields(es)
-    def baseline(state: InstrumentState) -> str | None:
-        if state.baseline_period is not None:
-            return state.baseline_period
-        return (state.timestamp.astimezone(ZoneInfo("America/New_York")).date().isoformat()
-                if state.timestamp else None)
-
-    compatible = (
-        nq is not None and es is not None
-        and nq.timestamp is not None and es.timestamp is not None
-        and abs((nq.timestamp - es.timestamp).total_seconds()) <= 60
-        and nq.source is not None and nq.source == es.source
-        and baseline(nq) == baseline(es)
-    )
-    if compatible:
-        nq_vs_es, label = relative_strength(
-            nq_change_pct, es_change_pct, tolerance_pct=tolerance_pct
-        )
-    else:
-        nq_vs_es = Value.unavailable("NQ/ES source times or baseline periods incompatible")
-        label = RelativeStrength.UNKNOWN
+    nq_vs_es, label = compare_nq_es(nq, es, tolerance_pct=tolerance_pct)
 
     return CrossMarketState(
         generated_at=now or market.generated_at,
@@ -188,6 +199,7 @@ def build_cross_market_state(
 __all__ = [
     "DEFAULT_TOLERANCE_PCT",
     "build_cross_market_state",
+    "compare_nq_es",
     "cross_asset_change",
     "relative_strength",
 ]

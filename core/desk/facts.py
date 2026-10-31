@@ -14,6 +14,7 @@ from math import isfinite
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from core.analysis.cross_market import DEFAULT_TOLERANCE_PCT, compare_nq_es
 from core.desk import explainers as X
 from core.desk.models import Figure, Move, Quote, RatesView, Surprise, UpcomingItem, YieldLine
 from core.domain.sessions import volatility_index_open
@@ -23,6 +24,7 @@ REACTION_SYMBOLS: tuple[str, ...] = ("NQ", "ES", "US2Y", "US10Y", "DXY", "VIX")
 #: Markets on the Today strip.
 STRIP_SYMBOLS: tuple[str, ...] = ("NQ", "ES", "US10Y", "US2Y", "DXY", "VIX", "WTI", "GOLD")
 YIELD_SYMBOLS = frozenset({"US2Y", "US10Y"})
+_NEW_YORK = ZoneInfo("America/New_York")
 #: Cash indexes computed only in Cboe's hours (see ``volatility_index_open``).
 CASH_INDEXES = frozenset({"VIX", "VXN"})
 
@@ -497,9 +499,174 @@ def quote_strip(state: Any, symbols: Sequence[str] = STRIP_SYMBOLS) -> list[Quot
     return quotes
 
 
-# --------------------------------------------------------------------------- price location
+def _et(moment: datetime) -> str:
+    return moment.astimezone(_NEW_YORK).strftime("%a %b %d, %H:%M ET")
 
-_NEW_YORK = ZoneInfo("America/New_York")
+
+def quote_status(inst: Any, quote: Quote) -> str:
+    """One word for a quote: ``live``, ``closed`` (a last close while the market
+    is shut), ``stale`` (an old value from a feed that should be updating) or
+    ``unavailable`` (no value at all). Delay is reported separately."""
+    if inst.value is None or _value(inst, "status") == "unavailable":
+        return "unavailable"
+    if quote.closed:
+        return "closed"
+    return "stale" if _value(inst, "status") == "stale" else "live"
+
+
+def _delay_text(inst: Any) -> str | None:
+    seconds = getattr(inst, "expected_delay_seconds", 0) or 0
+    if seconds >= 60:
+        return f"about {round(seconds / 60)} minutes"
+    if seconds > 0:
+        return f"about {seconds:.0f} seconds"
+    return "none" if _value(inst, "feed_status") == "live" else None
+
+
+def _baseline_text(inst: Any, symbol: str) -> str:
+    """What today's change is measured from (``change_today``)."""
+    if getattr(inst, "change", None) is None and getattr(inst, "change_pct", None) is None:
+        return "not known (no baseline from the feed)"
+    if (getattr(inst, "source", None) or "").startswith("binance"):
+        return "the price 24 hours earlier (rolling)"
+    if _value(inst, "asset_class") == "equity_index_future" or symbol in {"WTI", "GOLD"}:
+        return "the previous session's settle"
+    return "the previous session's close"
+
+
+def market_rows(state: Any, symbols: Sequence[str] = STRIP_SYMBOLS) -> list[dict[str, Any]]:
+    """The quote strip as writer facts: level and change, plus each quote's
+    status, observation time, declared delay and change baseline.
+
+    ``stale`` is true only for a stale feed: an unavailable quote and a closed
+    market are told apart through ``status``.
+    """
+    rows: list[dict[str, Any]] = []
+    for quote in quote_strip(state, symbols):
+        inst = state.instruments[quote.symbol]
+        status = quote_status(inst, quote)
+        row: dict[str, Any] = {"market": quote.label, "level": quote.value_text,
+                               "change_today": quote.change_text, "delayed": quote.delayed,
+                               "stale": status == "stale", "status": status}
+        if quote.as_of is not None:
+            row["as_of"] = _et(quote.as_of)
+        if status != "unavailable":
+            if (delay := _delay_text(inst)) is not None:
+                row["expected_delay"] = delay
+            row["change_from"] = _baseline_text(inst, quote.symbol)
+        rows.append(row)
+    return rows
+
+
+# --------------------------------------------------------------------------- participation
+
+#: The eight megacaps on the desk, in the order they are listed to the writer.
+MEGACAPS: tuple[str, ...] = ("NVDA", "MSFT", "AAPL", "AMZN", "META", "GOOGL", "AVGO", "TSLA")
+#: Instruments whose notes get NQ vs ES and megacap participation.
+PARTICIPATION_INSTRUMENTS = frozenset({"NQ", "ES"})
+#: A megacap counts as up or down only beyond this change (percent).
+FLAT_PCT = 0.05
+
+
+def _pct(value: float) -> str:
+    return f"{value:+.2f}%"
+
+
+def nq_vs_es(state: Any) -> dict[str, Any]:
+    """NQ's change today against ES's (:func:`core.analysis.cross_market.compare_nq_es`).
+
+    Compared only when both are live, from the same source, within a minute of
+    each other and against the same baseline; otherwise the block says why not.
+    """
+    nq, es = state.instruments.get("NQ"), state.instruments.get("ES")
+    for symbol, inst in (("NQ", nq), ("ES", es)):
+        if inst is None or inst.value is None or _value(inst, "status") == "unavailable":
+            return {"comparable": False, "why_not": f"no {symbol} quote"}
+        if _value(inst, "status") != "live":
+            return {"comparable": False, "why_not": f"the {symbol} quote is not current"}
+    diff, label = compare_nq_es(nq, es)
+    if diff.value is None:
+        return {"comparable": False, "why_not": diff.reason or "NQ or ES change unavailable"}
+    reading = {"outperforming": "NQ did better than ES",
+               "underperforming": "NQ did worse than ES",
+               "aligned": f"NQ and ES moved together (within "
+                          f"{DEFAULT_TOLERANCE_PCT:.2f} percentage points)"}[label.value]
+    return {"comparable": True,
+            "nq_change_today": _pct(nq.change_pct),
+            "es_change_today": _pct(es.change_pct),
+            "nq_minus_es": f"{diff.value:+.2f} percentage points",
+            "reading": reading,
+            "as_of": _et(nq.timestamp)}
+
+
+def megacap_participation(state: Any, symbols: Sequence[str] = MEGACAPS) -> dict[str, Any]:
+    """How many of the megacaps are up or down today, from live quotes only.
+
+    A closed, stale or missing quote is listed with its status and left out of
+    the count; with no live quote the count is "not available".
+    """
+    stocks: list[dict[str, Any]] = []
+    up = down = flat = 0
+    for symbol in symbols:
+        inst = state.instruments.get(symbol)
+        if inst is None:
+            stocks.append({"stock": symbol, "status": "unavailable"})
+            continue
+        closed = bool(getattr(inst, "market_closed", False)) and inst.value is not None
+        status = ("unavailable" if inst.value is None or _value(inst, "status") == "unavailable"
+                  else "closed" if closed
+                  else "stale" if _value(inst, "status") == "stale" else "live")
+        row: dict[str, Any] = {"stock": symbol, "status": status}
+        if status != "unavailable" and inst.change_pct is not None:
+            row["change_today"] = _pct(inst.change_pct)
+        if inst.timestamp is not None:
+            row["as_of"] = _et(inst.timestamp)
+        stocks.append(row)
+        if status != "live" or inst.change_pct is None:
+            continue
+        if inst.change_pct > FLAT_PCT:
+            up += 1
+        elif inst.change_pct < -FLAT_PCT:
+            down += 1
+        else:
+            flat += 1
+    counted = up + down + flat
+    if counted:
+        summary = (f"{up} up, {down} down, {flat} flat of {counted} with live quotes "
+                   f"({len(symbols) - counted} not counted: closed, stale or unavailable)")
+    elif all(row["status"] == "unavailable" for row in stocks):
+        return {"summary": "not available: no megacap quotes"}
+    else:
+        summary = "not available: no live megacap quotes"
+    return {"summary": summary, "flat_means": f"within {FLAT_PCT:.2f}% of the baseline",
+            "stocks": stocks}
+
+
+def participation(state: Any, symbol: str) -> dict[str, Any]:
+    """NQ vs ES and megacap participation for an NQ or ES note (else nothing)."""
+    if symbol not in PARTICIPATION_INSTRUMENTS:
+        return {}
+    return {"nq_vs_es": nq_vs_es(state), "megacap_participation": megacap_participation(state)}
+
+
+# --------------------------------------------------------------------------- events in a window
+
+
+def events_in_window(events: Iterable[Any], *, start: datetime, end: datetime,
+                     lead: timedelta) -> dict[str, Any]:
+    """Scheduled economic and Fed events from ``lead`` before ``start`` to ``end``.
+
+    The checked window is stated, so an empty list reads as "no event on the
+    supplied calendar", not "nothing happened".
+    """
+    slots = release_slots(events, start=start - lead, end=end, min_importance="medium")
+    return {"checked_from": _et(start - lead), "checked_to": _et(end),
+            "calendar": "US economic releases and Fed events (medium importance and up)",
+            "events": [{"when": _et(slot.at), "what": slot.title,
+                        "importance": slot.importance} for slot in slots]}
+
+
+# --------------------------------------------------------------------------- price location
 
 #: Key levels the writer gets, in this order. The gap is left out: today's
 #: change from the settle is already in ``markets_today``.
@@ -555,14 +722,21 @@ def price_location(levels: Any, price: float | None,
 #: VXN and VIX are compared only when their quotes are this close in time.
 VOL_INDEX_SKEW = timedelta(minutes=30)
 
+#: Each instrument's own implied-volatility index and the broad one it is
+#: compared with: NQ reads VXN against VIX, ES reads VIX alone. An instrument
+#: not listed gets no fear gauge rather than another market's.
+VOL_INDEXES: dict[str, tuple[str, str | None]] = {"NQ": ("VXN", "VIX"), "ES": ("VIX", None)}
+
 
 def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
-                trigger_scaled: bool) -> dict[str, Any] | None:
-    """How big NQ's moves normally are, and the fear gauges, as ready-made text.
+                trigger_scaled: bool, gauge: str = "VXN",
+                benchmark: str | None = "VIX") -> dict[str, Any] | None:
+    """How big an instrument's moves normally are, and its fear gauge, as text.
 
     ``size`` is a :class:`core.analysis.move_size.MoveSize`; ``vxn``/``vix`` are
-    market-state instruments (or None). Unmeasurable parts are left out, and a
-    finished session's range only when its quotes were complete.
+    the market-state instruments for ``gauge`` and ``benchmark`` (or None);
+    NQ's are VXN and VIX (:data:`VOL_INDEXES`). Unmeasurable parts are left
+    out, and a finished session's range only when its quotes were complete.
     """
     out: dict[str, Any] = {}
     if size is not None and size.typical_range is not None:
@@ -580,16 +754,17 @@ def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
     if size is not None and size.realised_vol_pct is not None:
         out["realised_volatility"] = f"{size.realised_vol_pct:.1f}% a year"
     vxn_value = getattr(vxn, "value", None)
-    vix_value = getattr(vix, "value", None)
+    vix_value = getattr(vix, "value", None) if benchmark else None
+    own, other = gauge.lower(), (benchmark or "").lower()
     if vxn_value is not None and isfinite(vxn_value):
-        out["vxn"] = f"{vxn_value:.2f}"
+        out[own] = f"{vxn_value:.2f}"
         if (at := getattr(vxn, "timestamp", None)) is not None:
-            out["vxn_as_of"] = _when(at)
+            out[f"{own}_as_of"] = _when(at)
         vix_at = getattr(vix, "timestamp", None)
         if (vix_value is not None and isfinite(vix_value) and at is not None
                 and vix_at is not None and abs(at - vix_at) <= VOL_INDEX_SKEW):
-            out["vix"] = f"{vix_value:.2f}"
-            out["vxn_minus_vix"] = f"{vxn_value - vix_value:+.2f} points"
+            out[other] = f"{vix_value:.2f}"
+            out[f"{own}_minus_{other}"] = f"{vxn_value - vix_value:+.2f} points"
     if not out:
         return None
     out["large_move_trigger"] = (f"{trigger_pct:.2f}% in one hour, "

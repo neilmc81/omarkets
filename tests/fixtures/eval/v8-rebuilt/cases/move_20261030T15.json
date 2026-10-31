@@ -1,0 +1,374 @@
+{
+ "id": "move:20261030T15",
+ "kind": "move",
+ "title": "NQ up 0.93% in the last hour",
+ "created_at": "2026-10-30T20:03:02.054804+00:00",
+ "facts": {
+  "now": "Fri Oct 30, 16:03 ET",
+  "session": "Futures trading after the US close",
+  "markets_today": [
+   {
+    "market": "Nasdaq 100 futures",
+    "level": "28,536.00",
+    "change_today": "-3.47%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 15:52 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "S&P 500 futures",
+    "level": "7,612.00",
+    "change_today": "-1.83%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 15:52 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "10-year yield",
+    "level": "4.929%",
+    "change_today": "-6.0bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:02 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "2-year yield",
+    "level": "4.596%",
+    "change_today": "-6.0bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:02 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "US dollar",
+    "level": "101.90",
+    "change_today": "-0.14%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:02 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "VIX fear gauge",
+    "level": "19.65",
+    "change_today": "+14.24%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:02 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "Crude oil",
+    "level": "$103.11",
+    "change_today": "+1.09%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 15:52 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "Gold",
+    "level": "$3,890.80",
+    "change_today": "-3.49%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 15:52 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   }
+  ],
+  "breaking_alerts": [],
+  "bond_market": {
+   "yields": [
+    {
+     "name": "2-year yield",
+     "level": "4.596%",
+     "change_today": "-6.0bp",
+     "change_past_week": "-9.0bp"
+    },
+    {
+     "name": "10-year yield",
+     "level": "4.929%",
+     "change_today": "-6.0bp",
+     "change_past_week": "-7.2bp"
+    },
+    {
+     "name": "Curve (10y minus 2y)",
+     "level": "+33bp",
+     "change_today": "+0.0bp",
+     "change_past_week": "+1.8bp"
+    }
+   ],
+   "curve": "+33bp, normal (10-year above 2-year)"
+  },
+  "nq_price_location": {
+   "nq_price": "28,536.00",
+   "levels": [
+    {
+     "level": "Prior settle",
+     "value": "29,562.00",
+     "nq_is": "1,026.00 points below"
+    },
+    {
+     "level": "Overnight high",
+     "value": "29,176.50",
+     "nq_is": "640.50 points below",
+     "measured": "Thu Oct 29 18:00 ET to Fri Oct 30 09:30 ET"
+    },
+    {
+     "level": "Overnight low",
+     "value": "28,757.75",
+     "nq_is": "221.75 points below",
+     "measured": "Thu Oct 29 18:00 ET to Fri Oct 30 09:30 ET"
+    },
+    {
+     "level": "Prior day high",
+     "value": "29,789.75",
+     "nq_is": "1,253.75 points below",
+     "measured": "Wed Oct 28 18:00 ET to Thu Oct 29 17:00 ET"
+    },
+    {
+     "level": "Prior day low",
+     "value": "29,120.00",
+     "nq_is": "584.00 points below",
+     "measured": "Wed Oct 28 18:00 ET to Thu Oct 29 17:00 ET"
+    },
+    {
+     "level": "Prior week high",
+     "value": "30,112.75",
+     "nq_is": "1,576.75 points below",
+     "measured": "Sun Oct 18 18:00 ET to Fri Oct 23 17:00 ET"
+    },
+    {
+     "level": "Prior week low",
+     "value": "28,992.75",
+     "nq_is": "456.75 points below",
+     "measured": "Sun Oct 18 18:00 ET to Fri Oct 23 17:00 ET"
+    }
+   ],
+   "as_of": "Fri Oct 30, 15:52 ET"
+  },
+  "normal_move_size": {
+   "typical_daily_range": "500 points (1.68%)",
+   "typical_measured_over": "median of the last 16 complete sessions",
+   "session_range_so_far": "Fri Oct 30 session: 942 points (3.30%), 196% of a typical day",
+   "realised_volatility": "18.1% a year",
+   "vxn": "29.31",
+   "vxn_as_of": "Fri Oct 30 15:47 ET",
+   "vix": "19.65",
+   "vxn_minus_vix": "+9.66 points",
+   "large_move_trigger": "0.92% in one hour, scaled to the typical daily range"
+  },
+  "nq_vs_es": {
+   "comparable": true,
+   "nq_change_today": "-3.47%",
+   "es_change_today": "-1.83%",
+   "nq_minus_es": "-1.64 percentage points",
+   "reading": "NQ did worse than ES",
+   "as_of": "Fri Oct 30, 15:52 ET"
+  },
+  "megacap_participation": {
+   "summary": "0 up, 8 down, 0 flat of 8 with live quotes (0 not counted: closed, stale or unavailable)",
+   "flat_means": "within 0.05% of the baseline",
+   "stocks": [
+    {
+     "stock": "NVDA",
+     "status": "live",
+     "change_today": "-4.22%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    },
+    {
+     "stock": "MSFT",
+     "status": "live",
+     "change_today": "-1.54%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    },
+    {
+     "stock": "AAPL",
+     "status": "live",
+     "change_today": "-1.23%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    },
+    {
+     "stock": "AMZN",
+     "status": "live",
+     "change_today": "-1.41%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    },
+    {
+     "stock": "META",
+     "status": "live",
+     "change_today": "-1.53%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    },
+    {
+     "stock": "GOOGL",
+     "status": "live",
+     "change_today": "-1.40%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    },
+    {
+     "stock": "AVGO",
+     "status": "live",
+     "change_today": "-5.48%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    },
+    {
+     "stock": "TSLA",
+     "status": "live",
+     "change_today": "-0.87%",
+     "as_of": "Fri Oct 30, 16:00 ET"
+    }
+   ]
+  },
+  "the_move": {
+   "market": "Nasdaq 100 futures",
+   "change": "+0.92%",
+   "from": "Fri Oct 30, 14:47 ET",
+   "to": "Fri Oct 30, 15:52 ET"
+  },
+  "events_in_move_window": {
+   "checked_from": "Fri Oct 30, 14:32 ET",
+   "checked_to": "Fri Oct 30, 15:52 ET",
+   "calendar": "US economic releases and Fed events (medium importance and up)",
+   "events": []
+  },
+  "other_markets_same_window": [
+   {
+    "market": "Nasdaq 100 futures",
+    "change": "+0.92%",
+    "from": "Fri Oct 30, 14:47 ET",
+    "to": "Fri Oct 30, 15:52 ET",
+    "delayed_feed": true
+   },
+   {
+    "market": "S&P 500 futures",
+    "change": "+0.60%",
+    "from": "Fri Oct 30, 14:47 ET",
+    "to": "Fri Oct 30, 15:52 ET",
+    "delayed_feed": true
+   },
+   {
+    "market": "2-year yield",
+    "change": "+0.4bp",
+    "from": "Fri Oct 30, 14:47 ET",
+    "to": "Fri Oct 30, 15:52 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "10-year yield",
+    "change": "+0.0bp",
+    "from": "Fri Oct 30, 14:47 ET",
+    "to": "Fri Oct 30, 15:52 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "US dollar",
+    "change": "+0.02%",
+    "from": "Fri Oct 30, 14:47 ET",
+    "to": "Fri Oct 30, 15:52 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "VIX fear gauge",
+    "change": "-13.30%",
+    "from": "Fri Oct 30, 14:47 ET",
+    "to": "Fri Oct 30, 15:52 ET",
+    "delayed_feed": false
+   }
+  ],
+  "headlines_around_the_move": [
+   {
+    "time": "Fri Oct 30, 15:20 ET",
+    "source": "cnbc_tech",
+    "headline": "Reddit stock plunges 30% after weak outlook, heads for worst day ever"
+   },
+   {
+    "time": "Fri Oct 30, 14:08 ET",
+    "source": "cnbc_tech",
+    "headline": "Binance hack: Investigators in a 'cat and mouse game' to recover $6.3 billion in stolen funds"
+   },
+   {
+    "time": "Fri Oct 30, 15:39 ET",
+    "source": "cnbc_top",
+    "headline": "Binance loses $6.3 billion in crypto heist—what happens to your money when an exchange gets hacked"
+   },
+   {
+    "time": "Fri Oct 30, 14:55 ET",
+    "source": "cnbc_top",
+    "headline": "Tech gets crushed, defensive stocks shine. How we're making sense of it all"
+   },
+   {
+    "time": "Fri Oct 30, 14:47 ET",
+    "source": "cnbc_top",
+    "headline": "'Bad time to troll': Binance co-founder Zhao asks Musk for support after hack"
+   },
+   {
+    "time": "Fri Oct 30, 14:32 ET",
+    "source": "cnbc_top",
+    "headline": "Reid Hoffman gives millions to Dems in late spending spree as Epstein fight spills into election"
+   },
+   {
+    "time": "Fri Oct 30, 13:54 ET",
+    "source": "cnbc_top",
+    "headline": "Why bitcoin held up better after the record Binance hack"
+   }
+  ],
+  "recent_omarkets_notes": [],
+  "next_events": []
+ },
+ "facts_complete": true,
+ "envelope": {
+  "prompt_version": "desk:v8",
+  "reconstructed": {
+   "built_at": "2026-10-30T20:03:02.054804+00:00",
+   "limits": [
+    "facts rebuilt offline by the slice-4 builders, not captured when written",
+    "quotes, headlines and alerts after the note's time are excluded",
+    "macro_trends omitted: only the current macro state is stored",
+    "earnings and Treasury auction calendars omitted (network sources)",
+    "calendar rows as stored at rebuild time (later revisions can show)",
+    "levels use hourly bars up to the note's time (bars cannot be cut by arrival)"
+   ]
+  },
+  "instrument": "NQ"
+ },
+ "baseline": {
+  "prompt_version": "desk:v8",
+  "model": "deepseek/deepseek-v4.1-flash-1017",
+  "draft": {
+   "headline": "Tech selloff drags Nasdaq down 3.4%, then a sharp late bounce",
+   "summary": "Nasdaq 100 futures fell 3.44% to 28,545 as tech sold off, then jumped 0.93% in the last measured hour. The supplied headlines do not clearly explain either move.",
+   "what_it_means": "The supplied headlines point at tech-specific selling. One says US tech stocks saw sharp falls as AI spending nears $1tn. Another describes tech getting crushed while defensive stocks shine. Reddit plunged 30% after a weak outlook, and a $6.3 billion crypto exchange hack added a risk-off tone. None of these is a confirmed cause of a 3.4% index drop, and nothing supplied explains the late bounce. Treat the reason as unclear.",
+   "market_reaction": "NQ ended the day 3.44% lower at 28,545, below yesterday's low and last week's low. Its 942-point range was 196% of a typical day. In the last hour it rose 0.93% while the VIX fear gauge dropped 13.02%. S&P 500 futures fell 1.81% on the day, gold lost 3.49% and oil gained 1.12%.",
+   "rates_read": "Yields fell on the day: the 10-year dropped 6.8bp to 4.921% and the 2-year 7.1bp to 4.585%. Lower yields usually help Nasdaq stocks, because future profits are worth more today, yet NQ still fell hard. So yields do not explain the drop. In the last hour, yields barely moved while NQ bounced.",
+   "watch_next": [
+    "Whether the late bounce carries into the next session",
+    "Tech earnings and any commentary on AI spending",
+    "VXN at 29.40, 9.88 points above the VIX",
+    "Fallout from the $6.3 billion Binance hack"
+   ],
+   "learn": "VXN is the Nasdaq's 'fear gauge': it shows how much price swings options traders expect over the next year, as a yearly rate. At 29.40 it sits 9.88 points above the VIX, meaning options markets expect more turbulence in tech than in the wider market.",
+   "nq_tone": "negative"
+  }
+ }
+}

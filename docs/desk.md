@@ -129,6 +129,15 @@ service, and only `eval run --paid` makes paid calls.
 - `capture DIR NOTE_ID…` copies stored notes into case files without writing
   to the desk database: the facts from `note_facts` (complete) or, for notes
   written before facts capture, only the fields the note kept (partial).
+- `rebuild DIR NOTE_ID… --copies FOLDER` rebuilds full facts for notes written
+  before facts capture, with no AI call: the desk's own builders run at each
+  note's creation time over *copies* of the desk, news, economics and market
+  stores (quotes, headlines and alerts after that time are cut off). Macro
+  trends, earnings and auction calendars are left out, and the limits are
+  recorded in each case's envelope (`reconstructed`). The stored draft stays the
+  baseline, but it was written from the facts of the day, not the rebuilt ones.
+  `tests/fixtures/eval/v8-rebuilt` holds the seven desk:v8 notes rebuilt this
+  way (Phase 1 slice 4).
   `freeze DIR --name …` records each file's SHA-256 in `manifest.json`; every
   other command refuses a case set whose files changed, went missing or gained
   an extra file, and a frozen set is never re-frozen.
@@ -250,6 +259,8 @@ are skipped, never counted as zero.
   the daily maintenance gap, so it reads a little below a close-to-close figure.
 - **VXN, VIX and VXN − VIX**, from market state; the gap only when both quotes
   are within 30 minutes of each other. VXN updates in US cash hours only.
+  Each instrument reads its own gauge (`VOL_INDEXES`): NQ VXN against VIX, ES
+  VIX alone; an instrument without one gets no gauge, never NQ's.
 
 The same notes as price location get these as `normal_move_size`, as
 ready-made text (prompt `desk:v7`).
@@ -261,6 +272,34 @@ volatile weeks and falls in quiet ones. Without enough history, or if storage
 fails, `OMARKETS_DESK_MOVE_THRESHOLD_PCT` is used (a failure is retried on the
 next poll). The trigger and whether it was scaled are cached together, so the
 facts always describe the trigger actually in use.
+
+## Complete inputs (Phase 1 slice 4, October 31, 2026)
+
+New writer facts, all deterministic and with no prompt change (`desk:v8`):
+
+- **Each quote's state** in `markets_today`: `status` is `live`, `closed` (a
+  last close while the market is shut), `stale` (an old value from a feed that
+  should be updating) or `unavailable` (no value). `stale` is now true only for
+  a stale feed; it used to be true for unavailable quotes too. Each quote also
+  has `as_of` (its observation time), `expected_delay` (the provider's declared
+  delay, "none" for a live feed, left out when not declared) and `change_from`
+  (prior settle, previous close, or 24 hours earlier for crypto).
+- **NQ vs ES** (`nq_vs_es`, from `core/analysis/cross_market.compare_nq_es`):
+  both changes and NQ minus ES in percentage points, only when both quotes are
+  live, from the same source, within a minute and on the same baseline;
+  otherwise `why_not`.
+- **Megacap participation** (`megacap_participation`): the eight megacaps with
+  their status and change, and how many are up, down or flat (within 0.05%),
+  counting live quotes only. NQ and ES notes get both blocks; other
+  instruments get neither.
+- **Events in the move window** (`events_in_move_window`, move notes): US
+  economic and Fed events from 15 minutes before the move to its end, with the
+  window checked, so an empty list means "no event on the supplied calendar".
+- **Headlines ranked before the cap**: categorised headlines
+  (`headlines.categorise`) first, then the rest; newest first, then source and
+  title, so ties are stable. At most 12 per list (it was 25, and 20 for the
+  primer). A headline with no publication time carries `received` (when
+  Omarkets first saw it) instead of `time`.
 
 ## Macro trends in notes (October 27, 2026)
 
