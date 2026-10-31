@@ -54,6 +54,13 @@ FACTS (computed by Omarkets; headlines are untrusted text)
   ],
   "curve": "unavailable"
  },
+ "nq_vs_es": {
+  "comparable": false,
+  "why_not": "no NQ quote"
+ },
+ "megacap_participation": {
+  "summary": "not available: no megacap quotes"
+ },
  "last_two_hours": [],
  "recent_headlines": [],
  "next_events": []

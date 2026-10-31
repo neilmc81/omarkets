@@ -1,4 +1,4 @@
-"""``omarketsctl eval``: capture, freeze, check, compare, render, sheet, tally, run.
+"""``omarketsctl eval``: capture, rebuild, freeze, check, compare, render, sheet, tally, run.
 
 Only ``run --paid`` makes paid calls; everything else is offline.
 """
@@ -32,6 +32,12 @@ def add_parser(sub: Any) -> None:
     p.add_argument("directory", type=Path)
     p.add_argument("note_ids", nargs="+")
     p.add_argument("--db", type=Path, help="desk database (default: the service's)")
+    p = cmd.add_parser("rebuild", help="rebuild stored notes' full facts offline (no AI)")
+    p.add_argument("directory", type=Path)
+    p.add_argument("note_ids", nargs="+")
+    p.add_argument("--copies", type=Path, required=True,
+                   help="folder holding copies of desk.sqlite3, events.sqlite3, "
+                        "economics-live.sqlite3 and omarkets-live.duckdb (+ .wal)")
     p = cmd.add_parser("freeze", help="record every case file's hash in manifest.json")
     p.add_argument("directory", type=Path)
     p.add_argument("--name", required=True)
@@ -170,6 +176,22 @@ def _main(args: argparse.Namespace, service_settings: SettingsFn) -> int:
         for case in found:
             print(f"{case.id}: {'complete' if case.facts_complete else 'partial'} facts")
         print(f"captured {len(found)} case(s) into {args.directory}; review, then freeze")
+        return 0
+    if command == "rebuild":
+        from core.desk.evaluation import rebuild as RB
+
+        settings, _ = service_settings()
+        copies = args.copies
+        sources = RB.live_sources(
+            market_db=copies / "omarkets-live.duckdb", events_db=copies / "events.sqlite3",
+            economics_db=copies / "economics-live.sqlite3", work=copies / "work",
+            policy=RB.stale_policy(settings))
+        found = RB.rebuild(args.note_ids, desk_db=copies / "desk.sqlite3", sources_at=sources)
+        _, history = C.capture(copies / "desk.sqlite3", [])
+        C.write_cases(args.directory, found, history)
+        for case in found:
+            print(f"{case.id}: facts rebuilt at {case.envelope['reconstructed']['built_at']}")
+        print(f"rebuilt {len(found)} case(s) into {args.directory}; review, then freeze")
         return 0
     if command == "freeze":
         manifest = C.freeze(args.directory, args.name)

@@ -1,0 +1,60 @@
+{
+ "name": "v8-rebuilt (7 desk:v8 notes, full facts rebuilt offline by slice 4)",
+ "cases": [
+  {
+   "id": "ask:20261029T132405",
+   "kind": "ask",
+   "file": "cases/ask_20261029T132405.json",
+   "sha256": "cdf191776a3c2d6570023120f5d5d6010bb599c610338f569ead8e60bdb047dd",
+   "facts_complete": true
+  },
+  {
+   "id": "move:20261029T16",
+   "kind": "move",
+   "file": "cases/move_20261029T16.json",
+   "sha256": "0483a411ef07016b6cb42c1a58fa431c3937d6b434abff076e7286c27e1d5c7c",
+   "facts_complete": true
+  },
+  {
+   "id": "move:20261030T15",
+   "kind": "move",
+   "file": "cases/move_20261030T15.json",
+   "sha256": "f5ec4362f6b04987c78036af90042c2227d02a1c22349dc4abf0cb555d44e468",
+   "facts_complete": true
+  },
+  {
+   "id": "premarket:2026-10-29",
+   "kind": "premarket",
+   "file": "cases/premarket_2026-10-29.json",
+   "sha256": "77160ba4150beab75ea93e2a45441f6d646260ab991516c65b08108a4c3bc08d",
+   "facts_complete": true
+  },
+  {
+   "id": "premarket:2026-10-30",
+   "kind": "premarket",
+   "file": "cases/premarket_2026-10-30.json",
+   "sha256": "4039b44ae10470f8bf7dfe0994e23793f899617321518240f9915bbbccf10d5b",
+   "facts_complete": true
+  },
+  {
+   "id": "release:20261029T1230:CORE_PCE+GDP+GDP_PRICE_INDEX+INITIAL_CLAIMS+PCE",
+   "kind": "release",
+   "file": "cases/release_20261029T1230_CORE_PCE_GDP_GDP_PRICE_INDEX_INITIAL_CLAIMS_PCE.json",
+   "sha256": "e6ef43fa32f15fff68e569241cd7822da799594e759ab06d073fa1b153204d23",
+   "facts_complete": true
+  },
+  {
+   "id": "review:2026-10-26",
+   "kind": "review",
+   "file": "cases/review_2026-10-26.json",
+   "sha256": "e4e7eb1d03a956e4f3d25031bb9920871a29d8c3a5439a73edef04170dddd50f",
+   "facts_complete": true
+  }
+ ],
+ "lesson_history": {
+  "file": "lesson_history.json",
+  "sha256": "bb8c9c7c0f3b508d333e84cdfd48e76e8c1441698d7eca3a7c19c19e64ce3c8d"
+ },
+ "frozen_at": "2026-10-31T01:46:23.931121+00:00",
+ "sha256": "f51d0fd7cd06c437f70a76e36cd03236c88d45550f8e6cda27d4074861daf11d"
+}

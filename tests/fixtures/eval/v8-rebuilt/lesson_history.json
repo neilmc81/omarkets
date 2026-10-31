@@ -1,0 +1,278 @@
+[
+ {
+  "id": "primer:2026-10-19",
+  "kind": "primer",
+  "created_at": "2026-10-19T11:10:33.964247+00:00",
+  "learn": "EPS is earnings per share, a company's profit divided by its share count. Traders compare it to a forecast, but the company's outlook for coming quarters often matters more. A stock can fall after an EPS beat if the outlook disappoints."
+ },
+ {
+  "id": "ask:20261019T125318",
+  "kind": "ask",
+  "created_at": "2026-10-19T12:53:32.937787+00:00",
+  "learn": "Futures trade almost around the clock, so they show how the market is leaning before the 9:30 ET stock open. Prices here are delayed about 10 minutes. The \"change today\" is measured from the start of the futures session, not from yesterday's stock-market close."
+ },
+ {
+  "id": "ask:20261019T125525",
+  "kind": "ask",
+  "created_at": "2026-10-19T12:55:38.056722+00:00",
+  "learn": "A basis point (bp) is one-hundredth of a percentage point. A yield moving +1.3bp is a tiny shift. A move of 10bp or more over a few days is what gets traders' attention, especially for rate-sensitive Nasdaq stocks."
+ },
+ {
+  "id": "premarket:2026-10-19",
+  "kind": "premarket",
+  "created_at": "2026-10-19T13:01:03.217770+00:00",
+  "learn": "A basis point (bp) is one-hundredth of a percentage point. Yield moves are quoted in bp. The 10-year yield's +0.0bp means it has barely moved today, and that matters because fast yield jumps tend to pressure tech stocks."
+ },
+ {
+  "id": "ask:20261019T150400",
+  "kind": "ask",
+  "created_at": "2026-10-19T15:04:13.603894+00:00",
+  "learn": "The yield curve compares the 10-year yield with the 2-year yield. Right now the 10-year is 37bp above the 2-year (+37bp), which is called a normal curve. When the 2-year is higher instead, the curve is inverted. Traders watch it for clues about growth and Fed expectations."
+ },
+ {
+  "id": "release:20261020T1215:ADP",
+  "kind": "release",
+  "created_at": "2026-10-20T12:41:38.478722+00:00",
+  "learn": "A basis point (bp) is one-hundredth of a percentage point. A 2.6bp drop in the 2-year yield is small but meaningful in bonds. Traders watch it because the 2-year reflects what investors expect the Fed to do with interest rates."
+ },
+ {
+  "id": "premarket:2026-10-20",
+  "kind": "premarket",
+  "created_at": "2026-10-20T13:06:16.703180+00:00",
+  "learn": "A basis point (bp) is one-hundredth of a percentage point. A 3.4bp fall in the 10-year yield, from about 5.14% to 5.102%, is a small daily move. The size and speed of the move matter more than the direction alone."
+ },
+ {
+  "id": "ask:20261020T131010",
+  "kind": "ask",
+  "created_at": "2026-10-20T13:10:17.242404+00:00",
+  "learn": "Futures are contracts that let traders bet on where an index will be later. They trade almost around the clock, so they show how markets are leaning before the stock market opens at 9:30 ET."
+ },
+ {
+  "id": "release:20261020T1230:BUILDING_PERMITS+HOUSING_STARTS",
+  "kind": "release",
+  "created_at": "2026-10-20T13:15:29.035088+00:00",
+  "learn": "A \"surprise\" is the gap between the actual number and the forecast. Markets price in the forecast ahead of time, so the gap moves prices, not the number itself. With no actual figure, there is no surprise to measure."
+ },
+ {
+  "id": "ask:20261020T132829",
+  "kind": "ask",
+  "created_at": "2026-10-20T13:28:37.799867+00:00",
+  "learn": "Futures trade nearly around the clock, so they show how the market is leaning before the 9:30 ET stock open. 'Change today' is measured from the start of the futures session, not from yesterday's stock close. Always check which baseline a number uses."
+ },
+ {
+  "id": "move:20261020T10",
+  "kind": "move",
+  "created_at": "2026-10-20T14:38:59.751833+00:00",
+  "learn": "When stocks rise while the VIX, yields and the dollar fall together, traders call it a 'risk-on' mood. It means investors feel calmer and more willing to own growth assets. It describes the mood, not the reason. Finding the real trigger needs evidence, like a headline at the exact minute."
+ },
+ {
+  "id": "earnings:NFLX:2026-10-20",
+  "kind": "earnings",
+  "created_at": "2026-10-20T20:35:59.423643+00:00",
+  "learn": "Guidance is a company's own forecast for the coming months. Stocks look forward, so a weak outlook can outweigh a strong past quarter. That is why a company can 'beat' expectations and still see its shares fall."
+ },
+ {
+  "id": "premarket:2026-10-21",
+  "kind": "premarket",
+  "created_at": "2026-10-21T13:01:01.010317+00:00",
+  "learn": "A Treasury auction is when the government sells new bonds. If buyers show weak demand, the government must offer higher yields to attract them, and yields can jump across the market. Higher yields often weigh on Nasdaq stocks, so auction results can move NQ in the afternoon."
+ },
+ {
+  "id": "earnings:TSLA:2026-10-21",
+  "kind": "earnings",
+  "created_at": "2026-10-21T20:36:04.143354+00:00",
+  "learn": "A \"beat\" means results came in above what analysts expected. It does not guarantee the stock or index rises. Traders also judge the quality of the beat, such as which business lines grew or shrank, and what the company says about the future."
+ },
+ {
+  "id": "premarket:2026-10-22",
+  "kind": "premarket",
+  "created_at": "2026-10-22T13:00:38.083904+00:00",
+  "learn": "Normally, falling yields lift tech stocks because future profits are worth more today. When stocks and yields fall together and the VIX rises, investors may be moving money toward safer assets like bonds. It's a pattern worth noticing, not proof of a cause."
+ },
+ {
+  "id": "release:20261022T1230:INITIAL_CLAIMS",
+  "kind": "release",
+  "created_at": "2026-10-22T13:02:02.636883+00:00",
+  "learn": "For jobless claims, 'below forecast' means fewer layoffs, which signals a stronger economy. Strong data can push yields up, because the Fed may feel less need to cut rates. That is why good economic news is sometimes mildly negative for Nasdaq stocks."
+ },
+ {
+  "id": "ask:20261022T134958",
+  "kind": "ask",
+  "created_at": "2026-10-22T13:50:25.712084+00:00",
+  "learn": "The VIX is a 'fear gauge' built from options prices. It estimates how much traders expect the S&P 500 to swing over the next month. When it jumps, as it did today (+8.87%), investors are paying more for protection. That often happens when stocks fall."
+ },
+ {
+  "id": "move:20261022T10",
+  "kind": "move",
+  "created_at": "2026-10-22T14:49:50.544198+00:00",
+  "learn": "Flight to safety: when fear rises, investors often sell riskier assets like tech stocks and buy government bonds. Buying bonds pushes yields down. So falling yields alongside falling stocks can signal worry, not relief. The VIX measures expected stock swings. A rising VIX means more fear."
+ },
+ {
+  "id": "auction:2026-10-22:91282CRR4",
+  "kind": "auction",
+  "created_at": "2026-10-22T17:27:04.320894+00:00",
+  "learn": "Bid-to-cover: dollars bid for every dollar of bonds sold. At 2.41, buyers offered $2.41 for each $1 on sale. Higher means more competition and usually a lower yield for the government. Lower means less appetite. MarketOS calls it weak when it is at least 5% below the recent average."
+ },
+ {
+  "id": "premarket:2026-10-23",
+  "kind": "premarket",
+  "created_at": "2026-10-23T13:00:55.329044+00:00",
+  "learn": "The VIX is called the fear gauge. It uses options prices to measure how much movement traders expect in the S&P 500 over the next month. When the VIX rises, as it did today, investors are paying more for protection. That is a sign of nervousness."
+ },
+ {
+  "id": "move:20261023T10",
+  "kind": "move",
+  "created_at": "2026-10-23T14:51:27.155231+00:00",
+  "learn": "Divergence: when two related markets move differently. Here, Nasdaq rose much more than the S&P 500. Nasdaq is heavy in big tech, while the S&P is broader. A gap like this often means money is favoring tech stocks specifically, not the whole market."
+ },
+ {
+  "id": "review:2026-10-19",
+  "kind": "review",
+  "created_at": "2026-10-23T20:15:46.378075+00:00",
+  "learn": "A 'beat' is not automatically good news. Tesla beat on earnings and sales, yet NQ fell afterward. Traders also weigh the details, like shrinking car revenue. First reactions can mislead too: NQ's early dip was small, then grew. Always check whether a move holds."
+ },
+ {
+  "id": "ask:20261024T074748",
+  "kind": "ask",
+  "created_at": "2026-10-24T07:48:30.253644+00:00",
+  "learn": "A bond yield is the return an investor gets for lending money to a government. When yields rise, lenders are demanding more. Tech profits mostly arrive years from now, so a higher yield shrinks what those future profits are worth today."
+ },
+ {
+  "id": "primer:2026-10-26",
+  "kind": "primer",
+  "created_at": "2026-10-25T21:01:42.456195+00:00",
+  "learn": "Core PCE is the Fed's preferred inflation gauge; it strips out food and energy. A hotter reading can push rate-cut expectations later, which often pressures NQ because higher rates reduce the present value of future profits."
+ },
+ {
+  "id": "move:20261026T08",
+  "kind": "move",
+  "created_at": "2026-10-26T12:17:19.012491+00:00",
+  "learn": "A basis point is one hundredth of a percentage point. The small yield moves above are quoted in basis points because even tiny shifts in yields change how much investors will pay today for profits that arrive years from now, which is why long-dated tech stocks are sensitive to them."
+ },
+ {
+  "id": "premarket:2026-10-26",
+  "kind": "premarket",
+  "created_at": "2026-10-26T13:00:41.638685+00:00",
+  "learn": "A Treasury auction is how the government borrows money by selling bonds. If buyers show weak demand, yields can rise to attract them. Higher yields can weigh on Nasdaq stocks. Strong demand can do the opposite, so traders watch auction results."
+ },
+ {
+  "id": "move:20261026T11",
+  "kind": "move",
+  "created_at": "2026-10-26T15:19:12.018870+00:00",
+  "learn": "The VIX is called the fear gauge: it reflects how much option traders expect the S&P 500 to swing. A sharp drop like today's 8.17% means investors are pricing less near-term turbulence, which often coincides with rallies in riskier assets like Nasdaq stocks."
+ },
+ {
+  "id": "release:20261027T1215:ADP",
+  "kind": "release",
+  "created_at": "2026-10-27T12:42:21.279362+00:00",
+  "learn": "A 'forecast' is the consensus estimate analysts expect. Without one, there is no 'beat' or 'miss' — only the change from the previous reading. That is why a 17K print can be described as steady but not graded as a surprise."
+ },
+ {
+  "id": "premarket:2026-10-27",
+  "kind": "premarket",
+  "created_at": "2026-10-27T13:00:46.336063+00:00",
+  "learn": "Treasury auction: the government borrows by selling bonds to investors. If demand is weak, buyers ask for higher yields. That can push rates up and weigh on Nasdaq stocks. Strong demand tends to calm yields. Today's 5-year note sale is $70 billion."
+ },
+ {
+  "id": "release:20261027T1230:DURABLE_GOODS",
+  "kind": "release",
+  "created_at": "2026-10-27T13:16:33.709959+00:00",
+  "learn": "\"Core\" durable goods orders strip out transportation, mainly aircraft, which swing wildly order to order. The core figure is the cleaner read on underlying business investment, while the headline number can jump on a single large plane order."
+ },
+ {
+  "id": "release:20261027T1400:NEW_HOME_SALES",
+  "kind": "release",
+  "created_at": "2026-10-27T14:46:05.495636+00:00",
+  "learn": "New Home Sales is a monthly count of contracts signed to buy newly built houses. It is a small, jumpy series, but it shows how interest rates affect housing demand, because mortgages are the biggest cost for most buyers."
+ },
+ {
+  "id": "move:20261027T11",
+  "kind": "move",
+  "created_at": "2026-10-27T15:33:53.360346+00:00",
+  "learn": "The VIX is called the fear gauge: it measures how much option protection investors are paying for, so it tends to rise when stocks fall. A 4.35% drop to 17.59 means less demand for protection and a calmer mood, which usually travels with firming stock prices."
+ },
+ {
+  "id": "premarket:2026-10-28",
+  "kind": "premarket",
+  "created_at": "2026-10-28T13:01:01.034133+00:00",
+  "learn": "A 'hawkish hold' means the Fed leaves rates unchanged but signals worry about inflation, hinting that rate cuts may wait. Markets often react more to that message than to the decision itself, because it shapes expectations for future rates and moves the 2-year yield."
+ },
+ {
+  "id": "release:20261028T1800:FOMC+FOMC_STATEMENT",
+  "kind": "fed",
+  "created_at": "2026-10-28T18:27:33.197513+00:00",
+  "learn": "Hawkish vs dovish: hawkish means the Fed leans toward keeping rates higher to fight inflation; dovish means it leans toward cutting to support growth. A \"hold\" is neutral on its own — the tone of the statement and press conference decides which way it reads."
+ },
+ {
+  "id": "release:20261028T1830:FOMC_PRESS_CONFERENCE",
+  "kind": "fed",
+  "created_at": "2026-10-28T19:42:07.746162+00:00",
+  "learn": "Hawkish means leaning toward keeping rates high or raising them to fight inflation; dovish means leaning toward cuts to support growth. The same decision can read either way depending on the reason given — which is why the chair's words move markets as much as the rate itself."
+ },
+ {
+  "id": "move:20261028T16",
+  "kind": "move",
+  "created_at": "2026-10-28T20:11:35.408738+00:00",
+  "learn": "Nasdaq 100 futures trade around the clock, so the biggest moves often come after the US cash close, when companies report earnings. Futures react first; the cash index catches up at the next open. That is why an after-the-bell headline can move NQ before the index shows it."
+ },
+ {
+  "id": "earnings:MSFT:2026-10-28",
+  "kind": "earnings",
+  "created_at": "2026-10-28T20:36:22.124001+00:00",
+  "learn": "A stock 'beat' means it reported earnings or revenue above what analysts forecast. Because the Nasdaq 100 weights companies by size, a giant like Microsoft can move the index. On this night the index fell anyway, which shows other forces were also at work."
+ },
+ {
+  "id": "earnings:GOOGL:2026-10-28",
+  "kind": "earnings",
+  "created_at": "2026-10-28T20:37:14.547967+00:00",
+  "learn": "Free cash flow is the cash left after running the business and paying for investments like data centers. Investors watch it because heavy AI spending can shrink free cash flow even when revenue grows."
+ },
+ {
+  "id": "premarket:2026-10-29",
+  "kind": "premarket",
+  "created_at": "2026-10-29T13:00:43.094889+00:00",
+  "learn": "The VXN is the Nasdaq 'fear gauge'. It shows how much movement options traders expect. It closed Wednesday at 23.78, well above the VIX at 16.97. When VXN sits above VIX, traders worry more about tech than the wider market. That fits a day when tech is leading the losses."
+ },
+ {
+  "id": "release:20261029T1230:CORE_PCE+GDP+GDP_PRICE_INDEX+INITIAL_CLAIMS+PCE",
+  "kind": "release",
+  "created_at": "2026-10-29T13:16:35.334811+00:00",
+  "learn": "Jobless claims are the weekly count of people newly filing for unemployment benefits. Fewer claims than forecast suggests companies are laying off fewer workers, which points to a firmer job market and can make the Fed less inclined to cut rates."
+ },
+ {
+  "id": "ask:20261029T132405",
+  "kind": "ask",
+  "created_at": "2026-10-29T13:24:35.996166+00:00",
+  "learn": "A basis point (bp) is one-hundredth of a percentage point, so yields are quoted in tiny units. Small moves matter: a few basis points on the 10-year shifts borrowing costs across the economy and nudges how investors value future tech profits."
+ },
+ {
+  "id": "move:20261029T16",
+  "kind": "move",
+  "created_at": "2026-10-29T20:16:43.634415+00:00",
+  "learn": "Capital spending, or capex, is the money a company puts into long-term assets like data centres and chips. When a giant like Amazon holds capex steady instead of raising it, suppliers expect fewer orders — which is why AI-spending jitters can hit chip and tech stocks fast."
+ },
+ {
+  "id": "earnings:AMZN:2026-10-29",
+  "kind": "earnings",
+  "created_at": "2026-10-29T20:37:06.607245+00:00",
+  "learn": "Capex means capital spending: money a company puts into long-lived assets like data centres and servers. For AI-focused companies, high capex signals investment but also costs. A miss on earnings is when profit comes in below what analysts forecast."
+ },
+ {
+  "id": "premarket:2026-10-30",
+  "kind": "premarket",
+  "created_at": "2026-10-30T13:00:32.965851+00:00",
+  "learn": "Index weight: the Nasdaq 100 gives bigger companies more weight. A big drop in a giant like Amazon pulls the whole index down more than a drop in a small company would. That's why a few earnings reports can move NQ much more than the S&P 500."
+ },
+ {
+  "id": "move:20261030T15",
+  "kind": "move",
+  "created_at": "2026-10-30T20:03:02.054804+00:00",
+  "learn": "VXN is the Nasdaq's 'fear gauge': it shows how much price swings options traders expect over the next year, as a yearly rate. At 29.40 it sits 9.88 points above the VIX, meaning options markets expect more turbulence in tech than in the wider market."
+ },
+ {
+  "id": "review:2026-10-26",
+  "kind": "review",
+  "created_at": "2026-10-30T20:16:00.539955+00:00",
+  "learn": "A 'beat' can still disappoint. Microsoft's headline said it beat, yet NQ slipped. Markets judge results against hopes, and also against forward signals like spending plans. If a company beats but doesn't ease worries about costly AI spending, its stock and the index can still fall."
+ }
+]

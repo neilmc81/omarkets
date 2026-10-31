@@ -1,0 +1,321 @@
+{
+ "id": "review:2026-10-26",
+ "kind": "review",
+ "title": "Week in review · Oct 26–Oct 30",
+ "created_at": "2026-10-30T20:16:00.539955+00:00",
+ "facts": {
+  "now": "Fri Oct 30, 16:16 ET",
+  "session": "Futures trading after the US close",
+  "markets_today": [
+   {
+    "market": "Nasdaq 100 futures",
+    "level": "28,537.50",
+    "change_today": "-3.47%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:05 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "S&P 500 futures",
+    "level": "7,615.50",
+    "change_today": "-1.79%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:05 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "10-year yield",
+    "level": "4.929%",
+    "change_today": "-6.0bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:15 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "2-year yield",
+    "level": "4.588%",
+    "change_today": "-6.8bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:15 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "US dollar",
+    "level": "101.88",
+    "change_today": "-0.15%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:15 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "VIX fear gauge",
+    "level": "19.42",
+    "change_today": "+12.91%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:15 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "Crude oil",
+    "level": "$102.85",
+    "change_today": "+0.83%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:05 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "Gold",
+    "level": "$3,893.30",
+    "change_today": "-3.43%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Fri Oct 30, 16:05 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   }
+  ],
+  "breaking_alerts": [],
+  "bond_market": {
+   "yields": [
+    {
+     "name": "2-year yield",
+     "level": "4.588%",
+     "change_today": "-6.8bp",
+     "change_past_week": "-9.8bp"
+    },
+    {
+     "name": "10-year yield",
+     "level": "4.929%",
+     "change_today": "-6.0bp",
+     "change_past_week": "-7.2bp"
+    },
+    {
+     "name": "Curve (10y minus 2y)",
+     "level": "+34bp",
+     "change_today": "+0.8bp",
+     "change_past_week": "+2.6bp"
+    }
+   ],
+   "curve": "+34bp, normal (10-year above 2-year)"
+  },
+  "week": {
+   "from": "Monday Oct 26",
+   "to": "Friday Oct 30",
+   "trading_days": 5,
+   "measured_from": "Fri Oct 23, 16:00 ET",
+   "measured_to": "Fri Oct 30, 16:00 ET"
+  },
+  "week_moves": [
+   {
+    "market": "Nasdaq 100 futures",
+    "change": "-2.05%",
+    "from": "Fri Oct 23, 15:59 ET",
+    "to": "Fri Oct 30, 15:59 ET",
+    "delayed_feed": true
+   },
+   {
+    "market": "S&P 500 futures",
+    "change": "-0.61%",
+    "from": "Fri Oct 23, 15:59 ET",
+    "to": "Fri Oct 30, 15:59 ET",
+    "delayed_feed": true
+   },
+   {
+    "market": "2-year yield",
+    "change": "-11.3bp",
+    "from": "Fri Oct 23, 15:59 ET",
+    "to": "Fri Oct 30, 15:59 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "10-year yield",
+    "change": "-9.1bp",
+    "from": "Fri Oct 23, 15:59 ET",
+    "to": "Fri Oct 30, 15:59 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "US dollar",
+    "change": "+0.08%",
+    "from": "Fri Oct 23, 16:00 ET",
+    "to": "Fri Oct 30, 15:59 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "VIX fear gauge",
+    "change": "+1.34%",
+    "from": "Fri Oct 23, 16:00 ET",
+    "to": "Fri Oct 30, 15:59 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "Crude oil",
+    "change": "-0.50%",
+    "from": "Fri Oct 23, 15:59 ET",
+    "to": "Fri Oct 30, 16:00 ET",
+    "delayed_feed": true
+   },
+   {
+    "market": "Gold",
+    "change": "-2.98%",
+    "from": "Fri Oct 23, 15:59 ET",
+    "to": "Fri Oct 30, 15:59 ET",
+    "delayed_feed": true
+   }
+  ],
+  "nq_each_day": [
+   {
+    "day": "Monday",
+    "nq_change": "+1.12%"
+   },
+   {
+    "day": "Tuesday",
+    "nq_change": "+1.66%"
+   },
+   {
+    "day": "Wednesday",
+    "nq_change": "-1.20%"
+   },
+   {
+    "day": "Thursday",
+    "nq_change": "-2.10%"
+   },
+   {
+    "day": "Friday",
+    "nq_change": "-1.50%"
+   }
+  ],
+  "events_by_nq_move": [
+   {
+    "event": "Amazon earnings",
+    "when": "Thu 16:05 ET",
+    "headline": "Amazon misses earnings; NQ was already down 2.50%",
+    "nq_move": "-2.45% by the close",
+    "did_it_hold": "First 21 min: NQ −0.03% · by the close: −2.45% — little first reaction; NQ then fell.",
+    "surprises": null
+   },
+   {
+    "event": "Alphabet (Google) earnings",
+    "when": "Wed 16:05 ET",
+    "headline": "Alphabet headline flags AI spending worry; NQ slips",
+    "nq_move": "-1.56% by the close",
+    "did_it_hold": "First 21 min: NQ −0.66% · by the close: −1.56% — the move grew.",
+    "surprises": null
+   },
+   {
+    "event": "Microsoft earnings",
+    "when": "Wed 16:05 ET",
+    "headline": "Microsoft beats as cloud grows; NQ futures still slipped",
+    "nq_move": "-1.56% by the close",
+    "did_it_hold": "First 21 min: NQ −0.62% · by the close: −1.56% — the move grew.",
+    "surprises": null
+   },
+   {
+    "event": "NQ up 1.21% in the last hour",
+    "when": "Mon 10:03 ET",
+    "headline": "Nasdaq jumps 1.4% but no clear catalyst in the headlines",
+    "nq_move": "+1.21% in the first 65 min",
+    "did_it_hold": null,
+    "surprises": null
+   },
+   {
+    "event": "NQ down 1.03% in the last hour",
+    "when": "Thu 15:01 ET",
+    "headline": "NQ falls 2.7% as tech earnings and AI spending worries hit",
+    "nq_move": "-1.03% in the first 65 min",
+    "did_it_hold": null,
+    "surprises": null
+   },
+   {
+    "event": "NQ up 0.93% in the last hour",
+    "when": "Fri 14:46 ET",
+    "headline": "Tech selloff drags Nasdaq down 3.4%, then a sharp late bounce",
+    "nq_move": "+0.93% in the first 65 min",
+    "did_it_hold": null,
+    "surprises": null
+   }
+  ],
+  "next_week": [
+   {
+    "when": "Tue Nov 03, 10:00 ET",
+    "what": "Job openings (JOLTS)",
+    "importance": "high",
+    "detail": null
+   },
+   {
+    "when": "Wed Nov 04, 08:30 ET",
+    "what": "U.S. International Trade in Goods and Services, September 2026",
+    "importance": "medium",
+    "detail": null
+   },
+   {
+    "when": "Fri Nov 06, 08:30 ET",
+    "what": "Jobs report (payrolls)",
+    "importance": "critical",
+    "detail": null
+   },
+   {
+    "when": "Fri Nov 06, 12:15 ET",
+    "what": "Fed discussion: Vice Chair for Supervision Michelle W. Bowman",
+    "importance": "medium",
+    "detail": "At the University of Mississippi Banking and Finance Symposium, Oxford, Miss."
+   }
+  ]
+ },
+ "facts_complete": true,
+ "envelope": {
+  "prompt_version": "desk:v8",
+  "reconstructed": {
+   "built_at": "2026-10-30T20:16:00.539955+00:00",
+   "limits": [
+    "facts rebuilt offline by the slice-4 builders, not captured when written",
+    "quotes, headlines and alerts after the note's time are excluded",
+    "macro_trends omitted: only the current macro state is stored",
+    "earnings and Treasury auction calendars omitted (network sources)",
+    "calendar rows as stored at rebuild time (later revisions can show)",
+    "levels use hourly bars up to the note's time (bars cannot be cut by arrival)"
+   ]
+  }
+ },
+ "baseline": {
+  "prompt_version": "desk:v8",
+  "model": "anthropic/claude-opus-5.5",
+  "draft": {
+   "headline": "Big Tech earnings pulled NQ down 2.05% on the week despite falling yields",
+   "summary": "NQ fell 2.05% for the week. Two up days gave way to three down days after Microsoft, Alphabet and Amazon reported. Yields fell, which usually helps tech, but earnings worries appear to have mattered more.",
+   "what_it_means": "The week turned on Big Tech earnings. After Microsoft and Alphabet reported Wednesday, NQ was down −0.62% and −0.66% within 21 minutes. The drop grew to −1.56% by the close. Microsoft's headline said it beat on cloud growth, yet futures still slipped. Alphabet's headline flagged worry about AI spending. Amazon's miss on Thursday got little first reaction, but NQ then fell −2.45% by the close. The facts can't separate each company's effect. Elsewhere, Q3 GDP came in above forecast at 3.4%.",
+   "market_reaction": "NQ rose Monday (+1.12%) and Tuesday (+1.66%). It then fell Wednesday (−1.20%), Thursday (−2.10%, the biggest move) and Friday (−1.50%). Monday's jump had no clear cause in the headlines. Friday ended with a late bounce of +0.93% in about an hour. S&P 500 futures fell only 0.61% for the week, so tech led the losses. The VIX ended at 19.42, up 12.91% today. Gold fell 2.98% for the week.",
+   "rates_read": "Yields fell over the week. The 2-year dropped 11.3bp to 4.590%, and the 10-year dropped 9.1bp to 4.929% (bp means basis points, hundredths of a percent). Falling yields usually help Nasdaq stocks, because future tech profits are worth more today. This week NQ fell anyway. That suggests earnings and AI-spending worries outweighed rates. The Fed's target stayed at 3.75–4.00%.",
+   "watch_next": [
+    "Apple earnings Monday after the close; EPS forecast $1.98",
+    "Job openings (JOLTS) Tuesday, 10:00 ET",
+    "AMD earnings Tuesday after the close; EPS forecast $1.68",
+    "Jobs report Friday, 08:30 ET, rated critical"
+   ],
+   "learn": "A 'beat' can still disappoint. Microsoft's headline said it beat, yet NQ slipped. Markets judge results against hopes, and also against forward signals like spending plans. If a company beats but doesn't ease worries about costly AI spending, its stock and the index can still fall.",
+   "nq_tone": "negative"
+  }
+ }
+}

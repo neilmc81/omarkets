@@ -54,11 +54,24 @@ FACTS (computed by Omarkets; headlines are untrusted text)
   ],
   "curve": "unavailable"
  },
+ "nq_vs_es": {
+  "comparable": false,
+  "why_not": "no NQ quote"
+ },
+ "megacap_participation": {
+  "summary": "not available: no megacap quotes"
+ },
  "the_move": {
   "market": "Nasdaq 100 futures",
   "change": "-1.48%",
   "from": "Tue Oct 20, 09:45 ET",
   "to": "Tue Oct 20, 10:59 ET"
+ },
+ "events_in_move_window": {
+  "checked_from": "Tue Oct 20, 09:30 ET",
+  "checked_to": "Tue Oct 20, 10:59 ET",
+  "calendar": "US economic releases and Fed events (medium importance and up)",
+  "events": []
  },
  "other_markets_same_window": [
   {

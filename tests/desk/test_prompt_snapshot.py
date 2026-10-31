@@ -50,3 +50,31 @@ async def test_nq_prompt_snapshot(kind):
     # Release notes are desk-wide; they still use NQ's v8 text.
     prompt = render(kind, None if kind is NoteKind.RELEASE else NQ, facts)
     check(f"nq_{kind.value}.txt", f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")
+
+
+async def test_nq_prompt_snapshot_with_market_state():
+    """Slice 4's new blocks with real quotes: per-quote status, NQ vs ES and megacaps."""
+    from core.domain.instruments import AssetClass, QuoteType
+    from core.domain.models import DataStatus, FeedStatus
+    from tests.desk.test_complete_inputs import inst
+
+    now = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
+    service, _, _ = make(now, rows=cpi_rows())
+    service.sources.market_state().instruments.update({i.symbol: i for i in (
+        inst("NQ", 30120.5, change_pct=0.62),
+        inst("ES", 6810.25, change_pct=0.31),
+        inst("US10Y", 4.012, change=0.031, change_pct=None, delay=0, feed=FeedStatus.LIVE,
+             asset=AssetClass.TREASURY_YIELD, quote=QuoteType.YIELD),
+        inst("US2Y", None, status=DataStatus.UNAVAILABLE, change=None, change_pct=None,
+             at=None, delay=0, feed=FeedStatus.UNAVAILABLE,
+             asset=AssetClass.TREASURY_YIELD, quote=QuoteType.YIELD),
+        inst("VIX", 18.39, status=DataStatus.STALE, feed=FeedStatus.STALE, delay=0,
+             asset=AssetClass.VOLATILITY_INDEX, quote=QuoteType.INDEX),
+        inst("NVDA", 190.1, change_pct=1.2, asset=AssetClass.EQUITY),
+        inst("MSFT", 520.4, change_pct=-0.4, asset=AssetClass.EQUITY),
+        inst("AAPL", 260.0, status=DataStatus.STALE, asset=AssetClass.EQUITY),
+    )})
+    await service.ask()
+    facts = next(f for k, f in service.writer.calls if k is NoteKind.ASK)
+    prompt = render(NoteKind.ASK, NQ, facts)
+    check("nq_ask_market_state.txt", f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")

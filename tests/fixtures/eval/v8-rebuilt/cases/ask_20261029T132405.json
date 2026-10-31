@@ -1,0 +1,385 @@
+{
+ "id": "ask:20261029T132405",
+ "kind": "ask",
+ "title": "Market right now",
+ "created_at": "2026-10-29T13:24:35.996166+00:00",
+ "facts": {
+  "now": "Thu Oct 29, 09:24 ET",
+  "session": "Futures trading overnight · US open in 5m",
+  "markets_today": [
+   {
+    "market": "Nasdaq 100 futures",
+    "level": "29,702.75",
+    "change_today": "-0.92%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:14 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "S&P 500 futures",
+    "level": "7,761.50",
+    "change_today": "-0.28%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:14 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "10-year yield",
+    "level": "4.995%",
+    "change_today": "-5.0bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:24 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "2-year yield",
+    "level": "4.685%",
+    "change_today": "-5.0bp",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:24 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "US dollar",
+    "level": "102.33",
+    "change_today": "+0.14%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:24 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "VIX fear gauge",
+    "level": "16.99",
+    "change_today": "+0.47%",
+    "delayed": false,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:24 ET",
+    "expected_delay": "none",
+    "change_from": "the previous session's close"
+   },
+   {
+    "market": "Crude oil",
+    "level": "$100.78",
+    "change_today": "-1.95%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:14 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   },
+   {
+    "market": "Gold",
+    "level": "$4,037.90",
+    "change_today": "-0.34%",
+    "delayed": true,
+    "stale": false,
+    "status": "live",
+    "as_of": "Thu Oct 29, 09:14 ET",
+    "expected_delay": "about 10 minutes",
+    "change_from": "the previous session's settle"
+   }
+  ],
+  "breaking_alerts": [],
+  "bond_market": {
+   "yields": [
+    {
+     "name": "2-year yield",
+     "level": "4.685%",
+     "change_today": "-5.0bp",
+     "change_past_week": "-4.6bp"
+    },
+    {
+     "name": "10-year yield",
+     "level": "4.995%",
+     "change_today": "-5.0bp",
+     "change_past_week": "-4.5bp"
+    },
+    {
+     "name": "Curve (10y minus 2y)",
+     "level": "+31bp",
+     "change_today": "+0.0bp",
+     "change_past_week": "+0.1bp"
+    }
+   ],
+   "curve": "+31bp, normal (10-year above 2-year)"
+  },
+  "nq_price_location": {
+   "nq_price": "29,702.75",
+   "levels": [
+    {
+     "level": "Prior settle",
+     "value": "29,979.50",
+     "nq_is": "276.75 points below"
+    },
+    {
+     "level": "Overnight high",
+     "value": "29,789.75",
+     "nq_is": "87.00 points below",
+     "measured": "Wed Oct 28 18:00 ET to Thu Oct 29 09:24 ET"
+    },
+    {
+     "level": "Overnight low",
+     "value": "29,483.75",
+     "nq_is": "219.00 points above",
+     "measured": "Wed Oct 28 18:00 ET to Thu Oct 29 09:24 ET"
+    },
+    {
+     "level": "Prior day high",
+     "value": "30,175.00",
+     "nq_is": "472.25 points below",
+     "measured": "Tue Oct 27 18:00 ET to Wed Oct 28 17:00 ET"
+    },
+    {
+     "level": "Prior day low",
+     "value": "29,680.75",
+     "nq_is": "22.00 points above",
+     "measured": "Tue Oct 27 18:00 ET to Wed Oct 28 17:00 ET"
+    },
+    {
+     "level": "Prior week high",
+     "value": "30,112.75",
+     "nq_is": "410.00 points below",
+     "measured": "Sun Oct 18 18:00 ET to Fri Oct 23 17:00 ET"
+    },
+    {
+     "level": "Prior week low",
+     "value": "28,992.75",
+     "nq_is": "710.00 points above",
+     "measured": "Sun Oct 18 18:00 ET to Fri Oct 23 17:00 ET"
+    }
+   ],
+   "overnight_so_far": true,
+   "as_of": "Thu Oct 29, 09:14 ET"
+  },
+  "normal_move_size": {
+   "typical_daily_range": "494 points (1.66%)",
+   "typical_measured_over": "median of the last 15 complete sessions",
+   "session_range_so_far": "Thu Oct 29 session: 306 points (1.03%), 62% of a typical day",
+   "realised_volatility": "17.3% a year",
+   "vxn": "23.78",
+   "vxn_as_of": "Wed Oct 28 16:15 ET",
+   "large_move_trigger": "0.92% in one hour, scaled to the typical daily range"
+  },
+  "nq_vs_es": {
+   "comparable": true,
+   "nq_change_today": "-0.92%",
+   "es_change_today": "-0.28%",
+   "nq_minus_es": "-0.64 percentage points",
+   "reading": "NQ did worse than ES",
+   "as_of": "Thu Oct 29, 09:14 ET"
+  },
+  "megacap_participation": {
+   "summary": "not available: no live megacap quotes",
+   "flat_means": "within 0.05% of the baseline",
+   "stocks": [
+    {
+     "stock": "NVDA",
+     "status": "stale",
+     "change_today": "-1.16%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    },
+    {
+     "stock": "MSFT",
+     "status": "stale",
+     "change_today": "+0.23%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    },
+    {
+     "stock": "AAPL",
+     "status": "stale",
+     "change_today": "-0.91%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    },
+    {
+     "stock": "AMZN",
+     "status": "stale",
+     "change_today": "+0.61%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    },
+    {
+     "stock": "META",
+     "status": "stale",
+     "change_today": "-1.25%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    },
+    {
+     "stock": "GOOGL",
+     "status": "stale",
+     "change_today": "+1.58%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    },
+    {
+     "stock": "AVGO",
+     "status": "stale",
+     "change_today": "+2.82%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    },
+    {
+     "stock": "TSLA",
+     "status": "stale",
+     "change_today": "-0.74%",
+     "as_of": "Wed Oct 28, 16:00 ET"
+    }
+   ]
+  },
+  "last_two_hours": [
+   {
+    "market": "Nasdaq 100 futures",
+    "change": "-0.02%",
+    "from": "Thu Oct 29, 07:24 ET",
+    "to": "Thu Oct 29, 09:14 ET",
+    "delayed_feed": true
+   },
+   {
+    "market": "S&P 500 futures",
+    "change": "-0.07%",
+    "from": "Thu Oct 29, 07:24 ET",
+    "to": "Thu Oct 29, 09:14 ET",
+    "delayed_feed": true
+   },
+   {
+    "market": "2-year yield",
+    "change": "-1.0bp",
+    "from": "Thu Oct 29, 07:23 ET",
+    "to": "Thu Oct 29, 09:24 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "10-year yield",
+    "change": "-1.2bp",
+    "from": "Thu Oct 29, 07:24 ET",
+    "to": "Thu Oct 29, 09:24 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "US dollar",
+    "change": "+0.18%",
+    "from": "Thu Oct 29, 07:24 ET",
+    "to": "Thu Oct 29, 09:24 ET",
+    "delayed_feed": false
+   },
+   {
+    "market": "VIX fear gauge",
+    "change": "+0.12%",
+    "from": "Thu Oct 29, 07:24 ET",
+    "to": "Thu Oct 29, 09:24 ET",
+    "delayed_feed": false
+   }
+  ],
+  "recent_headlines": [
+   {
+    "time": "Thu Oct 29, 09:19 ET",
+    "source": "cnbc_economy",
+    "headline": "European Central Bank keeps key interest rate on hold at 2.5%"
+   },
+   {
+    "time": "Thu Oct 29, 08:32 ET",
+    "source": "cnbc_top",
+    "headline": "Third-quarter U.S. GDP increases a better-than-expected 3.4% as September inflation accelerates"
+   },
+   {
+    "time": "Thu Oct 29, 07:50 ET",
+    "source": "cnbc_top",
+    "headline": "President of the European Central Bank Christine Lagarde to step down. Here's who is tipped to replace her"
+   },
+   {
+    "time": "Thu Oct 29, 07:49 ET",
+    "source": "guardian_world",
+    "headline": "Israel election results live: president warns against ‘tarnishing an entire community’ in defence of Palestinian vote"
+   },
+   {
+    "time": "Thu Oct 29, 07:41 ET",
+    "source": "cnbc_tech",
+    "headline": "Alphabet drags on Nasdaq futures as the stock faces a record post-earnings loss"
+   },
+   {
+    "time": "Thu Oct 29, 07:34 ET",
+    "source": "npr_world",
+    "headline": "GDP report to give insight before Election Day. And, Israel's election is deadlocked"
+   },
+   {
+    "time": "Thu Oct 29, 07:34 ET",
+    "source": "bbc_world",
+    "headline": "Record number of purges as Xi emphasises 'party discipline' at China political gathering"
+   },
+   {
+    "time": "Thu Oct 29, 07:30 ET",
+    "source": "cnbc_top",
+    "headline": "AI build-out hits snag as Google and Microsoft put off raising capex forecasts"
+   },
+   {
+    "time": "Thu Oct 29, 07:09 ET",
+    "source": "cnbc_tech",
+    "headline": "U.S. worker job engagement hits lowest level since 2011, new Gallup poll finds"
+   },
+   {
+    "time": "Thu Oct 29, 07:00 ET",
+    "source": "cnbc_top",
+    "headline": "Alphabet earnings miss reflects first real sign that AI is taking a bite out of search"
+   },
+   {
+    "time": "Thu Oct 29, 06:56 ET",
+    "source": "guardian_world",
+    "headline": "Europe’s central bank chief Christine Lagarde to step down nine months early"
+   },
+   {
+    "time": "Thu Oct 29, 06:46 ET",
+    "source": "cnbc_top",
+    "headline": "President of the European Central Bank Christine Lagarde to step down in February"
+   }
+  ],
+  "next_events": []
+ },
+ "facts_complete": true,
+ "envelope": {
+  "prompt_version": "desk:v8",
+  "reconstructed": {
+   "built_at": "2026-10-29T13:24:35.996166+00:00",
+   "limits": [
+    "facts rebuilt offline by the slice-4 builders, not captured when written",
+    "quotes, headlines and alerts after the note's time are excluded",
+    "macro_trends omitted: only the current macro state is stored",
+    "earnings and Treasury auction calendars omitted (network sources)",
+    "calendar rows as stored at rebuild time (later revisions can show)",
+    "levels use hourly bars up to the note's time (bars cannot be cut by arrival)"
+   ]
+  },
+  "instrument": "NQ"
+ },
+ "baseline": {
+  "prompt_version": "desk:v8",
+  "model": "deepseek/deepseek-v4.1-flash-1017",
+  "draft": {
+   "headline": "NQ falls 0.93% as Alphabet drags tech; yields ease",
+   "summary": "Nasdaq 100 futures are down 0.93% with the US open minutes away, and headlines point to a record post-earnings drop in Alphabet. Yields are lower, which usually helps tech, but the tech-specific selling is the bigger force this morning.",
+   "what_it_means": "Alphabet's earnings miss is the main headline for tech: reports say the stock faces a record post-earnings loss, and that AI is starting to bite into search. Reports also say Google and Microsoft held off raising AI spending forecasts. Separately, the GDP headline showed the US economy grew a better-than-expected 3.4% in the third quarter while September inflation accelerated — strong growth, but hotter prices, a harder mix for the Fed.",
+   "market_reaction": "NQ is at 29,700.00, down 0.93% today and 279.50 points below the prior settle of 29,979.50. It sits just 19.25 points above yesterday's low of 29,680.75 and below the overnight high of 29,789.75. S&P 500 futures are only 0.28% lower. The session range is 306 points, 62% of a typical day's 494 points.",
+   "rates_read": "The 10-year yield is 4.993%, down 5.2 basis points today; the 2-year is 4.681%, down 5.4. Both are also lower over the past week, and the curve is +31bp, a normal shape. Falling yields usually help Nasdaq stocks because future profits are discounted less. Today that help is not enough to offset the tech-specific selling.",
+   "watch_next": [
+    "Amazon earnings after the close; EPS forecast $2.01",
+    "$44 billion 7-year Treasury auction at 13:00 ET",
+    "Yesterday's low of 29,680.75, just under current NQ",
+    "September inflation detail inside the GDP report"
+   ],
+   "learn": "A basis point (bp) is one-hundredth of a percentage point, so yields are quoted in tiny units. Small moves matter: a few basis points on the 10-year shifts borrowing costs across the economy and nudges how investors value future tech profits.",
+   "nq_tone": "negative"
+  }
+ }
+}
