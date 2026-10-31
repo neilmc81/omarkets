@@ -92,6 +92,14 @@ INSTRUMENTS: tuple[Explainer, ...] = (
            "usually about tech.",
            "The whole US market is rising. If NQ rises more, tech is leading.",
            "The whole US market is falling. If NQ falls more, tech is leading the drop."),
+    _entry("instrument", "YM", "Dow futures",
+           "Futures on the Dow Jones Industrial Average, 30 large US companies weighted by "
+           "share price. They trade on CBOT and are quoted in whole points.",
+           "The Dow holds fewer tech names than the Nasdaq 100. When the Dow rises while NQ "
+           "falls, money is moving out of tech rather than out of stocks.",
+           "Big established companies are being bought. If NQ lags, tech is out of favour.",
+           "Big established companies are being sold. If NQ holds up, tech is the safer "
+           "place today."),
     _entry("instrument", "US2Y", "2-year yield",
            "The interest rate on 2-year US government bonds.",
            "It follows what traders expect the Fed to do with interest rates, and Nasdaq "

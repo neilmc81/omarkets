@@ -22,6 +22,8 @@ from core.domain.news import EntityKind, EntityRef
 INSTRUMENT_ALIASES: dict[str, tuple[str, ...]] = {
     "NQ": ("nasdaq-100", "nasdaq 100", "e-mini nasdaq", "nasdaq futures", "nq futures", "nasdaq"),
     "ES": ("s&p 500", "s&p500", "e-mini s&p", "s&p futures", "es futures", "spx"),
+    "YM": ("dow jones industrial average", "dow jones", "e-mini dow", "dow futures",
+           "ym futures", "djia"),
     "US10Y": (
         "10-year treasury",
         "10 year treasury",

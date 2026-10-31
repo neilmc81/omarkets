@@ -97,3 +97,20 @@ def test_quotes_from_another_contract_are_not_mixed_in(memory_repo):
     levels = by_key(key_levels("NQ", nq(contract="NQH27"), memory_repo.ohlc, now=PREMARKET))
     assert levels["prior_week_high"].value is None
     assert "NQZ26" in levels["prior_week_high"].unavailable_reason
+
+
+def test_ym_levels_are_written_in_whole_points(memory_repo):
+    """YM quotes whole index points, so its levels carry no decimals; NQ keeps two."""
+    def ym(ts: datetime, value: float) -> MarketObservation:
+        return MarketObservation(symbol="YM", timestamp=ts, value=value, unit="index points",
+                                 source="cnbc", received_at=ts + timedelta(minutes=10),
+                                 metadata={"feed_status": "delayed", "contract_code": "YMZ26"})
+
+    memory_repo.store([ym(at(2026, 10, 22, 1, 0), 51_701.0), ym(at(2026, 10, 22, 8, 0), 52_662.0)])
+    state = SimpleNamespace(value=51_928.0, previous_close=52_512.0, contract_code="YMZ26",
+                            feed_status="delayed")
+    levels = by_key(key_levels("YM", state, memory_repo.ohlc, now=PREMARKET))
+    assert levels["overnight_high"].value_text == "52,662"
+    assert levels["overnight_low"].value_text == "51,701"
+    assert levels["prior_settle"].value_text == "52,512"
+    assert levels["gap_vs_settle"].value_text == "-584 (-1.11%)"

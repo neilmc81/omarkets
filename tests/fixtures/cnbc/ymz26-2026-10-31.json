@@ -1,0 +1,52 @@
+{
+ "FormattedQuoteResult": {
+  "FormattedQuote": [
+   {
+    "symbol": "YMZ26",
+    "symbolType": "symbol",
+    "code": 0,
+    "name": "@YM26Z",
+    "shortName": "DJ MNI($5) DEC26",
+    "onAirName": "@YM26Z",
+    "altName": "DJ MNI($5) DEC26",
+    "last": "51,928.00",
+    "last_timedate": "5:40 PM EDT",
+    "last_time": "2026-10-31T17:40:26.000-0400",
+    "changetype": "DOWN",
+    "type": "DERIVATIVE",
+    "subType": "Future",
+    "exchange": "Chicago Board of Trade",
+    "source": "Exchange",
+    "open": "52,499.00",
+    "high": "52,662.00",
+    "low": "51,701.00",
+    "change": "-584.00",
+    "change_pct": "-1.11%",
+    "currencyCode": "USD",
+    "volume": "106,912",
+    "volume_alt": "106.9K",
+    "provider": "CNBC Quote Cache",
+    "previous_day_closing": "52,512.00",
+    "altSymbol": "YMZ26",
+    "realTime": "false",
+    "curmktstatus": "REG_MKT",
+    "yrhiprice": "52,662.00",
+    "yrhidate": "10/31/26",
+    "yrloprice": "0.00",
+    "streamable": "1",
+    "open_interest": "93297",
+    "expiration_date": "2026-12-18",
+    "settlePrice": "51918.00",
+    "settleDate": "2026-10-30",
+    "issue_id": "1038601073",
+    "countryCode": "US",
+    "timeZone": "EDT",
+    "feedSymbol": "/YMZ26",
+    "portfolioindicator": "N",
+    "EventData": {
+     "is_halted": "N"
+    }
+   }
+  ]
+ }
+}

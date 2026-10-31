@@ -362,7 +362,8 @@ async def test_closed_stream_rechecks_wall_clock_promptly_after_laptop_resume(mo
 
 
 @pytest.mark.parametrize(
-    "symbol,delay", [("NQ", 600), ("ES", 600), ("WTI", 600), ("GOLD", 600), ("VXN", 900)]
+    "symbol,delay",
+    [("NQ", 600), ("ES", 600), ("YM", 600), ("WTI", 600), ("GOLD", 600), ("VXN", 900)],
 )
 async def test_known_provider_delay_provenance(symbol, delay):
     from datetime import timedelta
@@ -380,7 +381,7 @@ async def test_known_provider_delay_provenance(symbol, delay):
         await client.aclose()
 
 
-@pytest.mark.parametrize("symbol", ["NQ", "ES"])
+@pytest.mark.parametrize("symbol", ["NQ", "ES", "YM"])
 async def test_normal_ten_minute_delay_is_usable_with_original_times(symbol):
     from datetime import timedelta
 
@@ -436,7 +437,9 @@ def test_expected_delays_live_in_the_adapter_table():
     from core.providers.cnbc import EXPECTED_DELAY_SECONDS
 
     # The values the inline literal held before Phase 0 moved them here.
-    assert EXPECTED_DELAY_SECONDS == {"NQ": 600, "ES": 600, "WTI": 600, "GOLD": 600, "VXN": 900}
+    # YM joined in Phase 2 with the same ten-minute delay as NQ and ES.
+    assert EXPECTED_DELAY_SECONDS == {"NQ": 600, "ES": 600, "YM": 600, "WTI": 600, "GOLD": 600,
+                                      "VXN": 900}
 
 
 async def test_a_declared_delay_reads_delayed_not_stale(monkeypatch):
@@ -479,3 +482,41 @@ async def test_a_declared_delay_reads_delayed_not_stale(monkeypatch):
         assert quote.delayed and not quote.stale and not quote.closed
     finally:
         await client.aclose()
+
+
+async def test_ym_parses_a_live_cbot_dow_quote():
+    """``tests/fixtures/cnbc/ymz26-2026-10-31.json`` is CNBC's live YMZ26 record
+    (fetched Oct 31, 2026). YM asks for the explicit contract month; the
+    continuous ``@YM.1`` returns no quote."""
+    import json
+    from pathlib import Path
+
+    fixture = json.loads((Path(__file__).parents[1] / "fixtures" / "cnbc"
+                          / "ymz26-2026-10-31.json").read_text())
+    now = datetime(2026, 10, 31, 21, 41, tzinfo=UTC)
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json=fixture)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    p = CNBCMarketDataProvider(client=client, clock=lambda: now, symbols=("YM",))
+    try:
+        (observation,) = await p.fetch_snapshot()
+    finally:
+        await client.aclose()
+    assert "YMZ26" in seen["url"] and "@YM" not in seen["url"]
+    assert observation.symbol == "YM"
+    assert observation.value == 51928.0
+    assert observation.unit == "index points"
+    assert observation.timestamp == datetime(2026, 10, 31, 21, 40, 26, tzinfo=UTC)
+    meta = observation.metadata
+    assert meta["provider_symbol"] == "YMZ26"
+    assert meta["exchange"] == "Chicago Board of Trade"
+    assert meta["contract_code"] == "YMZ26"
+    assert meta["contract_expiry"] == "2026-12-18"
+    assert meta["previous_close"] == 52512.0
+    assert (meta["open"], meta["high"], meta["low"]) == (52499.0, 52662.0, 51701.0)
+    assert meta["volume"] == 106912
+    assert meta["feed_status"] == "delayed" and meta["expected_delay_seconds"] == 600

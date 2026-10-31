@@ -31,6 +31,7 @@ CASH_INDEXES = frozenset({"VIX", "VXN"})
 LABELS: dict[str, str] = {
     "NQ": "Nasdaq 100 futures",
     "ES": "S&P 500 futures",
+    "YM": "Dow futures",
     "US2Y": "2-year yield",
     "US10Y": "10-year yield",
     "DXY": "US dollar",

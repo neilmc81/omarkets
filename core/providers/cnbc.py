@@ -6,8 +6,9 @@ status, and (usually) a day open/high/low and previous close.
 
 Scope notes, verified against live responses:
 
-* futures require an explicit contract month (``NQZ26``), not a continuous
-  symbol; the contract is resolved in :mod:`core.domain.contracts`. WTI uses
+* futures require an explicit contract month (``NQZ26``, ``YMZ26``), not a
+  continuous symbol (``@YM.1`` returns nothing); the contract is resolved in
+  :mod:`core.domain.contracts`. WTI uses
   ``CLZ26`` and so on: the continuous ``@CL.1`` kept serving the expired
   November contract's last trade for eight hours after it expired (Oct 20, 2026),
 * gold still uses the continuous ``@GC.1`` (an active-month series),
@@ -47,7 +48,7 @@ NEW_YORK = ZoneInfo("America/New_York")
 
 Clock = Callable[[], datetime]
 
-#: Canonical symbol -> CNBC symbol. ``NQ``/``ES``/``WTI`` are generated per
+#: Canonical symbol -> CNBC symbol. ``NQ``/``ES``/``YM``/``WTI`` are generated per
 #: active contract at fetch time, so they are handled separately.
 SYMBOL_MAP: dict[str, str] = {
     "US2Y": "US2Y",
@@ -75,6 +76,7 @@ SYMBOL_MAP: dict[str, str] = {
 EXPECTED_DELAY_SECONDS: dict[str, int] = {
     "NQ": 600,
     "ES": 600,
+    "YM": 600,
     "WTI": 600,
     "GOLD": 600,
     "VXN": 900,
