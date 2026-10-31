@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { pageFromLocation, pageSearch, PAGES } from "../../../web/src/shell/routes";
 
 describe("page routing", () => {
-  it("routes ?view= to each of the seven pages", () => {
+  it("routes ?view= to each of the eight pages", () => {
     for (const page of PAGES) expect(pageFromLocation(pageSearch(page))).toBe(page);
     expect(pageFromLocation("?view=Chart")).toBe("chart");
     expect(pageSearch("today")).toBe("");
@@ -17,6 +17,7 @@ describe("page routing", () => {
     expect(pageFromLocation("?view=details")).toBe("chart");
     expect(pageFromLocation("?view=learn")).toBe("learn");
     expect(pageFromLocation("?view=playbook")).toBe("playbook");
+    expect(pageFromLocation("?view=watchlists")).toBe("watchlists");
   });
 
   it("opens Today for retired, unknown or missing pages", () => {

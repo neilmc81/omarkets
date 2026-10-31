@@ -15,6 +15,7 @@ import { ShellHeader } from "./shell/Shell";
 import { StatusPanel } from "./shell/StatusPanel";
 import { useDesk } from "./shell/useDesk";
 import { useShortcuts } from "./shell/useShortcuts";
+import { WatchlistsPage } from "./watchlists/WatchlistsPage";
 
 
 const noteFromLocation = (search = window.location.search) => new URLSearchParams(search).get("note");
@@ -87,6 +88,7 @@ export function Root() {
       {page === "news" && <NewsPage />}
       {page === "learn" && <LearnPage />}
       {page === "playbook" && <PlaybookPage />}
+      {page === "watchlists" && <WatchlistsPage />}
       <footer className="t-footer">Education and analysis only · no trading or order execution</footer>
     </div>
   </NavigateContext.Provider>;

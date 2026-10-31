@@ -48,11 +48,11 @@ const current = () => screen.getByRole("link", { current: "page" });
 const press = (key: string, target: Element | Window = window) => fireEvent.keyDown(target, { key });
 
 describe("shared shell", () => {
-  it("has one header with the wordmark, seven tabs, the feeds dot and Explain", async () => {
+  it("has one header with the wordmark, eight tabs, the feeds dot and Explain", async () => {
     serve();
     render(<Root />);
     const tabs = screen.getByRole("navigation", { name: "Pages" });
-    expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Today", "Chart", "Calendar", "Macro", "News", "Playbook", "Learn"]);
+    expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Today", "Chart", "Calendar", "Macro", "News", "Playbook", "Learn", "Watchlists"]);
     expect(screen.getByRole("link", { name: "Omarkets home" })).toBeInTheDocument();
     expect(await screen.findByText("All feeds OK")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Explain the market now (E)" })).toBeEnabled();
@@ -125,13 +125,15 @@ describe("shared shell", () => {
     }
   });
 
-  it("switches pages with 1–7 and ignores keys typed into inputs", async () => {
+  it("switches pages with 1–8 and ignores keys typed into inputs", async () => {
     serve();
     render(<Root />);
     press("2");
     expect(current()).toHaveTextContent("Chart");
     press("5");
     expect(await screen.findByRole("heading", { name: "News" })).toBeInTheDocument();
+    press("8");
+    expect(current()).toHaveTextContent("Watchlists");
     press("7");
     expect(current()).toHaveTextContent("Learn");
     const search = await screen.findByLabelText("Search lessons");

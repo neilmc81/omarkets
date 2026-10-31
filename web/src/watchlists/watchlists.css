@@ -1,0 +1,82 @@
+/* Watchlists page. Colours come from the Omarchy tokens only. */
+
+.t-page.wl-page {
+  max-width: 1000px;
+}
+
+.wl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.wl-name,
+.wl-add label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--t-muted);
+}
+
+.wl-name input {
+  font-size: 16px;
+  min-width: 260px;
+}
+
+.wl-actions,
+.wl-add {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.wl-add {
+  margin-top: 12px;
+}
+
+.wl-table .wl-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.wl-row-actions {
+  text-align: right;
+}
+
+.wl-row-actions button {
+  padding: 0 4px;
+}
+
+.wl-row-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.wl-unknown td,
+.wl-warn {
+  color: var(--t-warn);
+}
+
+.wl-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid var(--t-line);
+  background: var(--surface-2);
+}
+
+.wl-badge.wl-demo { color: var(--t-warn); background: var(--warn-soft); font-weight: 600; }
+.wl-badge.wl-live { color: var(--t-up); }
+.wl-badge.wl-delayed { color: var(--text-soft); }
+.wl-badge.wl-stale { color: var(--t-warn); background: var(--warn-soft); }
+.wl-badge.wl-closed,
+.wl-badge.wl-none { color: var(--t-muted); }
+
+.wl-empty {
+  margin: 12px 0;
+}
