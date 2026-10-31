@@ -14,11 +14,13 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from datetime import date, datetime
 from pathlib import Path
 
 from core.config import effective
 from core.config.settings import Settings
 from core.desk.evaluation import cli as evaluation
+from core.domain.sessions import NEW_YORK
 
 
 def _get(settings: Settings, path: str) -> dict:
@@ -26,6 +28,14 @@ def _get(settings: Settings, path: str) -> dict:
     try:
         with urllib.request.urlopen(url, timeout=5) as response:  # noqa: S310
             return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # The API answered, with an error: show its reason, not "cannot reach".
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("detail", exc.reason)
+        except (ValueError, AttributeError):
+            detail = exc.reason
+        print(f"omarketsctl: {path}: {exc.code} {detail}", file=sys.stderr)
+        raise SystemExit(2) from exc
     except urllib.error.URLError as exc:
         print(f"omarketsctl: cannot reach Omarkets API at {url}: {exc.reason}", file=sys.stderr)
         raise SystemExit(2) from exc
@@ -237,6 +247,41 @@ def _cmd_cross_market(settings: Settings) -> int:
     return 0
 
 
+def _et(stamp: str | None) -> str:
+    """An API timestamp as New York wall time, e.g. ``Fri Nov 27 13:15``."""
+    if stamp is None:
+        return "-"
+    return datetime.fromisoformat(stamp).astimezone(NEW_YORK).strftime("%a %b %d %H:%M")
+
+
+def _cmd_levels(settings: Settings, symbol: str, day: date | None) -> int:
+    """Key levels with the window each was measured over, for checking by hand."""
+    query = f"?date={day}" if day else ""
+    payload = _get(settings, f"/api/v1/levels/{symbol}{query}")
+    feed = "delayed feed" if payload["delayed"] else "feed not delayed"
+    print(f"{payload['symbol']} levels for trade date {payload['trade_date']}  "
+          f"contract {payload['contract'] or '-'}  {feed}")
+    print(f"as of {_et(payload['generated_at'])} ET")
+    print()
+    for level in payload["levels"]:
+        start, end = level["window_start"], level["window_end"]
+        if level["key"] == "prior_settle":
+            window = "previous session's settle, from the quote source"
+        elif start is None:
+            window = f"latest price vs settle, {_et(end)} ET (before the cash open)"
+        elif start == end:
+            window = f"first cash price at {_et(start)} ET"
+        else:
+            window = f"{_et(start)} -> {_et(end)} ET" + (" (so far)" if level["partial"] else "")
+        print(f"{level['label']:<16} {level['value_text']:>18}   {window}")
+        if level["value"] is None:
+            print(f"{'':<16} {'':>18}   why: {level['unavailable_reason']}")
+    print()
+    print("Highs and lows come from stored delayed quotes, not every trade, so they can sit")
+    print("slightly inside the exchange's range. Windows are CME sessions in New York time.")
+    return 0
+
+
 def _service_settings() -> tuple[Settings, list[effective.SettingSource], str, Path]:
     """Settings as the running service sees them, else as this shell would."""
     process = effective.service_process()
@@ -353,6 +398,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("contracts", help="show active futures contracts")
     sub.add_parser("market-providers", help="show market-data provider routing")
     sub.add_parser("cross-market", help="show NQ cross-market context")
+    levels = sub.add_parser(
+        "levels", help="show a futures symbol's key levels with their time windows"
+    )
+    levels.add_argument("symbol", help="NQ or ES")
+    levels.add_argument("--date", type=date.fromisoformat,
+                        help="a past trade date, YYYY-MM-DD (default: now)")
     config = sub.add_parser(
         "config", help="show the running service's effective settings and where each came from"
     )
@@ -379,6 +430,7 @@ def main(argv: list[str] | None = None) -> int:
         "contracts": lambda: _cmd_contracts(settings),
         "market-providers": lambda: _cmd_market_providers(settings),
         "cross-market": lambda: _cmd_cross_market(settings),
+        "levels": lambda: _cmd_levels(settings, args.symbol, args.date),
         "config": lambda: _cmd_config(args.all),
         "note-costs": _cmd_note_costs,
         "desk-backup": lambda: _cmd_desk_backup(args.target),

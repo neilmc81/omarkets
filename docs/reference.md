@@ -362,6 +362,8 @@ OMARKETS_MARKET_DATA_MODE=demo .venv/bin/omarkets   # synthetic demo
 .venv/bin/omarketsctl quote NQ
 .venv/bin/omarketsctl contracts
 .venv/bin/omarketsctl market-providers
+.venv/bin/omarketsctl levels ES                    # key levels with their windows (ET)
+.venv/bin/omarketsctl levels ES --date 2026-11-27  # a past session, at its cash close
 ```
 
 `GET /api/v1/markets/status`, `/api/v1/market/providers`, and `/api/v1/contracts`
@@ -669,7 +671,7 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | `/api/v1/bars/{symbol}` | GET | OHLC bars: `interval=5m\|15m\|1h`, `range=1d\|5d\|1m` (1m allows 15m and 1h only; 422 otherwise). See "Chart API" |
 | `/api/v1/explainers` | GET | The explainer library: `{entries: [{key, kind, name, title, what, why_nq, rising, falling, rising_label, falling_label}]}`. See "Explainer library" |
 | `/api/v1/session` | GET | The active (or last) Globex session with its segments (each with `explainer` text), the next daily break, the next open when closed, holidays and early closes in the next 21 days |
-| `/api/v1/levels/{symbol}` | GET | Key levels for NQ or ES (404 otherwise), each with explainer text |
+| `/api/v1/levels/{symbol}` | GET | Key levels for NQ or ES (404 otherwise), each with explainer text; `?date=` for a past session |
 | `/api/v1/risk-tone` | GET | Rule-based risk tone `{tone, label, reasons[], inputs[], rules}` |
 | `/api/v1/chart/pins` | GET | Release pins for `range=1d\|5d\|1m`, with result, NQ's 15-minute move and `note_id`; 503 without the desk |
 | `/api/v1/sparklines` | GET | 15-minute closes over the 24 hours to each Today tile's latest quote; null marks a missing bucket |
@@ -729,6 +731,12 @@ draws. Times are UTC; unavailable values are `null` with a reason, never zero.
   high/low (the previous Monday–Friday sessions) and gap vs settle (before 09:30
   ET: latest price minus settle; after: first cash price minus settle). Quotes
   from another futures contract (after a roll) make a level unavailable.
+  `?date=YYYY-MM-DD` gives a past session's levels as they stood at its cash
+  close (13:00 ET on a half day), with that session's own stored settle and
+  contract; a holiday, weekend or future date is a 422. On the Monday after
+  Thanksgiving the prior day is the short Friday session (Thursday 18:00 ET to
+  13:15 ET). `omarketsctl levels ES [--date YYYY-MM-DD]` prints each level with
+  its window in New York time, for checking against CME or TradingView.
 - **Risk tone** (`/api/v1/risk-tone`): NQ ±0.25%, 2-year yield ±3bp, dollar
   ±0.25%, VIX ±5% or at 25+, each since the previous close. Rising NQ, falling
   yields, a falling dollar and a falling VIX count for risk; the opposite
