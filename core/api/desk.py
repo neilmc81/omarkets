@@ -12,6 +12,7 @@ from pydantic import AwareDatetime
 from core.api.economics import calendar_coverage
 from core.desk import calendar as CAL
 from core.desk import lessons as LS
+from core.desk.identity import LEGACY, Instrument
 from core.desk.models import (
     CalendarBoard,
     DeskNote,
@@ -131,10 +132,22 @@ async def desk_note(note_id: str, desk: DeskDep) -> DeskNote:
 
 
 @router.post("/desk/ask", response_model=DeskNote)
-async def desk_ask(desk: DeskDep) -> DeskNote:
+async def desk_ask(
+    desk: DeskDep,
+    instrument: Annotated[str, Query(max_length=10)] = LEGACY,
+) -> DeskNote:
+    """Explain ``instrument`` (default NQ) right now. 400 for an instrument the
+    desk does not write for (``desk_instruments``), before anything is spent."""
+    try:
+        inst = Instrument.of(instrument)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if inst not in desk.instruments:
+        raise HTTPException(status_code=400,
+                            detail=f"The desk does not write for {inst.symbol}")
     if not desk.writer.ready:
         raise HTTPException(status_code=503, detail=desk.writer.detail)
     try:
-        return await desk.ask()
+        return await desk.ask(inst)
     except RuntimeError as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
