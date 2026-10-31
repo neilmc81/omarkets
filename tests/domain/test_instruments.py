@@ -24,6 +24,7 @@ from core.domain.instruments import (
 REQUIRED_SYMBOLS = (
     "NQ",
     "ES",
+    "YM",
     "US2Y",
     "US10Y",
     "DXY",
@@ -45,7 +46,7 @@ REQUIRED_SYMBOLS = (
 
 def test_exactly_the_required_symbols_exist() -> None:
     assert set(all_symbols()) == set(REQUIRED_SYMBOLS)
-    assert len(all_symbols()) == 18
+    assert len(all_symbols()) == 19
     assert set(INSTRUMENTS) == set(REQUIRED_SYMBOLS)
 
 
@@ -132,6 +133,7 @@ def test_asset_classes_include_spot_fx_and_cash_indices() -> None:
 def test_every_instrument_declares_venue_currency_calendar_and_precision() -> None:
     venues = {symbol: instrument.venue for symbol, instrument in INSTRUMENTS.items()}
     assert venues["NQ"] == venues["ES"] == "CME"
+    assert venues["YM"] == "CBOT"
     assert venues["BTC"] == "BINANCE"
     assert venues["NVDA"] == "NASDAQ"
     for symbol, instrument in INSTRUMENTS.items():
@@ -142,9 +144,11 @@ def test_every_instrument_declares_venue_currency_calendar_and_precision() -> No
     # Rates and indices are not amounts of money; prices are.
     for symbol in ("US2Y", "US10Y", "DXY", "VIX", "VXN"):
         assert INSTRUMENTS[symbol].currency is None, symbol
-    for symbol in ("NQ", "ES", "WTI", "GOLD", "BTC", "AAPL"):
+    for symbol in ("NQ", "ES", "YM", "WTI", "GOLD", "BTC", "AAPL"):
         assert INSTRUMENTS[symbol].currency == "USD", symbol
     assert INSTRUMENTS["US2Y"].price_precision == 3
+    # Dow futures trade in whole index points.
+    assert INSTRUMENTS["YM"].price_precision == 0
 
 
 def test_currency_must_be_an_iso_code() -> None:

@@ -155,6 +155,16 @@ _ALL: tuple[Instrument, ...] = (
         price_precision=2,
     ),
     _instrument(
+        "YM",
+        "E-mini Dow Jones futures",
+        AssetClass.EQUITY_INDEX_FUTURE,
+        QuoteType.PRICE,
+        "index points",
+        venue="CBOT",
+        currency="USD",
+        price_precision=0,
+    ),
+    _instrument(
         "US2Y",
         "US 2-year Treasury yield",
         AssetClass.TREASURY_YIELD,

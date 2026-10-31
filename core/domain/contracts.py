@@ -1,13 +1,14 @@
 """Futures contract selection.
 
-Omarkets treats ``NQ``, ``ES`` and ``WTI`` as canonical instrument identifiers,
+Omarkets treats ``NQ``, ``ES``, ``YM`` and ``WTI`` as canonical instrument identifiers,
 not as permanent contracts. A real feed quotes a specific contract month, so
 this module resolves the active front month deterministically and exposes the
 contract metadata without exposing provider symbols elsewhere.
 
 The roll rule is deliberately simple and transparent:
 
-* CME equity-index futures expire on the third Friday of H, M, U, Z months,
+* CME Group equity-index futures (NQ, ES, and YM on CBOT) expire on the third
+  Friday of H, M, U, Z months,
 * NYMEX WTI crude (``CL``) lists every month; a contract stops trading three
   business days before the 25th of the month before its contract month (four
   if the 25th is not a business day). Business days use the exchange holiday
@@ -124,4 +125,4 @@ def contract_for_symbol(
 
 
 #: Canonical symbol -> futures root. ``WTI`` is quoted from the ``CL`` contract.
-DEFAULT_FUTURES_ROOTS: dict[str, str] = {"NQ": "NQ", "ES": "ES", "WTI": "CL"}
+DEFAULT_FUTURES_ROOTS: dict[str, str] = {"NQ": "NQ", "ES": "ES", "YM": "YM", "WTI": "CL"}

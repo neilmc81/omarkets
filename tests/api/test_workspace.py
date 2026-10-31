@@ -67,7 +67,7 @@ def test_defaults_are_nq_and_the_eight_strip_symbols(client):
 
 def test_chart_instruments_say_where_levels_and_pins_exist(client):
     found = {i["symbol"]: i for i in client.get("/api/v1/chart/instruments").json()["instruments"]}
-    assert {s for s, i in found.items() if i["levels"]} == {"NQ", "ES"}
+    assert {s for s, i in found.items() if i["levels"]} == {"NQ", "ES", "YM"}
     assert {s for s, i in found.items() if i["release_pins"]} == {"NQ"}
     assert found["US10Y"]["price_precision"] == 3
     assert found["BTC"]["label"] == "Bitcoin"

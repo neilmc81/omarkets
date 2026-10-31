@@ -108,3 +108,20 @@ def test_crude_rolls_across_the_year_end():
 def test_equity_contract_month_is_its_expiry_month():
     contract = active_contract("NQ", date(2026, 9, 18))
     assert contract.contract_month == "2026-12"
+
+
+def test_ym_rolls_like_es_on_the_quarterly_third_friday():
+    """YM (CBOT Dow futures) follows the equity-index quarterly cycle: YMZ26
+    expires Friday Dec 18, 2026 and, eight days earlier, YMH27 takes over."""
+    assert contract_for_symbol("YM", date(2026, 10, 31)).code == "YMZ26"
+    december = active_contract("YM", date(2026, 12, 9))
+    assert december.code == "YMZ26"
+    assert december.expiry == date(2026, 12, 18)
+    assert december.expiry.weekday() == 4
+    assert december.provider_symbol() == "YMZ26"
+    at_roll = active_contract("YM", date(2026, 12, 10))
+    assert at_roll.code == "YMH27"
+    assert at_roll.expiry == date(2027, 3, 19)
+    # Same dates as ES: one rule, no per-root table.
+    for when in (date(2026, 12, 9), date(2026, 12, 10), date(2027, 6, 1)):
+        assert active_contract("YM", when).expiry == active_contract("ES", when).expiry

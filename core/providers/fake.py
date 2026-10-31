@@ -47,6 +47,7 @@ _SIM: dict[str, _Sim] = {
     # Primary and index futures (index points)
     "NQ": _Sim(start=24800.0, sigma=12.0, model="walk"),
     "ES": _Sim(start=6350.0, sigma=3.0, model="walk"),
+    "YM": _Sim(start=44800.0, sigma=20.0, model="walk"),
     # Treasury yields (percentage points)
     "US2Y": _Sim(start=3.91, sigma=0.012, model="mean_revert"),
     "US10Y": _Sim(start=4.28, sigma=0.010, model="mean_revert"),
