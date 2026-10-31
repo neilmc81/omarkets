@@ -18,6 +18,7 @@ from core.desk.models import NoteKind
 from core.desk.service import DeskService
 from core.domain.instruments import get_instrument
 from core.domain.models import MarketObservation
+from core.domain.workspace import FocusUpdate, Watchlist
 from core.storage.workspace import WorkspaceStore
 from tests.api.test_chart_api import StubService, inst
 from tests.desk.test_service import FakeWriter, make
@@ -115,6 +116,32 @@ def test_a_stored_value_that_no_longer_validates_reads_as_the_default(tmp_path):
     with TestClient(app_for(s)) as c:
         assert c.get("/api/v1/chart/focus").json()["symbol"] == "NQ"
         assert c.get("/api/v1/watchlist").json()["name"] == "Desk strip"
+    s.close()
+
+
+@pytest.mark.parametrize("updated_at", ["not a time", "2026-10-31T09:00:00"])
+def test_a_bad_stored_timestamp_reads_as_the_default(tmp_path, updated_at):
+    s = WorkspaceStore(tmp_path / "workspace.sqlite3")
+    s.set_focus(FocusUpdate(symbol="BTC"))
+    s.set_watchlist(Watchlist(name="Mine", symbols=["NQ"]))
+    s._db.execute("UPDATE workspace SET updated_at=?", (updated_at,))
+    s._db.commit()
+    with TestClient(app_for(s)) as c:
+        focus = c.get("/api/v1/chart/focus")
+        watch = c.get("/api/v1/watchlist")
+    assert focus.status_code == 200 and focus.json()["symbol"] == "NQ"
+    assert watch.status_code == 200 and watch.json()["name"] == "Desk strip"
+    s.close()
+
+
+def test_a_broken_store_file_is_unavailable_not_an_error(tmp_path):
+    s = WorkspaceStore(tmp_path / "workspace.sqlite3")
+    s._db.execute("DROP TABLE workspace")
+    s._db.commit()
+    with TestClient(app_for(s)) as c:
+        assert c.get("/api/v1/chart/focus").status_code == 503
+        assert c.put("/api/v1/chart/focus", json={"symbol": "ES"}).status_code == 503
+        assert c.get("/api/v1/watchlist").status_code == 503
     s.close()
 
 

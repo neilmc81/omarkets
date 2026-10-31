@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Explain } from "../shell/Explain";
 import { ChartFooter, ChartState } from "../today/Market";
 import {
@@ -48,16 +48,33 @@ function useOverlay(symbol: string, on: boolean, interval: Interval, range: Char
     on ? `${symbol}:${interval}:${range}` : `${symbol}:off`, on ? POLL[range] : 3_600_000);
 }
 
+// One queue of focus saves for the whole app, not one per page visit, so a save
+// started before leaving the Chart page can never land after a newer choice
+// made when it is reopened. `pending` is the newest choice not yet saved.
+const focusSaves = { queue: Promise.resolve() as Promise<unknown>, pending: null as ChartInstrument | null, count: 0 };
+
+function queueFocusSave(next: ChartInstrument): Promise<unknown> {
+  focusSaves.pending = next;
+  focusSaves.count += 1;
+  const run = focusSaves.queue.then(() => saveFocus(next.symbol));
+  focusSaves.queue = run.catch(() => undefined).finally(() => {
+    focusSaves.count -= 1;
+    if (focusSaves.count === 0) focusSaves.pending = null;
+  });
+  return run;
+}
+
 export function ChartPage() {
-  const [focus, setFocus] = useState<ChartInstrument | null>(null);
+  // A choice still being saved is the focus; otherwise wait for the core's.
+  const [focus, setFocus] = useState<ChartInstrument | null>(() => focusSaves.pending);
   const [focusError, setFocusError] = useState<string | null>(null);
-  const saving = useRef<Promise<void>>(Promise.resolve());
   const instruments = usePoll((signal) => fetchChartInstruments(signal), "instruments", 3_600_000);
   const watchlist = usePoll((signal) => fetchWatchlist(signal), "watchlist", 3_600_000);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchFocus(controller.signal).then(
+    // Read only after any saves in flight, so the answer is never older than them.
+    focusSaves.queue.then(() => fetchFocus(controller.signal)).then(
       (saved) => setFocus((current) => current ?? saved.instrument),
       (err: Error) => {
         if (controller.signal.aborted) return;
@@ -70,7 +87,7 @@ export function ChartPage() {
   const pick = (next: ChartInstrument) => {
     setFocus(next);
     // One save at a time, in order, so the last choice is the one kept.
-    saving.current = saving.current.then(() => saveFocus(next.symbol)).then(
+    queueFocusSave(next).then(
       () => setFocusError(null),
       (err: Error) => setFocusError(`Couldn't save the chart focus (${err.message})`));
   };
@@ -115,6 +132,8 @@ function FocusChart({ focus, choices, watchlist, pickerError, focusError, onPick
   const [interval, setBarSize] = useState<Interval>("15m");
   const [on, setOn] = useState<Record<string, boolean>>({ ES: false, US2Y: false, DXY: false });
   const [status, setStatus] = useState<string | null>(null);
+  // A new instrument starts with no hovered bar's readout from the old one.
+  useEffect(() => setStatus(null), [symbol]);
   const colors = useOverlayColors();
   const pickRange = (next: ChartRange) => {
     setRange(next);
@@ -166,7 +185,9 @@ function FocusChart({ focus, choices, watchlist, pickerError, focusError, onPick
       {pickerError && <p className="t-error" role="status">Instrument list unavailable ({pickerError})</p>}
       <ChartState bars={shown} />
       {overlayErrors.length > 0 && <p className="t-error" role="status">Overlay unavailable · {overlayErrors.join(" · ")}</p>}
-      <SessionChart bars={shown.data} levels={lines} pins={pinList} overlays={overlays} height={560} onStatus={setStatus}
+      {/* Keyed by instrument: a switch starts a fresh chart, so no hover card,
+          pinned card or crosshair from the previous instrument survives. */}
+      <SessionChart key={symbol} bars={shown.data} levels={lines} pins={pinList} overlays={overlays} height={560} onStatus={setStatus}
         precision={focus.price_precision}
         label={`${symbol} candles, ${RANGE_LABEL[range]}, ${interval} bars, times in New York.`} />
       <ChartFooter bars={shown.data} status={status} />

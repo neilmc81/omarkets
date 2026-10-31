@@ -14,11 +14,13 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
 from core.domain.workspace import FocusUpdate, Watchlist
 
 logger = logging.getLogger(__name__)
+
+_AT = TypeAdapter(AwareDatetime)
 
 FOCUS_KEY = "chart_focus"
 WATCHLIST_KEY = "watchlist"
@@ -43,11 +45,11 @@ class WorkspaceStore:
         with self._lock:
             self._db.close()
 
-    def _get(self, key: str) -> tuple[str, datetime] | None:
+    def _get(self, key: str) -> tuple[str, str] | None:
         with self._lock:
             row = self._db.execute(
                 "SELECT value, updated_at FROM workspace WHERE key=?", (key,)).fetchone()
-        return None if row is None else (row[0], datetime.fromisoformat(row[1]))
+        return None if row is None else (row[0], row[1])
 
     def _put(self, key: str, value: str, now: datetime | None) -> datetime:
         at = (now or datetime.now(UTC)).astimezone(UTC)
@@ -66,8 +68,8 @@ class WorkspaceStore:
         if row is None:
             return None
         try:
-            return FocusUpdate.model_validate_json(row[0]).symbol, row[1]
-        except ValidationError:
+            return FocusUpdate.model_validate_json(row[0]).symbol, _AT.validate_python(row[1])
+        except (ValidationError, ValueError):
             logger.warning("workspace: stored chart focus no longer valid; using the default")
             return None
 
@@ -79,8 +81,8 @@ class WorkspaceStore:
         if row is None:
             return None
         try:
-            return Watchlist.model_validate_json(row[0]), row[1]
-        except ValidationError:
+            return Watchlist.model_validate_json(row[0]), _AT.validate_python(row[1])
+        except (ValidationError, ValueError):
             logger.warning("workspace: stored watchlist no longer valid; using the default")
             return None
 

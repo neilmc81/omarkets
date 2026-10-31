@@ -15,6 +15,9 @@ bar and the desk stay on NQ.
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -46,6 +49,14 @@ def _store(request: Request) -> WorkspaceStore:
     return store
 
 
+async def _run[T](fn: Callable[..., T], *args: Any) -> T:
+    """Run a store call off the event loop; a broken store file is a 503, not a 500."""
+    try:
+        return await asyncio.to_thread(fn, *args)
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=503, detail="workspace store unavailable") from exc
+
+
 def chart_instrument(symbol: str) -> ChartInstrument:
     inst = get_instrument(symbol)
     if inst is None:  # pragma: no cover - callers pass registry symbols
@@ -72,7 +83,7 @@ def _focus(store: WorkspaceStore) -> ChartFocus:
 @router.get("/chart/focus", response_model=ChartFocus, responses=_UNAVAILABLE)
 async def get_focus(request: Request) -> ChartFocus:
     """The instrument the Chart page shows (NQ until one is chosen)."""
-    return await asyncio.to_thread(_focus, _store(request))
+    return await _run(_focus, _store(request))
 
 
 @router.put("/chart/focus", response_model=ChartFocus,
@@ -80,7 +91,7 @@ async def get_focus(request: Request) -> ChartFocus:
 async def put_focus(body: FocusUpdate, request: Request) -> ChartFocus:
     """Save the Chart page's instrument. Writes no note and calls no AI."""
     store = _store(request)
-    at = await asyncio.to_thread(store.set_focus, body)
+    at = await _run(store.set_focus, body)
     return ChartFocus(symbol=body.symbol, updated_at=at, instrument=chart_instrument(body.symbol))
 
 
@@ -95,7 +106,7 @@ def _watchlist(store: WorkspaceStore) -> SavedWatchlist:
 @router.get("/watchlist", response_model=SavedWatchlist, responses=_UNAVAILABLE)
 async def get_watchlist(request: Request) -> SavedWatchlist:
     """The watchlist (the desk strip's eight symbols until one is saved)."""
-    return await asyncio.to_thread(_watchlist, _store(request))
+    return await _run(_watchlist, _store(request))
 
 
 @router.put("/watchlist", response_model=SavedWatchlist,
@@ -103,7 +114,7 @@ async def get_watchlist(request: Request) -> SavedWatchlist:
 async def put_watchlist(body: Watchlist, request: Request) -> SavedWatchlist:
     """Replace the watchlist's name and ordered symbols."""
     store = _store(request)
-    at = await asyncio.to_thread(store.set_watchlist, body)
+    at = await _run(store.set_watchlist, body)
     return SavedWatchlist(**body.model_dump(), updated_at=at)
 
 
