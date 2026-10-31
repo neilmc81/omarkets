@@ -1958,6 +1958,21 @@
 }
 
 /* Status panel behind the feeds dot (Phase 6) */
+.shell-focus {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
+  color: var(--text-soft);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-focus:hover,
+.shell-focus:focus-visible {
+  color: var(--text);
+}
+
 button.shell-feeds {
   background: transparent;
   border: 1px solid transparent;

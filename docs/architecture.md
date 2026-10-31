@@ -348,7 +348,7 @@ each reading a core view model and doing no market calculation:
 | Page | Location | Core endpoint(s) |
 | --- | --- | --- |
 | Shell, `<Explain>`, status panel | `web/src/shell/` | `/health`, `/api/v1/desk` (feeds dot and the status panel behind it) |
-| Today | `web/src/today/` | `/api/v1/desk`, `/session`, `/levels/NQ`, `/risk-tone`, `/sparklines`, `/chart/pins` |
+| Today | `web/src/today/` | `/api/v1/desk`, `/focus/strip`, `/session`, `/levels/{focus}`, `/bars/{focus}`, `/risk-tone`, `/sparklines`, `/chart/pins` (only when the focus has release pins) |
 | Chart | `web/src/chart/` | `/bars/{symbol}`, `/levels`, `/chart/pins` |
 | Calendar | `web/src/calendar/` | `/api/v1/desk/calendar` |
 | Macro | `web/src/macro/` | `/api/v1/desk/macro` |

@@ -69,6 +69,8 @@ Item {
   readonly property string aiHealth: root.status && root.status.ai_health
     ? String(root.status.ai_health) : "unknown"
 
+  // The global focus symbol (NQ by default, or from an older core).
+  readonly property string focusSymbol: root.status && typeof root.status.focus === "string" && root.status.focus !== "" ? root.status.focus : "NQ"
   readonly property var primary: root.status && root.status.primary ? root.status.primary : null
   readonly property var strip: root.status && root.status.strip ? root.status.strip : []
   readonly property var session: root.status && root.status.session ? root.status.session : null

@@ -521,13 +521,20 @@ computed state, so QML never assembles internal models or does timezone math:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/v1/shell/status` | Bar payload (contract version 2): primary quote, strip, session, next event, `risk_tone` (`{tone, label, line}`, or null without market state), data/AI health, providers |
-| `GET /api/v1/shell/context` | Popup payload: cross-market strip, upcoming events |
+| `GET /api/v1/shell/status` | Bar payload (contract version 2): `focus` (the global focus symbol, default `NQ`), `primary` (the focus's own quote, or null when it has none), strip, session, next event, `risk_tone` (`{tone, label, line}`, or null without market state), data/AI health, providers |
+| `GET /api/v1/shell/context` | Popup payload: cross-market strip (the focus first, then NQ, ES, US2Y, US10Y, DXY, VIX, VXN), upcoming events |
 
 Both return safe defaults for unavailable sections (never a 500), so a missing
 service cannot blank the shell. The popup shows the risk-tone line and the next
 high-impact event with a countdown; QML only displays them (`risk_tone` is an
 additive field, so the contract version stays 2).
+
+The bar follows the **global focus** (the Chart page's saved focus, see "Chart
+focus and watchlist"): the strip is the focus, then the first two symbols of the
+saved watchlist; until a watchlist is saved it is the focus, the 2-year yield
+and VIX, so the default bar is still `NQ, US2Y, VIX`. `focus` is additive too
+(contract version stays 2); an older core without it reads as NQ. A workspace
+store that is missing or unreadable leaves the bar on NQ.
 
 ### Hotkeys
 
@@ -674,7 +681,8 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | `/api/v1/levels/{symbol}` | GET | Key levels for NQ or ES (404 otherwise), each with explainer text; `?date=` for a past session |
 | `/api/v1/risk-tone` | GET | Rule-based risk tone `{tone, label, reasons[], inputs[], rules}` |
 | `/api/v1/chart/pins` | GET | Release pins for `range=1d\|5d\|1m`, with result, NQ's 15-minute move and `note_id`; 503 without the desk |
-| `/api/v1/sparklines` | GET | 15-minute closes over the 24 hours to each Today tile's latest quote; null marks a missing bucket |
+| `/api/v1/sparklines` | GET | 15-minute closes over the 24 hours to each tile's latest quote; null marks a missing bucket. `?symbols=` (comma-separated, 1–20 registry symbols, 422 otherwise) names the tiles; without it, the eight desk strip symbols |
+| `/api/v1/focus/strip` | GET | Today's strip for the global focus: `{generated_at, focus, watchlist_name, symbols, quotes}`. `focus` is the Chart instrument (as in `/chart/focus`), `symbols` the focus then the watchlist (no repeats, at most 8), `quotes` the desk `Quote` tiles the market state has, in that order. Defaults to NQ and the desk strip when the workspace store is missing or unreadable; an empty `quotes` without market state. Read-only: writes no note and calls no AI |
 | `/api/v1/chart/instruments` | GET | Every registry instrument as the Chart page draws it: `{instruments: [{symbol, label, unit, price_precision, levels, release_pins}]}` |
 | `/api/v1/chart/focus` | GET, PUT | The Chart page's instrument `{symbol, updated_at, instrument}` (default NQ, `updated_at` null). PUT `{symbol}` saves it (422 if not in the registry; 503 without the workspace store). Writes no note and calls no AI |
 | `/api/v1/watchlist` | GET, PUT | The one watchlist `{name, symbols, updated_at}` (default "Desk strip": the eight Today strip symbols). PUT `{name, symbols}` replaces it; symbols must be registry instruments, no repeats (422 otherwise) |
@@ -752,9 +760,17 @@ draws. Times are UTC; unavailable values are `null` with a reason, never zero.
   and switches bars, labels, price precision and errors together. Levels are
   fetched only where `levels` is true (NQ, ES) and release pins only where
   `release_pins` is true (NQ: each pin measures NQ's first 15 minutes). The
-  picker lists the watchlist first, then the other instruments. Today, the
-  shell bar and the desk stay on NQ; a stored value that no longer validates
-  reads as the default.
+  picker lists the watchlist first, then the other instruments. A stored
+  value that no longer validates reads as the default.
+- **Global focus** (`core/api/focus.py`, no AI): the Chart page's focus is also
+  what Today and the shells lead with. Today's strip (`/api/v1/focus/strip`)
+  is the focus then the watchlist; Today's chart, its key levels (only where
+  `levels` is true) and the header's focus chip follow it, and each draws only
+  the focus's own data. The Omarchy bar's primary quote and strip follow it
+  too (see "Shell API"). The desk does not: notes, their tone ("for NQ"), the
+  writer's schedule and the risk tone stay as they were, and changing the
+  focus writes no note and calls no AI. Without a readable focus, Today shows
+  NQ with the desk's tiles.
 
 ### Calendar page
 

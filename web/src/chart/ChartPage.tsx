@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Explain } from "../shell/Explain";
+import { focusSaves, NQ_FALLBACK, queueFocusSave } from "../shell/focus";
 import { ChartFooter, ChartState } from "../today/Market";
 import {
-  fetchBars, fetchChartInstruments, fetchFocus, fetchLevels, fetchPins, fetchWatchlist, intervalsFor, RANGES, saveFocus,
+  fetchBars, fetchChartInstruments, fetchFocus, fetchLevels, fetchPins, fetchWatchlist, intervalsFor, RANGES,
   type ChartInstrument, type ChartRange, type Interval,
 } from "./api";
 import { useExplainers } from "../explainers/library";
@@ -15,18 +16,14 @@ import { usePoll } from "./usePoll";
 // 1D / 5D / 1M with level lines (NQ, ES), release pins (NQ only) and optional
 // overlays (ES, the 2-year yield, the dollar) as % change from the start of the
 // range. Bars, levels, pins, % changes, labels and precision all come from the
-// core. Changing the focus touches only this page: Today and the desk stay NQ.
+// core. The focus is global: Today and the header follow it (shell/focus.ts);
+// the desk and its notes do not.
 
 const OVERLAYS: Array<{ symbol: string; label: string; slot: OverlaySlot }> = [
   { symbol: "ES", label: "S&P 500 futures", slot: 0 },
   { symbol: "US2Y", label: "2-year yield", slot: 1 },
   { symbol: "DXY", label: "US dollar", slot: 2 },
 ];
-
-// Today's NQ chart, used only when the core can't say what the focus is.
-const NQ_FALLBACK: ChartInstrument = {
-  symbol: "NQ", label: "Nasdaq 100 futures", unit: "index points", price_precision: 2, levels: true, release_pins: true,
-};
 
 // The overlay colours the chart uses, for the toggles' underlines.
 function useOverlayColors(): [string, string, string] {
@@ -46,22 +43,6 @@ function useOverlay(symbol: string, on: boolean, interval: Interval, range: Char
   // Off overlays poll nothing: their key never changes and the loader resolves null.
   return usePoll((signal) => on ? fetchBars(symbol, interval, range, signal) : Promise.resolve(null),
     on ? `${symbol}:${interval}:${range}` : `${symbol}:off`, on ? POLL[range] : 3_600_000);
-}
-
-// One queue of focus saves for the whole app, not one per page visit, so a save
-// started before leaving the Chart page can never land after a newer choice
-// made when it is reopened. `pending` is the newest choice not yet saved.
-const focusSaves = { queue: Promise.resolve() as Promise<unknown>, pending: null as ChartInstrument | null, count: 0 };
-
-function queueFocusSave(next: ChartInstrument): Promise<unknown> {
-  focusSaves.pending = next;
-  focusSaves.count += 1;
-  const run = focusSaves.queue.then(() => saveFocus(next.symbol));
-  focusSaves.queue = run.catch(() => undefined).finally(() => {
-    focusSaves.count -= 1;
-    if (focusSaves.count === 0) focusSaves.pending = null;
-  });
-  return run;
 }
 
 export function ChartPage() {
