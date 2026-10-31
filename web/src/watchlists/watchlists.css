@@ -70,6 +70,7 @@
   background: var(--surface-2);
 }
 
+.wl-badge.wl-demo { color: var(--t-warn); background: var(--warn-soft); font-weight: 600; }
 .wl-badge.wl-live { color: var(--t-up); }
 .wl-badge.wl-delayed { color: var(--text-soft); }
 .wl-badge.wl-stale { color: var(--t-warn); background: var(--warn-soft); }

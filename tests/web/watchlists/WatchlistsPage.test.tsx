@@ -15,19 +15,21 @@ const quote = (symbol: string, state: Record<string, unknown>) => ({
   },
 });
 
-const quotes = { generated_at: "2026-10-22T15:00:00Z", count: 4, instruments: [
+const quotes = { generated_at: "2026-10-22T15:00:00Z", count: 5, instruments: [
   quote("NQ", { value: 21012.5, change: 105.25, change_pct: 0.5 }),
   quote("ES", { value: 5800.25, change: -12.5, change_pct: -0.21 }),
   quote("US2Y", { value: 3.512, change: 0.021, change_pct: 0.6, status: "stale", feed_status: "stale", expected_delay_seconds: 0, market_closed: true }),
   quote("BTC", { value: 110250, change: 250, change_pct: 0.23, feed_status: "live", expected_delay_seconds: 0, source: "binance" }),
+  quote("YM", { value: 42000, change: 10, change_pct: 0.02, feed_status: "demo", expected_delay_seconds: 0, source: "demo" }),
 ] };
 
 const reply = (status: number, body: unknown) => Promise.resolve({ ok: status < 400, status, json: async () => body });
 
-function serve({ registry = true }: { registry?: boolean } = {}) {
+function serve({ registry = true, holdPut = false, symbols = ["NQ", "ES", "US2Y"] }: { registry?: boolean; holdPut?: boolean; symbols?: string[] } = {}) {
   const known = new Set(chartInstruments.instruments.map((i) => i.symbol));
-  const store = { name: "Desk strip", symbols: ["NQ", "ES", "US2Y"], updated_at: null as string | null };
+  const store = { name: "Desk strip", symbols, updated_at: null as string | null };
   const puts: Array<{ name: string; symbols: string[] }> = [];
+  const held: Array<() => void> = [];
   const fetcher = vi.fn((url: string, init?: RequestInit) => {
     if (url === "/api/v1/watchlist" && init?.method === "PUT") {
       const body = JSON.parse(String(init.body)) as { name: string; symbols: string[] };
@@ -35,6 +37,7 @@ function serve({ registry = true }: { registry?: boolean } = {}) {
       const bad = body.symbols.find((s) => !known.has(s));
       if (bad) return reply(422, { detail: [{ type: "value_error", loc: ["body", "symbols"], msg: `Value error, unknown instrument: ${bad}` }] });
       Object.assign(store, body, { updated_at: "2026-10-22T15:05:00Z" });
+      if (holdPut) return new Promise((resolve) => held.push(() => resolve(reply(200, { ...store }))));
       return reply(200, store);
     }
     if (url === "/api/v1/watchlist") return reply(200, { ...store });
@@ -44,7 +47,7 @@ function serve({ registry = true }: { registry?: boolean } = {}) {
     return reply(404, { detail: "not found" });
   });
   vi.stubGlobal("fetch", fetcher);
-  return { store, puts };
+  return { store, puts, release: () => held.shift()?.() };
 }
 
 const symbols = () => within(screen.getByRole("table")).getAllByRole("row").slice(1)
@@ -144,6 +147,42 @@ describe("Watchlists page", () => {
     expect(store.symbols).toEqual(["NQ", "ES", "US2Y", "BTC"]);
   });
 
+  it("marks a demo-mode quote as Demo, never Live, and says it is not real", async () => {
+    serve({ symbols: ["NQ", "YM"] });
+    render(<WatchlistsPage />);
+    await screen.findByRole("table");
+    const ym = screen.getByText("YM").closest("tr")!;
+    expect(await within(ym).findByText("Demo")).toHaveClass("wl-badge", "wl-demo");
+    expect(within(ym).queryByText("Live")).toBeNull();
+    fireEvent.mouseEnter(within(ym).getByText("YM"));
+    expect(document.body.textContent).toMatch(/Demo: made-up practice data/);
+  });
+
+  it("locks editing while a save is in flight and keeps an edit made during it", async () => {
+    const { puts, release } = serve({ holdPut: true });
+    render(<WatchlistsPage />);
+    await waitFor(() => expect(screen.getByText("Nasdaq 100 futures")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Remove ES" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("button", { name: "Saving…" })).toBeDisabled();
+    expect(screen.getByLabelText("Watchlist name")).toBeDisabled();
+    expect(screen.getByLabelText("Add an instrument")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove NQ" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move NQ down" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Undo changes" })).toBeDisabled();
+    // A change event that slips past the disabled input is ignored too.
+    fireEvent.change(screen.getByLabelText("Watchlist name"), { target: { value: "Typed during save" } });
+    expect(screen.getByLabelText("Watchlist name")).toHaveValue("Desk strip");
+
+    release();
+    expect(await screen.findByText(/^Saved at/)).toBeInTheDocument();
+    expect(puts).toEqual([{ name: "Desk strip", symbols: ["NQ", "US2Y"] }]);
+    expect(symbols()).toEqual(["NQ", "US2Y"]);
+    expect(screen.getByLabelText("Watchlist name")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
   it("says when the watchlist cannot be read", async () => {
     vi.stubGlobal("fetch", vi.fn(() => reply(503, { detail: "workspace store unavailable" })));
     render(<WatchlistsPage />);
@@ -166,5 +205,7 @@ describe("watchlist helpers", () => {
     expect(badgeOf(quote("NQ", { status: "stale" }) as never)).toBe("stale");
     expect(badgeOf(quote("US2Y", { status: "stale", market_closed: true }) as never)).toBe("closed");
     expect(badgeOf(quote("NQ", { value: null }) as never)).toBe("none");
+    expect(badgeOf(quote("YM", { feed_status: "demo", expected_delay_seconds: 0 }) as never)).toBe("demo");
+    expect(badgeOf(quote("YM", { feed_status: "demo", status: "stale", market_closed: true }) as never)).toBe("demo");
   });
 });

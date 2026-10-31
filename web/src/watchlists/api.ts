@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requestValidated } from "../api/client";
+import { REQUEST_TIMEOUT_MS, requestValidated } from "../api/client";
 import { watchlistSchema, type Watchlist } from "../chart/api";
 
 // The Watchlists page reads the one watchlist (GET /api/v1/watchlist), the
@@ -62,9 +62,21 @@ export function rejectionText(detail: unknown): string | null {
 }
 
 export async function saveWatchlist(next: { name: string; symbols: string[] }): Promise<Watchlist> {
-  const response = await fetch("/api/v1/watchlist", {
-    method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/watchlist", {
+      method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next), signal: controller.signal,
+    });
+  } catch {
+    throw new Error(controller.signal.aborted
+      ? "the core didn't answer in time. Reload the page to see whether the list was saved."
+      : "the core is unreachable.");
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     let text: string | null = null;
     try {

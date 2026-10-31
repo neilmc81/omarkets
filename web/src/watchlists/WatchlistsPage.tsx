@@ -19,13 +19,14 @@ const MAX_NAME = 60;
 const ET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
 const etTime = (iso: string) => `${ET.format(new Date(iso))} ET`;
 
-type Badge = "live" | "delayed" | "stale" | "closed" | "none";
+type Badge = "demo" | "live" | "delayed" | "stale" | "closed" | "none";
 
 const BADGE_TEXT: Record<Badge, string> = {
-  live: "Live", delayed: "Delayed", stale: "Stale", closed: "Closed", none: "No data",
+  demo: "Demo", live: "Live", delayed: "Delayed", stale: "Stale", closed: "Closed", none: "No data",
 };
 
 const BADGE_LINE: Record<Badge, string> = {
+  demo: "Demo: made-up practice data from the core's demo mode, not a real market price. Don't trade from it.",
   live: "Live: the source sends this quote in real time.",
   delayed: "Delayed: the source sends this quote late (about 10 minutes for futures).",
   stale: "Stale: no fresh quote recently. Treat this number as old.",
@@ -35,6 +36,8 @@ const BADGE_LINE: Record<Badge, string> = {
 
 export function badgeOf(row: QuoteRow | undefined): Badge {
   if (!row || row.state.status === "unavailable" || row.state.value === null) return "none";
+  // Synthetic data is never shown as real, whatever its freshness or session.
+  if (row.state.feed_status === "demo") return "demo";
   if (row.state.market_closed) return "closed";
   if (row.state.status === "stale") return "stale";
   return row.state.feed_status === "delayed" || row.state.expected_delay_seconds > 0 ? "delayed" : "live";
@@ -53,7 +56,7 @@ function rowLines(symbol: string, inst: ChartInstrument | undefined, row: QuoteR
     ...(inst ? [] : [`${symbol} is not in the instrument registry; the core will refuse to save it.`]),
     ...(row && badge !== "none" ? [
       `Last: ${fixed(row.state.value, digits)}${inst?.unit ? ` ${inst.unit}` : ""}`,
-      `Change since the previous close: ${signed(row.state.change, digits)} (${signed(row.state.change_pct, 2, "%")})`,
+      `Reported change: ${signed(row.state.change, digits)} (${signed(row.state.change_pct, 2, "%")})`,
       row.state.timestamp ? `As of ${etTime(row.state.timestamp)}${row.state.source ? ` · ${row.state.source}` : ""}` : "Time unavailable",
     ] : []),
     BADGE_LINE[badge],
@@ -103,9 +106,11 @@ export function WatchlistsPage() {
   const choices = [...registry.keys()].filter((s) => !draft.symbols.includes(s));
 
   const edit = (next: Draft) => {
+    if (saving) return;
     setDraft(next);
     setNotice(null);
     setSaveError(null);
+    setAddError(null);
   };
   const move = (index: number, by: -1 | 1) => {
     const symbols = [...draft.symbols];
@@ -117,7 +122,7 @@ export function WatchlistsPage() {
   const add = (event: FormEvent) => {
     event.preventDefault();
     const symbol = adding.trim().toUpperCase();
-    if (!symbol) return;
+    if (!symbol || saving) return;
     if (draft.symbols.includes(symbol)) return setAddError(`${symbol} is already on the list.`);
     if (draft.symbols.length >= MAX_SYMBOLS) return setAddError(`A watchlist holds at most ${MAX_SYMBOLS} instruments.`);
     // With the registry loaded an unknown symbol is caught here; without it the core's 422 says so on save.
@@ -129,13 +134,20 @@ export function WatchlistsPage() {
 
   const save = async () => {
     if (!canSave) return;
+    const submitted: Draft = { name: draft.name.trim(), symbols: draft.symbols };
     setSaving(true);
     setSaveError(null);
     try {
-      const next = await saveWatchlist({ name: draft.name.trim(), symbols: draft.symbols });
+      const next = await saveWatchlist(submitted);
       setSaved(next);
-      setDraft({ name: next.name, symbols: next.symbols });
-      setNotice(`Saved${next.updated_at ? ` at ${etTime(next.updated_at)}` : ""}. The Chart picker lists these first.`);
+      // Only replace the draft if it is still what was sent; a newer edit stays unsaved.
+      let kept = false;
+      setDraft((current) => {
+        if (current && !same(current, submitted)) { kept = true; return current; }
+        return { name: next.name, symbols: next.symbols };
+      });
+      setNotice(`Saved${next.updated_at ? ` at ${etTime(next.updated_at)}` : ""}. The Chart picker lists these first.`
+        + (kept ? " Your newer changes aren't saved yet." : ""));
     } catch (err) {
       setSaveError((err as Error).message || "Could not save");
     } finally {
@@ -149,7 +161,7 @@ export function WatchlistsPage() {
         <label className="wl-name">
           <span>Name</span>
           <input type="text" aria-label="Watchlist name" value={draft.name} maxLength={MAX_NAME}
-            onChange={(e) => edit({ ...draft, name: e.target.value })} />
+            disabled={saving} onChange={(e) => edit({ ...draft, name: e.target.value })} />
         </label>
         <div className="wl-actions">
           <button type="button" onClick={() => edit({ name: saved.name, symbols: saved.symbols })} disabled={!dirty || saving}>
@@ -189,9 +201,9 @@ export function WatchlistsPage() {
                 {badge === "none" ? "—" : signed(row!.state.change_pct, 2, "%")}</td>
               <td><span className={`wl-badge wl-${badge}`}>{BADGE_TEXT[badge]}</span></td>
               <td className="wl-row-actions">
-                <button type="button" className="t-link" aria-label={`Move ${symbol} up`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button>
-                <button type="button" className="t-link" aria-label={`Move ${symbol} down`} disabled={index === draft.symbols.length - 1} onClick={() => move(index, 1)}>↓</button>
-                <button type="button" className="t-link" aria-label={`Remove ${symbol}`} onClick={() => remove(symbol)}>✕</button>
+                <button type="button" className="t-link" aria-label={`Move ${symbol} up`} disabled={saving || index === 0} onClick={() => move(index, -1)}>↑</button>
+                <button type="button" className="t-link" aria-label={`Move ${symbol} down`} disabled={saving || index === draft.symbols.length - 1} onClick={() => move(index, 1)}>↓</button>
+                <button type="button" className="t-link" aria-label={`Remove ${symbol}`} disabled={saving} onClick={() => remove(symbol)}>✕</button>
               </td>
             </tr>;
           })}</tbody>
@@ -200,16 +212,16 @@ export function WatchlistsPage() {
       <form className="wl-add" onSubmit={add}>
         <label>
           <span>Add an instrument</span>
-          <input type="text" aria-label="Add an instrument" list="wl-choices" value={adding} placeholder="e.g. BTC"
+          <input type="text" aria-label="Add an instrument" list="wl-choices" value={adding} placeholder="e.g. BTC" disabled={saving}
             onChange={(e) => { setAdding(e.target.value); setAddError(null); }} />
         </label>
         <datalist id="wl-choices">{choices.map((s) => <option key={s} value={s}>{registry.get(s)!.label}</option>)}</datalist>
-        <button type="submit" disabled={!adding.trim()}>Add</button>
+        <button type="submit" disabled={saving || !adding.trim()}>Add</button>
       </form>
       {addError && <p className="t-error" role="alert">{addError}</p>}
       <p className="t-footnote">
         {draft.symbols.length} of {MAX_SYMBOLS} · Changes stay here until you press Save. Saving writes no note and spends nothing on AI.
-        {quotes.data ? ` Quotes as of ${etTime(quotes.data.generated_at)}; changes are since the previous close.` : ""}
+        {quotes.data ? ` Quotes as of ${etTime(quotes.data.generated_at)}; changes are as each source reports them (usually since the previous close).` : ""}
       </p>
     </section>
   </main>;
