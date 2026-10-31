@@ -19,6 +19,7 @@ from core.api import (
     desk,
     economics,
     explainers,
+    focus,
     news,
     routes,
     shell,
@@ -112,6 +113,7 @@ def create_app(
     app.include_router(desk.router)
     app.include_router(chart.router)
     app.include_router(workspace.router)
+    app.include_router(focus.router)
     app.include_router(explainers.router)
     app.include_router(theme.router)
     app.include_router(economics.router)

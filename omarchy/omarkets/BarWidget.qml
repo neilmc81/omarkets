@@ -134,9 +134,10 @@ BarWidget {
     if (root.transportRetrying)
       return "Omarkets temporarily unresponsive · retrying\nLast response "
         + (service.ageSeconds >= 0 ? Math.round(service.ageSeconds) + "s ago" : "unknown")
+    // The core picks the primary (the focus instrument); the bar only names it.
     var nq = service.primary
-    if (!nq) return "Omarkets — NQ unavailable\nClick for market context"
-    var line = "NQ " + root.fmtValue(nq.value) + " " + root.fmtChangePct(nq.change_pct)
+    if (!nq) return "Omarkets — " + service.focusSymbol + " unavailable\nClick for market context"
+    var line = nq.symbol + " " + root.fmtValue(nq.value) + " " + root.fmtChangePct(nq.change_pct)
       + " · feed " + (nq.market_closed ? "closed" : nq.status === "stale" || nq.status === "unavailable" ? nq.status : String(nq.feed_status || "unavailable")).toUpperCase()
     if (service.nextEvent) {
       line += "\n" + root.eventShortName(service.nextEvent) + " "

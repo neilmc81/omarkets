@@ -45,7 +45,7 @@ const followUpSchema = z.object({
   text: z.string(),
 });
 
-const quoteSchema = z.object({
+export const quoteSchema = z.object({
   symbol: z.string(),
   label: z.string(),
   value: z.number().nullable(),

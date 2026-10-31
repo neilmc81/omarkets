@@ -242,16 +242,41 @@ async def chart_pins(
     return ChartPins(range=range, start=start, end=end, pins=found)
 
 
+#: The most instruments one sparklines request may name.
+MAX_SPARKLINES = 20
+
+
+def _sparkline_symbols(symbols: str | None) -> list[str]:
+    """The desk strip, or the comma-separated registry symbols asked for."""
+    if symbols is None:
+        return list(STRIP_SYMBOLS)
+    asked = [normalize_symbol(s) for s in symbols.split(",") if s.strip()]
+    unknown = [s for s in asked if get_instrument(s) is None]
+    if not asked or unknown or len(asked) > MAX_SPARKLINES:
+        raise HTTPException(status_code=422, detail=(
+            f"unknown instrument: {', '.join(unknown)}" if unknown
+            else f"name 1 to {MAX_SPARKLINES} instruments"))
+    return list(dict.fromkeys(asked))
+
+
 @router.get("/sparklines", response_model=Sparklines,
-            responses={503: {"description": "Storage unavailable"}})
-async def sparklines(service: ServiceDep) -> Sparklines:
-    """15-minute closes over the 24 hours to each strip instrument's latest quote."""
+            responses={503: {"description": "Storage unavailable"},
+                       422: {"description": "Unknown instrument"}})
+async def sparklines(
+    service: ServiceDep,
+    symbols: Annotated[str | None, Query(max_length=400)] = None,
+) -> Sparklines:
+    """15-minute closes over the 24 hours to each tile's latest quote.
+
+    ``symbols`` (comma-separated) names the tiles; without it, the desk strip.
+    """
+    wanted = _sparkline_symbols(symbols)
     state = service.current_state()
     interval = Interval.M15
 
     def build() -> list:
         lines = []
-        for symbol in STRIP_SYMBOLS:
+        for symbol in wanted:
             inst = state.instruments.get(symbol)
             if inst is None or inst.timestamp is None:
                 lines.append(B.sparkline(symbol, [], interval))

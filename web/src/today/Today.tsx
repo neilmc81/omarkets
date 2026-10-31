@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { fetchLevels, fetchPins, fetchRiskTone, fetchSession, fetchSparklines } from "../chart/api";
 import { usePoll } from "../chart/usePoll";
+import { NQ_FALLBACK, type FocusState } from "../shell/focus";
 import { useShortcuts } from "../shell/useShortcuts";
 import { GROUP_LABEL, groupNotes, newSince, useLastSeen, type DayGroup } from "./notesList";
 import { fetchNote, type Desk, type Figure, type Note, type Rates, type Upcoming, type WatchCard } from "./api";
@@ -247,19 +248,30 @@ function NotesPanel({ notes, openNote, onOpen, now, seenBefore, headRef }: {
 }
 
 // openId: null opens the newest note; "" means every note is collapsed.
-export function Today({ desk, error, openId, onOpen }: {
+// focus: the global focus strip (shell/focus.ts). The market section (tiles,
+// chart, levels) follows it; the notes, rates and coming-up are the desk's.
+export function Today({ desk, error, openId, onOpen, focus }: {
   desk: Desk | null;
   error: string | null;
   openId: string | null;
   onOpen: (id: string) => void;
+  focus?: FocusState;
 }) {
   const now = useNow();
   const seenBefore = useLastSeen();
+  // Until the core says otherwise (or if it can't), Today is NQ's with the desk's tiles.
+  const strip = focus?.data ?? null;
+  const instrument = strip?.focus ?? NQ_FALLBACK;
+  const symbol = instrument.symbol;
+  const quotes = strip ? strip.quotes : desk?.quotes ?? null;
+  const tiles = strip ? strip.symbols : null;
   const calendar = usePoll(fetchSession, "session", 60_000);
   const todayPins = usePoll((signal) => fetchPins("1d", signal), "1d", 300_000);
-  const levels = usePoll((signal) => fetchLevels("NQ", signal), "NQ", 60_000);
+  const levels = usePoll((signal) => instrument.levels ? fetchLevels(symbol, signal) : Promise.resolve(null),
+    instrument.levels ? symbol : `${symbol}:off`, instrument.levels ? 60_000 : 3_600_000);
   const risk = usePoll(fetchRiskTone, "risk", 30_000);
-  const sparklines = usePoll(fetchSparklines, "sparklines", 300_000);
+  const sparklines = usePoll((signal) => fetchSparklines(signal, tiles ?? undefined), `sparklines:${tiles?.join(",") ?? ""}`, 300_000);
+  const shownLevels = levels.data?.symbol === symbol ? levels.data : null;
   const heads = useRef(new Map<string, HTMLButtonElement>());
   const jumped = useRef(false);
   // A linked note older than the desk's recent list is fetched on its own.
@@ -316,13 +328,13 @@ export function Today({ desk, error, openId, onOpen }: {
     {!desk && !error && <p className="t-muted" role="status">Connecting…</p>}
     {calendar.data ? <SessionTimeline calendar={calendar.data} pins={todayPins.data?.pins ?? []} now={now} />
       : desk && <p className="t-session">{desk.session_text}</p>}
-    {desk && <QuoteStrip quotes={desk.quotes} sparklines={sparklines.data} asOf={(iso) => `As of ${etTime(iso)} · ${localTime(iso)}`} />}
+    {quotes && <QuoteStrip quotes={quotes} sparklines={sparklines.data} asOf={(iso) => `As of ${etTime(iso)} · ${localTime(iso)}`} />}
     <RiskBanner tone={risk.data} error={risk.error} />
     <div className="t-market">
-      <TodayChart levels={levels.data} />
+      <TodayChart key={symbol} instrument={instrument} levels={shownLevels} />
       <aside className="t-market-side">
         <NextEventCard event={desk?.next_event} now={now} />
-        <KeyLevelsCard levels={levels.data} error={levels.error} />
+        <KeyLevelsCard instrument={instrument} levels={shownLevels} error={levels.error} />
       </aside>
     </div>
     <div className="t-grid">

@@ -1,11 +1,12 @@
 import { useContext, useEffect, useState, type MouseEvent } from "react";
-import { fetchBars, fetchPins, intervalsFor, type Bars, type ChartRange, type Interval, type KeyLevel, type KeyLevels, type Pin, type RiskTone, type SessionCalendar, type Sparklines } from "../chart/api";
+import { fetchBars, fetchPins, intervalsFor, type Bars, type ChartInstrument, type ChartRange, type Interval, type KeyLevel, type KeyLevels, type Pin, type RiskTone, type SessionCalendar, type Sparklines } from "../chart/api";
 import { etDayClock, levelLines, pinLines, pinTitle, yourTime } from "../chart/explain";
 import { SessionChart } from "../chart/SessionChart";
 import { Sparkline } from "../chart/Sparkline";
 import { usePoll } from "../chart/usePoll";
 import { explainerLines, useExplainers, type Explainer } from "../explainers/library";
 import { Explain, NavigateContext } from "../shell/Explain";
+import { NQ_FALLBACK } from "../shell/focus";
 import type { NextEvent, Quote } from "./api";
 
 // Today's market section: everything here is computed by the core and only
@@ -140,8 +141,12 @@ const lowerFirst = (text: string) => text.startsWith("NQ") || text.startsWith("V
 
 const TODAY_LEVELS: KeyLevel["key"][] = ["overnight_high", "overnight_low", "prior_settle", "prior_day_high", "prior_day_low", "gap_vs_settle"];
 
-export function KeyLevelsCard({ levels, error }: { levels: KeyLevels | null; error: string | null }) {
+export function KeyLevelsCard({ levels, error, instrument = NQ_FALLBACK }: { levels: KeyLevels | null; error: string | null; instrument?: ChartInstrument }) {
   const library = useExplainers();
+  if (!instrument.levels) return <section className="t-panel key-levels" aria-label="Key levels">
+    <h2>Key levels</h2>
+    <p className="t-muted">None for {instrument.label}: key levels are worked out for NQ and ES.</p>
+  </section>;
   const rows = levels?.levels.filter((l) => TODAY_LEVELS.includes(l.key)) ?? [];
   return <section className="t-panel key-levels" aria-label="Key levels">
     <h2>Key levels</h2>
@@ -151,7 +156,7 @@ export function KeyLevelsCard({ levels, error }: { levels: KeyLevels | null; err
       <dt><Explain title={level.label} lines={levelLines(level, library?.get(`level:${level.key}`))}>{level.label}{level.partial ? " (so far)" : ""}</Explain></dt>
       <dd className={level.value === null ? "t-muted" : ""}>{level.value_text}</dd>
     </div>)}</dl>
-    {levels && <p className="t-muted">{levels.contract ?? "NQ"}{levels.delayed ? " · from delayed quotes" : ""} · hover a level for what it means</p>}
+    {levels && <p className="t-muted">{levels.contract ?? instrument.symbol}{levels.delayed ? " · from delayed quotes" : ""} · hover a level for what it means</p>}
   </section>;
 }
 
@@ -178,22 +183,29 @@ export function NextEventCard({ event, now }: { event: NextEvent | null | undefi
 const CHART_LEVELS: KeyLevel["key"][] = ["overnight_high", "overnight_low", "prior_settle"];
 const INTERVAL_LABEL: Record<Interval, string> = { "5m": "5-min", "15m": "15-min", "1h": "hourly" };
 
-export function TodayChart({ levels }: { levels: KeyLevels | null }) {
+// The focus instrument's session chart. Levels and release pins are drawn only
+// where the core says they belong (`levels`, `release_pins`).
+export function TodayChart({ instrument, levels }: { instrument: ChartInstrument; levels: KeyLevels | null }) {
+  const { symbol, label: name } = instrument;
   const [range, setRange] = useState<Extract<ChartRange, "1d" | "5d">>("1d");
   const [interval, setBarSize] = useState<Interval>("5m");
   const [status, setStatus] = useState<string | null>(null);
-  const bars = usePoll((signal) => fetchBars("NQ", interval, range, signal), `NQ:${interval}:${range}`, 60_000);
-  const pins = usePoll((signal) => fetchPins(range, signal), range, 300_000);
+  const bars = usePoll((signal) => fetchBars(symbol, interval, range, signal), `${symbol}:${interval}:${range}`, 60_000);
+  const pins = usePoll((signal) => instrument.release_pins ? fetchPins(range, signal) : Promise.resolve(null),
+    instrument.release_pins ? range : `${symbol}:off`, instrument.release_pins ? 300_000 : 3_600_000);
   const navigate = useContext(NavigateContext);
   const openChart = (event: MouseEvent) => {
     if (!navigate || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
     event.preventDefault();
     navigate("?view=chart");
   };
-  const lines = levels?.levels.filter((l) => CHART_LEVELS.includes(l.key)) ?? [];
-  return <section className="t-panel today-chart" aria-label="NQ session chart">
+  // Only ever this instrument's own bars and levels, never a previous focus's.
+  const shown = bars.data?.symbol === symbol ? bars.data : null;
+  const lines = instrument.levels && levels?.symbol === symbol ? levels.levels.filter((l) => CHART_LEVELS.includes(l.key)) : [];
+  const span = range === "1d" ? "this session" : "5 sessions";
+  return <section className="t-panel today-chart" aria-label={`${symbol} session chart`}>
     <header className="chart-head">
-      <h2>NQ · {range === "1d" ? "this session" : "5 sessions"} · {INTERVAL_LABEL[interval]}</h2>
+      <h2 title={name}>{symbol} · {span} · {INTERVAL_LABEL[interval]}</h2>
       <span className="chart-controls">
         <select aria-label="Bar size" value={interval} onChange={(e) => setBarSize(e.target.value as Interval)}>
           {intervalsFor(range).map((i) => <option key={i} value={i}>{i}</option>)}
@@ -204,10 +216,11 @@ export function TodayChart({ levels }: { levels: KeyLevels | null }) {
         <a href="?view=chart" onClick={openChart} className="t-link">Full chart →</a>
       </span>
     </header>
-    <ChartState bars={bars} />
-    <SessionChart bars={bars.data} levels={lines} pins={pins.data?.pins ?? []} height={340} onStatus={setStatus}
-      label={`NQ candles, ${range === "1d" ? "this session" : "five sessions"}, ${INTERVAL_LABEL[interval]} bars, times in New York.`} />
-    <ChartFooter bars={bars.data} status={status} />
+    <ChartState bars={{ ...bars, data: shown }} />
+    <SessionChart bars={shown} levels={lines} pins={instrument.release_pins ? pins.data?.pins ?? [] : []} height={340}
+      onStatus={setStatus} precision={instrument.price_precision}
+      label={`${symbol} candles, ${range === "1d" ? "this session" : "five sessions"}, ${INTERVAL_LABEL[interval]} bars, times in New York.`} />
+    <ChartFooter bars={shown} status={status} />
   </section>;
 }
 

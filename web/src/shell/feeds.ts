@@ -1,12 +1,13 @@
 import type { HealthResponse } from "../api/schemas";
-import type { Desk } from "../today/api";
+import type { Desk, Quote } from "../today/api";
 
 export type FeedsTone = "ok" | "warn" | "down" | "pending";
 export type FeedsStatus = { tone: FeedsTone; label: string; lines: string[] };
 
 // Summarises the core's own health and desk flags for the header dot. It only
 // reads statuses the core reports; it judges nothing about the market.
-export function feedsStatus(input: { desk: Desk | null; deskError: string | null; health: HealthResponse | null; healthError: string | null }): FeedsStatus {
+// `quotes` is the focus strip Today shows; without it, the desk's tiles.
+export function feedsStatus(input: { desk: Desk | null; deskError: string | null; health: HealthResponse | null; healthError: string | null; quotes?: Quote[] }): FeedsStatus {
   const { desk, deskError, health, healthError } = input;
   if (!desk && !health && !deskError && !healthError) return { tone: "pending", label: "Connecting…", lines: ["Waiting for the Omarkets core."] };
   if (!desk && !health) return { tone: "down", label: "Omarkets unavailable", lines: [deskError ?? healthError ?? "No response from the core."] };
@@ -32,10 +33,11 @@ export function feedsStatus(input: { desk: Desk | null; deskError: string | null
     lines.push(`Economic sources: ${health.economic_providers.length - economic.length} of ${health.economic_providers.length} healthy`);
     if (health.news?.enabled) lines.push(`News sources: ${health.news.healthy_sources} of ${health.news.source_count} healthy`);
   }
+  const quotes = input.quotes ?? desk?.quotes ?? [];
+  const stale = quotes.filter((q) => q.stale && !q.closed).map((q) => q.label);
+  if (stale.length) problems.push(`Stale quotes: ${stale.join(", ")}`);
+  if (quotes.some((q) => q.delayed)) lines.push("Some quotes are delayed by the source (normal).");
   if (desk) {
-    const stale = desk.quotes.filter((q) => q.stale && !q.closed).map((q) => q.label);
-    if (stale.length) problems.push(`Stale quotes: ${stale.join(", ")}`);
-    if (desk.quotes.some((q) => q.delayed)) lines.push("Some quotes are delayed by the source (normal).");
     if (!desk.writer_ready) problems.push(`AI writer not available${desk.writer_detail ? `: ${desk.writer_detail}` : ""}`);
   }
   if (!problems.length) return { tone: "ok", label: "All feeds OK", lines };

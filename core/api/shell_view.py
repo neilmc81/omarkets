@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 from core.analysis.risk_tone import risk_tone
 from core.domain.cross_market import Availability, CrossMarketState, Value
 from core.domain.economics import EconomicEvent, Importance
+from core.domain.instruments import PRIMARY_SYMBOL
 from core.domain.models import DataStatus, FeedStatus, MarketState
 from core.domain.sessions import SessionPhase, next_session_open, session_phase
 from core.domain.shell import (
@@ -33,12 +34,31 @@ from core.domain.shell import (
 
 NEW_YORK = ZoneInfo("America/New_York")
 
-#: The glanceable bar strip, in display order. Kept short on purpose.
+#: The glanceable bar strip with the default focus (NQ) and no saved watchlist.
 STRIP_SYMBOLS: tuple[str, ...] = ("NQ", "US2Y", "VIX")
+#: How many quotes the bar strip shows. Kept short on purpose.
+STRIP_SIZE = len(STRIP_SYMBOLS)
+#: What follows the focus on the bar until a watchlist is saved.
+DEFAULT_COMPANIONS: tuple[str, ...] = STRIP_SYMBOLS[1:]
 #: Popup cross-market strip, in display order.
 CONTEXT_SYMBOLS: tuple[str, ...] = ("NQ", "ES", "US2Y", "US10Y", "DXY", "VIX", "VXN")
 #: Event importances eligible for the bar/countdown.
 BAR_IMPORTANCE: frozenset[str] = frozenset({Importance.HIGH.value, Importance.CRITICAL.value})
+
+
+def focus_symbols(focus: str, symbols: Sequence[str], limit: int) -> list[str]:
+    """``focus`` first, then ``symbols`` in order without repeating it, cut to ``limit``."""
+    return [focus, *(s for s in symbols if s != focus)][:limit]
+
+
+def bar_symbols(focus: str, watchlist: Sequence[str] | None = None) -> list[str]:
+    """The bar strip: the focus, then the saved watchlist's first symbols.
+
+    Without a saved watchlist the focus is followed by the 2-year yield and VIX,
+    so the default (NQ) bar is the same ``NQ, US2Y, VIX`` it always was.
+    """
+    return focus_symbols(focus, DEFAULT_COMPANIONS if watchlist is None else watchlist,
+                         STRIP_SIZE)
 
 
 def _maybe(value: Value) -> float | None:
@@ -311,14 +331,21 @@ def build_status(
     data_health: ShellHealth,
     ai_health: ShellHealth,
     providers: Sequence[ShellProviderHealth] = (),
+    focus: str = PRIMARY_SYMBOL,
+    watchlist: Sequence[str] | None = None,
 ) -> ShellStatus:
-    strip = build_strip(market, STRIP_SYMBOLS, cross)
+    """The bar payload. ``focus`` leads the strip and is the primary quote;
+    ``watchlist`` is the saved watchlist (``None`` while the default applies)."""
+    symbols = bar_symbols(focus, watchlist)
+    strip = build_strip(market, symbols, cross)
     # Fall back to cross-market only when the market state itself is absent.
     if not strip and cross is not None:
-        strip = build_cross_quotes(cross, STRIP_SYMBOLS)
-    primary = next((quote for quote in strip if quote.symbol == "NQ"), None)
+        strip = build_cross_quotes(cross, symbols)
+    # Only the focus's own quote is primary; never another instrument's.
+    primary = next((quote for quote in strip if quote.symbol == focus), None)
     return ShellStatus(
         generated_at=now,
+        focus=focus,
         primary=primary,
         strip=strip,
         session=build_session(now),
@@ -350,6 +377,7 @@ def build_context(
     events: Sequence[EconomicEvent],
     diagnostics: Sequence[ShellProviderHealth],
     market: MarketState | None = None,
+    focus: str = PRIMARY_SYMBOL,
 ) -> ShellContext:
     # Only genuinely future events, so the popup never lists a stale stored
     # release as "upcoming".
@@ -359,7 +387,8 @@ def build_context(
     )[:5]
     return ShellContext(
         generated_at=now,
-        cross_market=build_cross_quotes(cross, CONTEXT_SYMBOLS, market),
+        cross_market=build_cross_quotes(
+            cross, focus_symbols(focus, CONTEXT_SYMBOLS, len(CONTEXT_SYMBOLS) + 1), market),
         upcoming_events=[build_event(event) for event in upcoming],
         diagnostics=list(diagnostics),
     )
@@ -368,8 +397,11 @@ def build_context(
 __all__ = [
     "BAR_IMPORTANCE",
     "CONTEXT_SYMBOLS",
+    "DEFAULT_COMPANIONS",
+    "STRIP_SIZE",
     "STRIP_SYMBOLS",
     "aggregate_health",
+    "bar_symbols",
     "build_context",
     "build_cross_quotes",
     "build_diagnostics",
@@ -378,5 +410,6 @@ __all__ = [
     "build_session",
     "build_status",
     "build_strip",
+    "focus_symbols",
     "pick_next_event",
 ]

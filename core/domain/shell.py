@@ -136,9 +136,12 @@ class ShellStatus(BaseModel):
 
     version: int = Field(default=SHELL_SCHEMA_VERSION, ge=1)
     generated_at: UTCDatetime
-    #: Primary instrument (NQ) quote, or None when no state is known.
+    #: The global focus instrument (the Chart page's saved focus; NQ by default).
+    focus: NonEmptyString = "NQ"
+    #: The focus instrument's quote, or None when no state is known for it.
     primary: ShellQuote | None = None
-    #: The glanceable strip (NQ, US2Y, VIX, ...).
+    #: The glanceable strip: the focus, then the saved watchlist's first
+    #: symbols (NQ, US2Y, VIX until a watchlist is saved).
     strip: list[ShellQuote] = Field(default_factory=list)
     session: ShellSession
     next_event: ShellEvent | None = None

@@ -200,6 +200,12 @@ describe("feeds status", () => {
   it("reports all feeds OK when the core reports nothing wrong", () => {
     expect(feedsStatus({ desk: parsed, deskError: null, health, healthError: null })).toMatchObject({ tone: "ok", label: "All feeds OK" });
   });
+  it("judges staleness on the focus strip's tiles when it has them", () => {
+    const btc = { ...parsed.quotes[0], symbol: "BTC", label: "Bitcoin", stale: true, closed: false };
+    expect(feedsStatus({ desk: parsed, deskError: null, health, healthError: null, quotes: [btc] }).lines.join(" "))
+      .toMatch(/Stale quotes: Bitcoin/);
+    expect(feedsStatus({ desk: parsed, deskError: null, health, healthError: null, quotes: [] })).toMatchObject({ tone: "ok" });
+  });
   it("does not count closed-market quotes as issues, but still counts a failing provider", () => {
     const closed = { ...parsed, quotes: parsed.quotes.map((q) => ({ ...q, stale: false, closed: true, closed_text: "Markets closed" })) };
     expect(feedsStatus({ desk: closed, deskError: null, health, healthError: null })).toMatchObject({ tone: "ok" });

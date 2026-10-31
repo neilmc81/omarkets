@@ -11,6 +11,10 @@ never depends on database schemas. The handlers are read-only projections; the
 mapping lives in :mod:`core.api.shell_view` and is pure. The latest desk note
 reaches the popup through ``/api/v1/desk`` (see ``omarchy/omarkets/update.py``).
 
+Both lead with the global focus instrument (the Chart page's saved focus, NQ
+by default; :mod:`core.api.focus`). The bar strip is the focus, then the saved
+watchlist's first symbols, or NQ, the 2-year yield and VIX until one is saved.
+
 Every field degrades safely: an unavailable service yields safe defaults rather
 than a 500, because a missing section must never blank the whole shell.
 """
@@ -24,6 +28,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Request
 
 from core.analysis.cross_market import build_cross_market_state
+from core.api.focus import read_focus
 from core.api.shell_view import (
     aggregate_health,
     build_context,
@@ -97,8 +102,11 @@ async def shell_status(request: Request) -> ShellStatus:
         except Exception:  # pragma: no cover
             pass
 
+    focus = read_focus(request.app.state)
     result = build_status(
         now=now,
+        focus=focus.symbol,
+        watchlist=focus.saved_watchlist.symbols if focus.saved_watchlist else None,
         market=market_state,
         cross=cross,
         events=events,
@@ -126,7 +134,8 @@ async def shell_context(request: Request) -> ShellContext:
     market_state = _market_state(request, now)
     cross = build_cross_market_state(market_state, now=now) if market_state else None
     events, _ = _calendar(request)
-    result = build_context(now=now, cross=cross, market=market_state, events=events, diagnostics=[])
+    result = build_context(now=now, cross=cross, market=market_state, events=events, diagnostics=[],
+                           focus=read_focus(request.app.state).symbol)
     _log_slow_projection("context", started)
     return result
 
