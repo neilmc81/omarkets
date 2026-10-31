@@ -116,10 +116,11 @@ def _render(cases: C.CaseSet, out: Path, settings: Any, model: str | None,
         kind = NoteKind(case.kind)
         instrument = C.case_instrument(case)
         chosen = model or writer.model_for(kind)
-        prompt = writer.prompt(kind, case.facts, instrument=instrument)
+        facts = C.prompt_facts(case, cases.history, writer.prompt_version)
+        prompt = writer.prompt(kind, facts, instrument=instrument)
         (out / f"{C.file_name(case.id)[:-5]}.txt").write_text(
             f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")
-        bound = (f"${writer.max_cost(kind, case.facts, model=chosen, instrument=instrument):.4f}"
+        bound = (f"${writer.max_cost(kind, facts, model=chosen, instrument=instrument):.4f}"
                  if chosen in rates else "no price on record")
         index.append(f"{case.id} | {case.kind} | "
                      f"{'complete' if case.facts_complete else 'partial'} | {chosen} | "

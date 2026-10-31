@@ -32,6 +32,7 @@ from core.desk import playbook as P
 from core.desk import review as R
 from core.desk import watch as W
 from core.desk.identity import NQ, PRODUCTION_INSTRUMENTS, Instrument
+from core.desk.lessons import recent_lessons
 from core.desk.links import ReleaseNotes
 from core.desk.models import (
     BreakingAlert,
@@ -49,7 +50,7 @@ from core.desk.models import (
     UpcomingItem,
     WatchCard,
 )
-from core.desk.prompts import PROMPT_VERSION, has_profile
+from core.desk.prompts import PROMPT_VERSION, RECENT_LESSONS_VERSIONS, has_profile
 from core.desk.store import DeskStore
 from core.desk.writer import DeskWriter
 from core.domain.chart import ChartPin
@@ -1096,6 +1097,10 @@ class DeskService:
             symbol = instrument.symbol if instrument else None
             raise ValueError(f"{kind.value} note {note_id}: instrument {symbol} "
                              "does not match its kind")
+        if self.prompt_version in RECENT_LESSONS_VERSIONS:
+            # What the latest notes taught, so this one teaches something else.
+            facts = {**facts, "recent_lessons": recent_lessons(
+                entry.text for entry in self.store.learn_entries())}
         result = await self.writer.write(kind, facts, instrument=instrument)
         note = DeskNote(
             id=note_id, kind=kind, title=title, created_at=self.clock(),

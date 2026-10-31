@@ -56,8 +56,12 @@ so a restart cannot produce a duplicate note or notification.
   NQ's wording lives in NQ's profile; ES has its own reviewed profile. v9 asks
   for `tone` (stored as `nq_tone`), and `rates_read` only where yields matter
   (every equity index future). Each note task has a length target, recorded by
-  `eval check` and never retried. `desk_prompt_version`
-  (`OMARKETS_DESK_PROMPT_VERSION`, default `desk:v8`) selects the version; it
+  `eval check` and never retried. v9 notes get `recent_lessons` in their facts
+  (the terms the latest five Learn boxes taught, newest first) and are told
+  not to teach one again; v8 facts never carry it. v9's stated facts include
+  "1 basis point (bp) = 0.01 percentage point", so a note may quote it.
+  `desk_prompt_version` (`OMARKETS_DESK_PROMPT_VERSION`: `desk:v8` or
+  `desk:v9`, default `desk:v8`; see `.env.example`) selects the version; it
   moves to v9 only after the paid acceptance test and Neil's read of a v9
   pre-market. An instrument with no profile at that version is refused before
   anything is reserved or sent, and never borrows NQ's prompt. Event notes
@@ -171,7 +175,11 @@ service, and only `eval run --paid` makes paid calls.
 - `render DIR OUT` writes each case's exact prompt and cost bound, offline.
   `render` and `run` take `--prompt desk:v8|desk:v9` (default: the service's
   `desk_prompt_version`); the results record the version, and `check` allows
-  the stated facts of the version that wrote each draft.
+  the stated facts of the version that wrote each draft (for a draft with no
+  recorded version, the default, or the newest version with a profile for its
+  instrument, e.g. ES). At v9, a case captured without `recent_lessons` gets
+  them from the frozen lesson history (notes created before it). Rebuilt cases
+  (`eval rebuild`) record the version that wrote the note.
 - `run DIR RESULTS --max-calls N --allowance-usd X` prints the plan and makes no
   calls; with `--paid` it makes one attempt per case: no fallback model, no
   regeneration. Each run has its own call count and dollar allowance, fixed
@@ -182,7 +190,12 @@ service, and only `eval run --paid` makes paid calls.
   500 for chat formatting) and every output token, at the model's recorded
   rates (which must be at or above the provider's price). Each result is kept
   in the run ledger and the results file is rebuilt from it, so a second
-  process or a stale copy can't lose a paid draft. Each call also reserves on
+  process or a stale copy can't lose a paid draft. A run is tied to one
+  prompt version: the first call records it and every admission checks it in
+  the same transaction, so a resumed run or a second worker at another version
+  is refused. Older ledgers are upgraded in place when opened (the missing
+  `entry` and `prompt_version` columns are added; a run's version is taken
+  from its recorded results). Each call also reserves on
   the shared weekly AI budget, as desk notes do. The run refuses to start if a
   cost bound can't be set (a model with no price on record or whose routing
   params change the token limit, no shared budget with limits, partial facts)

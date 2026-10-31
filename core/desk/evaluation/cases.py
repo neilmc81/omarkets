@@ -20,7 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from core.desk.identity import INSTRUMENT_KINDS, LEGACY, Instrument
+from core.desk.lessons import recent_lessons
 from core.desk.models import NoteKind
+from core.desk.prompts import RECENT_LESSONS_VERSIONS
 
 MANIFEST = "manifest.json"
 HISTORY = "lesson_history.json"
@@ -60,6 +62,19 @@ def instrument_for(kind: str, symbol: str | None) -> Instrument | None:
 def case_instrument(case: Case) -> Instrument | None:
     """The instrument from the case's captured envelope (see ``instrument_for``)."""
     return instrument_for(case.kind, (case.envelope or {}).get("instrument"))
+
+
+def prompt_facts(case: Case, history: Sequence[dict[str, Any]],
+                 version: str | None) -> dict[str, Any]:
+    """The facts ``case`` is written from at prompt ``version``: as captured,
+    plus ``recent_lessons`` from the frozen lesson history (notes created
+    before it) when that version takes them and the capture has none."""
+    if version not in RECENT_LESSONS_VERSIONS or "recent_lessons" in case.facts:
+        return case.facts
+    earlier = sorted((row for row in history if row.get("learn") and row["id"] != case.id
+                      and row["created_at"] < case.created_at),
+                     key=lambda row: row["created_at"], reverse=True)
+    return {**case.facts, "recent_lessons": recent_lessons(row["learn"] for row in earlier)}
 
 
 def _sha(data: bytes) -> str:

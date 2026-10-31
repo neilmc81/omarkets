@@ -253,6 +253,12 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
     ),
 }
 
+#: Rule 7's definition, stated so a note may quote it ("0.01 percentage point").
+BASIS_POINT = "1 basis point (bp) = 0.01 percentage point."
+#: Versions whose facts carry ``recent_lessons`` (the Learn boxes of the latest
+#: notes) so a note doesn't teach the same lesson again. desk:v8 never did.
+RECENT_LESSONS_VERSIONS = frozenset({V9})
+
 _V9_SYSTEM = """\
 You are the Omarkets desk writer. Your reader is a new trader who is learning how \
 economic data, the Federal Reserve, bond yields, company earnings and world news \
@@ -274,9 +280,11 @@ calendar", never "there was no news" or "nothing was scheduled".
 4. Closed, stale and unavailable are different; say which. Each row of \
 "markets_today" has a "status": "live" (updating), "closed" (the market is shut and \
 the level is its last price), "stale" (the feed stopped updating, so the number may \
-be old) or "unavailable" (no quote at all). Each live quote has its own "as_of" time, \
-"expected_delay" and "change_from" (the baseline its change is measured from). Never \
-call a closed market stale, or an unavailable one flat.
+be old) or "unavailable" (no quote at all). Each live quote has its own "as_of" time and \
+"change_from" (the baseline its change is measured from), and an "expected_delay" \
+when its feed states one. A row marked "delayed" with no "expected_delay" is delayed \
+by an amount the feed doesn't state: say it is delayed, never how long. Never call a \
+closed market stale, or an unavailable one flat.
 5. Never merge measurement windows. A change today (from its "change_from"), a move \
 between two quote times ("from" and "to") and a change over the past week are \
 different numbers. Say which window each one covers, and never add, compare or \
@@ -337,7 +345,9 @@ hotter than expected").
 each with the window it was measured over.
 {rates_field}
 - watch_next: 2-4 short items (max 15 words each) to watch next. No price targets.
-- learn: max 50 words teaching the one concept this note most depends on.
+- learn: max 50 words teaching the one concept this note most depends on. \
+"recent_lessons" lists what the latest notes already taught: never teach one of \
+those again; pick another concept this note depends on.
 - tone: one of "supportive", "negative", "mixed", "neutral": whether this, on \
 balance, is supportive or negative for {symbol}.
 The task gives a length for the whole note. A shorter note that keeps every rule \
@@ -441,7 +451,8 @@ def _v9(spec: InstrumentSpec) -> Profile:
         rates_field=(_RATES_FIELD if defaults.rates_rule else _NO_RATES_FIELD).format(**fields))
     templates = {**_V9_INSTRUMENT_TASKS, **(_V9_EVENT_TASKS if spec.events else {})}
     return Profile(system, {kind: text.format(**fields) for kind, text in templates.items()},
-                   defaults.about, rates_read_required=defaults.rates_rule is not None)
+                   f"{defaults.about} {BASIS_POINT}",
+                   rates_read_required=defaults.rates_rule is not None)
 
 
 #: Reviewed desk:v9 instrument profiles. An instrument gets one only after its

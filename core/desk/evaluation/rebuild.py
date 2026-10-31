@@ -28,7 +28,6 @@ from typing import Any
 from core.desk.evaluation.cases import Case
 from core.desk.identity import INSTRUMENT_KINDS, Instrument, instrument_of
 from core.desk.models import NoteKind
-from core.desk.prompts import PROMPT_VERSION
 from core.desk.service import DeskService, DeskSources
 from core.desk.store import DeskStore
 from core.desk.writer import WriteResult
@@ -163,7 +162,8 @@ def rebuild(note_ids: Sequence[str], *, desk_db: Path,
                 store.close()
             model, _, version = str(payload.get("model") or "").partition(" · ")
             envelope: dict[str, Any] = {
-                "prompt_version": PROMPT_VERSION,
+                # The version that wrote the note; the facts are rebuilt, not the prompt.
+                "prompt_version": version or None,
                 "reconstructed": {"built_at": at.isoformat(), "limits": list(LIMITS)}}
             if kind in INSTRUMENT_KINDS:
                 envelope["instrument"] = instrument_of(note_id)

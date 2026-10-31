@@ -152,7 +152,11 @@ def test_length_targets_follow_section_7():
 
 def test_v9_states_its_own_facts():
     stated = P.PROMPTS[P.V9]["NQ"].stated_facts
-    assert stated in P.PROMPTS[P.V9]["NQ"].system
+    about = P.ASSET_DEFAULTS[AssetClass.EQUITY_INDEX_FUTURE].about
+    assert stated == f"{about} {P.BASIS_POINT}"
+    # Every stated fact is in the system text (rule 7 defines the basis point).
+    assert about in P.PROMPTS[P.V9]["NQ"].system
+    assert "a basis point, 0.01 percentage point" in P.PROMPTS[P.V9]["NQ"].system
     assert stated == P.PROMPTS[P.V9]["ES"].stated_facts
     note = NoteDraft.model_validate({**NO_NUMBERS, "summary": "The US open is 09:30 ET; "
                                      "data comes at 08:30 ET."})
@@ -335,7 +339,8 @@ def test_eval_render_and_plan_take_a_prompt_version(tmp_path, monkeypatch, capsy
     out = tmp_path / "prompts"
     assert cli.main(["eval", "render", str(cases.directory), str(out),
                      "--prompt", "desk:v9"]) == 0
-    es = P.render(NoteKind.PREMARKET, ES, {"es": "+0.31%"}, version=P.V9)
+    es = P.render(NoteKind.PREMARKET, ES, {"es": "+0.31%", "recent_lessons": []},
+                  version=P.V9)
     assert (out / "premarket_ES_2026-10-20.txt").read_text() == text(es)
     assert "(desk:v9, cases" in (out / "index.md").read_text()
     capsys.readouterr()
@@ -382,3 +387,236 @@ async def test_a_run_never_mixes_prompt_versions(tmp_path):
     with pytest.raises(RunRefused, match="has desk:v8 results"):
         v9.plan(cases, run_id="r", max_calls=1, allowance_usd=1.0)
     assert v9.plan(cases, run_id="fresh", max_calls=1, allowance_usd=1.0)
+
+
+# --------------------------------------------------------------------------- review fixes
+
+
+@pytest.mark.parametrize("kind", ["release", "ask"])
+def test_a_v9_note_may_quote_the_basis_point_definition(kind):
+    note = {**NO_NUMBERS, "learn": "A basis point is 0.01 percentage point: 1 basis point "
+                                    "= 0.01 percentage point, so 1bp is tiny."}
+    score = dict(case_id=f"{kind}:0", kind=kind, model=MODEL,
+                 created_at="2026-10-20T15:00:00+00:00", draft=note, facts={},
+                 facts_complete=True, history=[])
+    assert checker.score_draft(**score, prompt_version="desk:v9").numbers_not_in_facts == []
+    instrument = None if kind == "release" else ID.NQ
+    sources = P.render(NoteKind(kind), instrument, {}, version=P.V9).number_sources
+    assert invented_numbers(NoteDraft.model_validate(note), sources) == []
+    # desk:v8 is unchanged and never stated it.
+    assert P.STATED_FACTS == P.PROMPTS[P.V8]["NQ"].stated_facts
+    assert "0.01" not in P.STATED_FACTS
+
+
+def test_recent_lessons_are_the_latest_distinct_terms():
+    from core.desk.lessons import RECENT, recent_lessons
+
+    learns = ["Basis point: 0.01 percentage point.", "basis point: again.",
+              "VIX measures fear. It rises when...", *(f"Term {i}: text." for i in range(9))]
+    assert recent_lessons(learns) == ["Basis point", "VIX measures fear", "Term 0",
+                                      "Term 1", "Term 2"]
+    assert len(recent_lessons(learns)) == RECENT == checker.REPEAT_WINDOW
+    assert recent_lessons(["", "  "]) == []
+
+
+async def test_v9_notes_get_the_latest_lessons_and_v8_facts_never_do():
+    service, writer = nq_and_es(NOW, rows=cpi_rows())
+    await service.ask(ID.NQ)
+    assert writer.sent[0][2]["recent_lessons"] == []
+    await service.ask(ES)
+    assert writer.sent[1][2]["recent_lessons"] == ["Lesson"]  # the NQ note's Learn box
+    es_note = next(n for n in service.store.recent() if n.instrument == "ES")
+    assert service.store.facts(es_note.id)[0]["recent_lessons"] == ["Lesson"]
+
+    base, _, _ = make(NOW, rows=cpi_rows())
+    await base.ask(ID.NQ)
+    await base.ask(ID.NQ)
+    assert all("recent_lessons" not in facts for _, facts in base.writer.calls)
+
+
+def test_eval_cases_take_lessons_from_notes_written_before_them():
+    from dataclasses import replace
+
+    from core.desk.evaluation import cases as C
+
+    case = complete_case("ask:now")
+    history = [
+        {"id": "a", "created_at": "2026-10-29T10:00:00+00:00", "learn": "Older: x."},
+        {"id": "b", "created_at": "2026-10-30T09:00:00+00:00", "learn": "Newer: y."},
+        {"id": "ask:now", "created_at": case.created_at, "learn": "Itself: z."},
+        {"id": "c", "created_at": "2026-10-31T09:00:00+00:00", "learn": "Later: w."},
+    ]
+    assert C.prompt_facts(case, history, P.V9)["recent_lessons"] == ["Newer", "Older"]
+    assert C.prompt_facts(case, history, P.V8) is case.facts
+    captured = replace(case, facts={**case.facts, "recent_lessons": ["Kept"]})
+    assert C.prompt_facts(captured, history, P.V9)["recent_lessons"] == ["Kept"]
+
+
+async def test_a_v9_eval_run_sends_the_recent_lessons(tmp_path):
+    from core.desk.evaluation import cases as C
+    from core.desk.evaluation.runner import EvalRunner, RunLedger
+
+    directory = tmp_path / "cases"
+    C.write_cases(directory, [complete_case("ask:0")], [
+        {"id": "x", "kind": "ask", "created_at": "2026-10-29T10:00:00+00:00",
+         "learn": "Basis point: 0.01 percentage point."}])
+    C.freeze(directory, "test")
+    cases = C.load(directory)
+    wire, guard = Wire(), FakeGuard()
+    guard.spending_limits_enabled = True
+    runner = EvalRunner(writer=v9_writer(wire, guard), guard=guard,
+                        ledger=RunLedger(tmp_path / "runs.sqlite3"), rates=RATES)
+    await runner.run(cases, run_id="r", max_calls=1, allowance_usd=1.0, out=tmp_path / "r.json")
+    user = wire.bodies[0]["messages"][1]["content"]
+    assert '"recent_lessons": [\n  "Basis point"\n ]' in user
+
+
+def test_the_checker_reads_an_es_draft_with_no_recorded_version(tmp_path, capsys):
+    from core.desk.evaluation import compare as R
+
+    case = es_case()
+    cases = frozen(tmp_path, [replace_baseline(case, {"prompt_version": None, "model": MODEL,
+                                                      "draft": dict(NO_NUMBERS)})])
+    scores = R.score_results(cases, R.stored_results(cases))
+    assert scores[case.id] is not None
+    assert cli.main(["eval", "check", str(cases.directory)]) == 0
+    assert R.compare(cases, R.stored_results(cases), R.stored_results(cases)).passed
+
+
+def replace_baseline(case, baseline):
+    from dataclasses import replace
+
+    return replace(case, baseline=baseline)
+
+
+def test_a_resumed_run_cannot_admit_a_call_at_another_version(tmp_path):
+    from core.desk.evaluation.runner import RunLedger, RunLimits, RunRefused
+
+    limits = RunLimits("sha", 3, 1_000_000)
+    first = RunLedger(tmp_path / "runs.sqlite3")
+    first.open_run("r", limits, P.V8)
+    first.begin("r", "ask:0", MODEL, 0.01, prompt_version=P.V8)
+    # A second worker (or a restart) at v9, while the v8 call is still pending
+    # and no result is written yet: refused at admission, nothing recorded.
+    second = RunLedger(tmp_path / "runs.sqlite3")
+    with pytest.raises(RunRefused, match="has desk:v8 results"):
+        second.begin("r", "ask:1", MODEL, 0.01, prompt_version=P.V9)
+    with pytest.raises(RunRefused, match="has desk:v8 results"):
+        second.open_run("r", limits, P.V9)
+    assert second.attempted("r") == {"ask:0": "pending"}
+    assert second.prompt_version("r") == P.V8
+    second.begin("r", "ask:1", MODEL, 0.01, prompt_version=P.V8)
+
+
+async def test_a_resumed_run_at_another_version_is_refused_before_any_call(tmp_path):
+    from core.desk.evaluation.runner import EvalRunner, RunLimits, RunRefused
+    from tests.desk.test_evaluation import runner_for
+
+    cases = frozen(tmp_path / "two", [complete_case("ask:0"), complete_case("ask:1")])
+    wire = Wire()
+    _, guard, ledger = runner_for(tmp_path, wire)
+    ledger.open_run("r", RunLimits(cases.sha256, 2, 1_000_000), P.V8)
+    v9 = EvalRunner(writer=v9_writer(wire, guard), guard=guard, ledger=ledger, rates=RATES)
+    with pytest.raises(RunRefused, match="has desk:v8 results"):
+        await v9.run(cases, run_id="r", max_calls=2, allowance_usd=1.0, out=tmp_path / "r.json")
+    assert wire.bodies == [] and ledger.attempted("r") == {}
+
+
+def test_concurrent_admissions_at_two_versions_admit_only_one(tmp_path):
+    import sqlite3
+    import threading
+
+    from core.desk.evaluation.runner import RunLedger, RunLimits, RunRefused
+
+    path = tmp_path / "runs.sqlite3"
+    RunLedger(path).close()
+    db = sqlite3.connect(path)  # a run created before versions were recorded
+    db.execute("INSERT INTO eval_runs (run_id, manifest_sha256, max_calls, allowance_micro, "
+               "created_at) VALUES ('r', 'sha', 10, 1000000, 'then')")
+    db.commit()
+    db.close()
+    assert RunLedger(path).limits("r") == RunLimits("sha", 10, 1_000_000)
+    barrier, outcomes = threading.Barrier(8), []
+
+    def worker(i):
+        ledger = RunLedger(path)
+        barrier.wait()
+        try:
+            ledger.begin("r", f"ask:{i}", MODEL, 0.01,
+                         prompt_version=P.V8 if i % 2 else P.V9)
+            outcomes.append((i % 2, True))
+        except RunRefused:
+            outcomes.append((i % 2, False))
+        finally:
+            ledger.close()
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    admitted = {parity for parity, ok in outcomes if ok}
+    assert len(outcomes) == 8 and len(admitted) == 1
+    winner = P.V8 if admitted == {1} else P.V9
+    ledger = RunLedger(path)
+    assert ledger.prompt_version("r") == winner and len(ledger.attempted("r")) == 4
+
+
+def old_ledger(path, *, entries=()):
+    """A run ledger from before ``entry`` and ``prompt_version`` existed."""
+    import sqlite3
+
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE eval_runs (run_id TEXT PRIMARY KEY, manifest_sha256 TEXT NOT "
+               "NULL, max_calls INTEGER NOT NULL, allowance_micro INTEGER NOT NULL, "
+               "created_at TEXT NOT NULL)")
+    db.execute("CREATE TABLE eval_calls (run_id TEXT NOT NULL REFERENCES eval_runs(run_id), "
+               "case_id TEXT NOT NULL, model TEXT NOT NULL, reserved_micro INTEGER NOT NULL, "
+               "actual_micro INTEGER, status TEXT NOT NULL, started_at TEXT NOT NULL, "
+               "finished_at TEXT, PRIMARY KEY (run_id, case_id))")
+    db.commit()
+    db.close()
+
+
+def test_an_old_ledger_is_upgraded_in_place(tmp_path):
+    import sqlite3
+
+    from core.desk.evaluation.runner import RunLedger, RunLimits
+
+    path = tmp_path / "runs.sqlite3"
+    old_ledger(path)
+    ledger = RunLedger(path)
+    columns = {r[1] for r in ledger._db.execute("PRAGMA table_info(eval_calls)")}
+    assert "entry" in columns
+    ledger.open_run("r", RunLimits("sha", 2, 1_000_000), P.V9)
+    ledger.begin("r", "ask:0", MODEL, 0.01, prompt_version=P.V9)
+    ledger.finish("r", "ask:0", "done", 0.01, {"prompt_version": P.V9, "draft": None})
+    assert ledger.prompt_versions("r") == {P.V9}
+    ledger.close()
+    RunLedger(path).close()  # opening again changes nothing
+
+    # A run made with entry but before prompt_version: taken from its results.
+    other = tmp_path / "other.sqlite3"
+    old_ledger(other)
+    db = sqlite3.connect(other)
+    db.execute("ALTER TABLE eval_calls ADD COLUMN entry TEXT")
+    db.execute("INSERT INTO eval_runs VALUES ('r', 'sha', 2, 1000000, 'then')")
+    db.execute("INSERT INTO eval_calls VALUES ('r', 'ask:0', 'm', 1, 1, 'done', 'then', "
+               "'then', ?)", (json.dumps({"prompt_version": P.V8}),))
+    db.commit()
+    db.close()
+    assert RunLedger(other).prompt_version("r") == P.V8
+
+
+def test_eval_run_works_on_an_old_empty_default_ledger(tmp_path, monkeypatch, capsys):
+    cases = frozen(tmp_path / "set", [complete_case("ask:0")])
+    old_ledger(tmp_path / "desk-eval-runs.sqlite3")  # data_dir is tmp_path
+    monkeypatch.setattr(cli, "_eval_settings", lambda: (eval_settings(tmp_path), tmp_path))
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("no request may be sent")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", forbidden)
+    assert cli.main(["eval", "run", str(cases.directory), str(tmp_path / "run.json"),
+                     "--max-calls", "1", "--allowance-usd", "1"]) == 0
+    assert "plan only: no calls made" in capsys.readouterr().out
