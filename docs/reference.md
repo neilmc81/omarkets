@@ -804,6 +804,25 @@ after a medium-or-higher release or Fed event of its kind), `nq_15m`/
 NQ read once per request) and `alert` (it also fired a breaking alert).
 `alerts` are the breaking alerts in the window.
 
+### Watchlists page
+
+`?view=watchlists` (tab 8, shortcut `8`; `web/src/watchlists/`, no AI). It edits
+the one watchlist: rename it, add instruments (the add box offers the registry
+from `GET /api/v1/chart/instruments` and refuses unknown symbols and repeats
+when the registry has loaded), remove them and move them up or down. Nothing is
+stored until **Save**, which sends one `PUT /api/v1/watchlist`; the core checks
+every symbol again, and its 422 (`unknown instrument: …`, `listed more than
+once: …`, a blank name) is shown on the page with the edit kept so it can be
+fixed. **Undo changes** returns to the saved list. Saving writes no note, calls
+no AI and touches neither Today nor the desk; the Chart picker reads the saved
+list the next time the Chart page opens.
+
+Each row shows last, change and % since the previous close and a feed badge
+(Live, Delayed, Stale, Closed, No data) read from the quotes the core already
+keeps (`GET /api/v1/instruments`, polled every 15 seconds; no new API or store).
+Hovering the instrument shows its explainer entry plus the quote's time and
+source.
+
 ### Explainer library
 
 Every fixed hover text lives in `core/desk/explainers.py` (no AI, written once;

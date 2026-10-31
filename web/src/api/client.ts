@@ -18,7 +18,7 @@ export const REQUEST_TIMEOUT_MS = 5000;
 
 // A GET with a timeout whose response is validated before use. Errors never
 // echo the response body.
-async function requestValidated<T>(url: string, schema: { parse: (data: unknown) => T }, signal?: AbortSignal): Promise<T> {
+export async function requestValidated<T>(url: string, schema: { parse: (data: unknown) => T }, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
   signal?.addEventListener("abort", abort, { once: true });
