@@ -366,7 +366,10 @@ class EvalRunner:
             case = call.case
             self._ledger.begin(run_id, case.id, call.model, call.bound_usd,
                                prompt_version=version)
-            result = await self._writer.attempt(NoteKind(case.kind), call.facts or case.facts,
+            # ``{}`` is a real answer: every captured fact was one this version
+            # doesn't take.
+            facts = call.facts if call.facts is not None else case.facts
+            result = await self._writer.attempt(NoteKind(case.kind), facts,
                                                 instrument=call.instrument, model=call.model)
             error = result.error or ""
             # The cost guard refused, or the provider rejected the request

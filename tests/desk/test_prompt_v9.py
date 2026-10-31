@@ -505,6 +505,30 @@ async def test_a_v9_eval_run_sends_the_recent_lessons(tmp_path):
     assert '"recent_lessons": [\n  "Basis point"\n ]' in user
 
 
+async def test_a_v8_eval_run_of_a_lessons_only_capture_sends_no_facts(tmp_path):
+    from dataclasses import replace
+
+    from tests.desk.test_evaluation import runner_for
+
+    runner, _, _ = runner_for(tmp_path, Wire())
+    writer = runner._writer
+    seen: dict[str, dict] = {}
+    hard_max_cost, attempt = writer.hard_max_cost, writer.attempt
+
+    def bound_spy(kind, facts, **kwargs):
+        seen["bound"] = facts
+        return hard_max_cost(kind, facts, **kwargs)
+
+    async def attempt_spy(kind, facts, **kwargs):
+        seen["attempt"] = facts
+        return await attempt(kind, facts, **kwargs)
+
+    writer.hard_max_cost, writer.attempt = bound_spy, attempt_spy
+    case = replace(complete_case("ask:0"), facts={"recent_lessons": ["Basis point"]})
+    cases = frozen(tmp_path, [case])
+    await runner.run(cases, run_id="r", max_calls=1, allowance_usd=1.0, out=tmp_path / "r.json")
+    assert seen == {"bound": {}, "attempt": {}}
+
 def test_the_checker_reads_an_es_draft_with_no_recorded_version(tmp_path, capsys):
     from core.desk.evaluation import compare as R
 
