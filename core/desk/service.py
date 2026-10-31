@@ -166,11 +166,15 @@ class DeskService:
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
         #: Instruments that get pre-market, move and ask notes (NQ only in production).
-        #: Each needs a prompt profile at the live prompt version.
+        #: Each needs a prompt profile at the writer's prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)
-        missing = [i.symbol for i in self.instruments if not has_profile(i.symbol)]
+        #: The prompt version notes are written with: the writer's (test doubles
+        #: without one use the production default).
+        self.prompt_version: str = getattr(writer, "prompt_version", PROMPT_VERSION)
+        missing = [i.symbol for i in self.instruments
+                   if not has_profile(i.symbol, version=self.prompt_version)]
         if missing:
-            raise ValueError(f"no {PROMPT_VERSION} prompt for {', '.join(missing)}; "
+            raise ValueError(f"no {self.prompt_version} prompt for {', '.join(missing)}; "
                              "an instrument needs a reviewed prompt profile before the "
                              "desk can write for it")
         #: Large-move trigger and whether it was scaled, per (instrument, trade date)
@@ -1097,7 +1101,7 @@ class DeskService:
             id=note_id, kind=kind, title=title, created_at=self.clock(),
             instrument=instrument.symbol if instrument else None,
             draft=result.draft, status="ok" if result.draft else "failed",
-            error=result.error, model=f"{result.model} · {PROMPT_VERSION}",
+            error=result.error, model=f"{result.model} · {self.prompt_version}",
             cost_usd=result.cost_usd,
             unverified_numbers=list(result.unverified_numbers), **parts,
         )

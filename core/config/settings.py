@@ -9,7 +9,7 @@ and environment variables prefixed with ``OMARKETS_``. The pre-rename
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
@@ -262,6 +262,9 @@ class Settings(BaseSettings):
     desk_input_rate: float = Field(default=3.0, gt=0, allow_inf_nan=False)
     desk_output_rate: float = Field(default=15.0, gt=0, allow_inf_nan=False)
     desk_db_path: Path | None = None
+    #: Prompt version new notes are written with (``core/desk/prompts.py``).
+    #: desk:v9 goes live only after its paid acceptance test and Neil's read.
+    desk_prompt_version: Literal["desk:v8", "desk:v9"] = "desk:v8"
     #: NQ move over about an hour that earns its own "why is NQ moving" note, used
     #: until there is enough history to scale it (``core/analysis/move_size.py``).
     desk_move_threshold_pct: float = Field(default=0.8, gt=0, allow_inf_nan=False)

@@ -78,7 +78,8 @@ def score_results(cases: CaseSet, results: Results) -> dict[str, Score | None]:
                 case_id=case.id, kind=case.kind, model=entry.get("model") or "",
                 created_at=case.created_at, draft=draft, facts=case.facts,
                 facts_complete=case.facts_complete, history=cases.history,
-                instrument=(case.envelope or {}).get("instrument"))
+                instrument=(case.envelope or {}).get("instrument"),
+                prompt_version=entry.get("prompt_version"))
         except ValidationError:
             scores[case.id] = None
     return scores

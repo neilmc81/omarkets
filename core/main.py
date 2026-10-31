@@ -256,6 +256,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
         input_rate=settings.desk_input_rate,
         output_rate=settings.desk_output_rate,
         cost_guard=cost_guard,
+        prompt_version=settings.desk_prompt_version,
     )
     return DeskService(
         sources=DeskSources(

@@ -18,7 +18,7 @@ from typing import Any
 from core.desk.evaluation.cases import instrument_for
 from core.desk.lessons import TOPICS, _lead
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import render
+from core.desk.prompts import PROMPT_VERSION, PROMPTS, render
 from core.desk.writer import _number_forms, invented_numbers
 
 #: §7 length targets in words, over every draft field.
@@ -373,9 +373,14 @@ class Score:
 
 def score_draft(*, case_id: str, kind: str, model: str, created_at: str,
                 draft: Mapping[str, Any], facts: Any, facts_complete: bool,
-                history: Sequence[Mapping], instrument: str | None = None) -> Score:
-    """``instrument`` is the symbol the note was written for (NQ when not recorded)."""
-    sources = render(NoteKind(kind), instrument_for(kind, instrument), facts).number_sources
+                history: Sequence[Mapping], instrument: str | None = None,
+                prompt_version: str | None = None) -> Score:
+    """``instrument`` is the symbol the note was written for (NQ when not recorded);
+    ``prompt_version`` the prompt that wrote it, whose stated facts a number may
+    also come from (the production default for older or unrecorded versions)."""
+    version = prompt_version if prompt_version in PROMPTS else PROMPT_VERSION
+    sources = render(NoteKind(kind), instrument_for(kind, instrument), facts,
+                     version=version).number_sources
     fields = draft_fields(draft)
     text = " ".join(fields)
     parsed = NoteDraft.model_validate(dict(draft))

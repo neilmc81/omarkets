@@ -15,7 +15,14 @@ from pydantic import ValidationError
 
 from core.desk.identity import Instrument
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import PROMPT_VERSION, NoPromptProfile, Profile, Prompt, render
+from core.desk.prompts import (
+    PROMPT_VERSION,
+    NoPromptProfile,
+    Profile,
+    Prompt,
+    profiles_at,
+    render,
+)
 from core.services.ai_budget import BudgetPaused
 
 logger = logging.getLogger(__name__)
@@ -59,12 +66,12 @@ def _draft_text(draft: NoteDraft) -> str:
                      draft.market_reaction, draft.rates_read or "", draft.learn, *draft.watch_next])
 
 
-def check_draft(draft: NoteDraft) -> str | None:
+def check_draft(draft: NoteDraft, *, rates_read_required: bool = True) -> str | None:
     if _ADVICE.search(_draft_text(draft)):
         return "draft contained trading advice"
-    # The reader accepts a missing rates_read (desk:v9 notes); the v8 prompt
-    # asks for it, so a v8 draft without it is invalid, as before.
-    if draft.rates_read is None:
+    # The reader accepts a missing rates_read; a prompt that asks for it (every
+    # v8 prompt, and v9 wherever yields matter) treats a draft without it as invalid.
+    if rates_read_required and draft.rates_read is None:
         return "model output was not valid"
     return None
 
@@ -137,9 +144,12 @@ class DeskWriter:
         timeout_seconds: float = 90.0,
         client: httpx.AsyncClient | None = None,
         url: str = OPENROUTER_URL,
-        #: Prompt profiles by instrument (default: ``prompts.PROFILES``). Tests only.
+        #: The prompt version every request is rendered at.
+        prompt_version: str = PROMPT_VERSION,
+        #: Prompt profiles by instrument (default: the version's). Tests only.
         profiles: Mapping[str, Profile] | None = None,
     ) -> None:
+        profiles_at(prompt_version)  # an unknown version fails here, not per note
         if models is None and model is None:
             raise ValueError("DeskWriter needs models or model")
         self._api_key = api_key
@@ -155,6 +165,7 @@ class DeskWriter:
         self._client = client
         self._url = url
         self._profiles = profiles
+        self.prompt_version = prompt_version
 
     @property
     def ready(self) -> bool:
@@ -173,7 +184,8 @@ class DeskWriter:
     def prompt(self, kind: NoteKind, facts: dict[str, Any], *,
                instrument: Instrument | None) -> Prompt:
         """The exact request for this note; ``NoPromptProfile`` if it can't be built."""
-        return render(kind, instrument, facts, profiles=self._profiles)
+        return render(kind, instrument, facts, version=self.prompt_version,
+                      profiles=self._profiles)
 
     def envelope(self, kind: NoteKind, result: WriteResult, *,
                  instrument: Instrument | None) -> dict[str, Any]:
@@ -184,7 +196,7 @@ class DeskWriter:
         primary = self.model_for(kind)
         prompt = result.prompt
         envelope: dict[str, Any] = {
-            "prompt_version": prompt.version if prompt else PROMPT_VERSION,
+            "prompt_version": prompt.version if prompt else self.prompt_version,
             "system_sha256": prompt.system_sha256 if prompt else None,
             "task_sha256": prompt.task_sha256 if prompt else None,
             "temperature": TEMPERATURE,
@@ -355,7 +367,7 @@ class DeskWriter:
                     self._max_output,
                 )
                 return WriteResult(None, model, cost, error="model output was not valid")
-            problem = check_draft(draft)
+            problem = check_draft(draft, rates_read_required=prompt.rates_read_required)
             if problem:
                 return WriteResult(None, model, cost, error=problem)
             return WriteResult(draft, model, cost)

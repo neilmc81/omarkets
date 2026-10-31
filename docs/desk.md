@@ -49,6 +49,20 @@ so a restart cannot produce a duplicate note or notification.
   when settled spend reaches 80% of the cap, and one critical "budget used up"
   alert when notes pause because the cap cannot cover another note. Output is
   validated (`NoteDraft`) and rejected if it contains trading advice.
+- Prompt versions (`core/desk/prompts.py`): `desk:v8` is NQ's hand-tuned text
+  and is what production writes. `desk:v9` (Phase 1 slice 5) is one set of
+  shared rules plus an instrument profile on top of its asset class's defaults
+  (session hours, what "close" means, the expected delay, how yields matter).
+  NQ's wording lives in NQ's profile; ES has its own reviewed profile. v9 asks
+  for `tone` (stored as `nq_tone`), and `rates_read` only where yields matter
+  (every equity index future). Each note task has a length target, recorded by
+  `eval check` and never retried. `desk_prompt_version`
+  (`OMARKETS_DESK_PROMPT_VERSION`, default `desk:v8`) selects the version; it
+  moves to v9 only after the paid acceptance test and Neil's read of a v9
+  pre-market. An instrument with no profile at that version is refused before
+  anything is reserved or sent, and never borrows NQ's prompt. Event notes
+  (release, Fed, earnings, auction, primer, review) stay desk-wide on NQ's
+  profile.
 - `core/desk/service.py` schedules notes and sends one desktop notification per
   successful note. `core/desk/store.py` keeps notes in `data/desk.sqlite3`.
   Each note's exact facts and request envelope (prompt version, SHA-256 of the
@@ -114,7 +128,7 @@ reported; otherwise it is worked out from that model's rates.
 writer was given, either exactly or rounded to fewer decimals. Only the FACTS
 block counts, plus the few facts the prompt itself states (`STATED_FACTS`: the
 10-minute delay, the 18:00 ET reopen, 08:30 ET data, 30 minutes before the
-open). The prompt's limits and examples ("max 45 words", rule numbers) are not
+open; v9 also states the 09:30–16:00 ET US session). The prompt's limits and examples ("max 45 words", rule numbers) are not
 facts. Digits inside a name are not figures and are skipped: Treasury
 maturities (1, 2, 3, 5, 7, 10, 20, 30 years: "2-year", "10y") and exact index
 names ("Nasdaq 100", "S&P 500", "FTSE 100" and a few others). "Nasdaq 777" or
@@ -155,6 +169,9 @@ service, and only `eval run --paid` makes paid calls.
   letters shuffled per case and the key in a separate file; `tally OUT` adds up
   the filled-in scores.
 - `render DIR OUT` writes each case's exact prompt and cost bound, offline.
+  `render` and `run` take `--prompt desk:v8|desk:v9` (default: the service's
+  `desk_prompt_version`); the results record the version, and `check` allows
+  the stated facts of the version that wrote each draft.
 - `run DIR RESULTS --max-calls N --allowance-usd X` prints the plan and makes no
   calls; with `--paid` it makes one attempt per case: no fallback model, no
   regeneration. Each run has its own call count and dollar allowance, fixed

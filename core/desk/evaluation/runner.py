@@ -32,7 +32,7 @@ from core.desk.evaluation.cases import Case, CaseSet, case_instrument
 from core.desk.evaluation.compare import Results, save_results
 from core.desk.identity import Instrument
 from core.desk.models import NoteKind
-from core.desk.prompts import PROMPT_VERSION, NoPromptProfile
+from core.desk.prompts import NoPromptProfile
 from core.desk.writer import DeskWriter
 
 #: Recorded before the request; left as-is if the process dies mid-call.
@@ -121,6 +121,13 @@ class RunLedger:
             rows = self._db.execute("SELECT case_id, status FROM eval_calls "
                                     "WHERE run_id=? AND status!=?", (run_id, REFUSED)).fetchall()
         return dict(rows)
+
+    def prompt_versions(self, run_id: str) -> set[str]:
+        """The prompt versions of the results recorded so far."""
+        with self._lock:
+            rows = self._db.execute("SELECT entry FROM eval_calls WHERE run_id=? AND "
+                                    "entry IS NOT NULL", (run_id,)).fetchall()
+        return {json.loads(entry).get("prompt_version") for (entry,) in rows} - {None}
 
     def begin(self, run_id: str, case_id: str, model: str, bound_usd: float) -> None:
         """Admit one attempt, atomically against the run's limits, before sending it."""
@@ -218,6 +225,10 @@ class EvalRunner:
         if recorded is not None and recorded != limits:
             raise RunRefused(f"run {run_id} was created with {recorded}; a restart cannot "
                              "change its cases or limits")
+        other = self._ledger.prompt_versions(run_id) - {self._writer.prompt_version}
+        if other:
+            raise RunRefused(f"run {run_id} has {', '.join(sorted(other))} results; a restart "
+                             f"cannot switch it to {self._writer.prompt_version}")
         done = self._ledger.attempted(run_id)
         planned = []
         for case in cases.cases:
@@ -256,7 +267,7 @@ class EvalRunner:
         planned = self.plan(cases, run_id=run_id, max_calls=max_calls,
                             allowance_usd=allowance_usd)
         self._ledger.open_run(run_id, RunLimits(cases.sha256, max_calls, _micro(allowance_usd)))
-        label = f"{PROMPT_VERSION} run {run_id}"
+        label = f"{self._writer.prompt_version} run {run_id}"
 
         def saved() -> Results:
             results = self._ledger.results(run_id, cases.sha256, label)
@@ -281,7 +292,7 @@ class EvalRunner:
                 status = DONE
             self._ledger.finish(run_id, case.id, status,
                                 0.0 if status == REFUSED else result.cost_usd, {
-                "model": result.model, "prompt_version": PROMPT_VERSION,
+                "model": result.model, "prompt_version": self._writer.prompt_version,
                 "draft": result.draft.model_dump(mode="json") if result.draft else None,
                 "error": result.error, "cost_usd": result.cost_usd,
                 "bound_usd": call.bound_usd,
