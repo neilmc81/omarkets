@@ -9,7 +9,7 @@ import { askDesk } from "./today/api";
 import { Today } from "./today/Today";
 import { NavigateContext } from "./shell/Explain";
 import { feedsStatus } from "./shell/feeds";
-import { useFocusStrip } from "./shell/focus";
+import { focusSaves, useFocusStrip } from "./shell/focus";
 import { pageFromLocation, pageSearch, PAGES, type Page } from "./shell/routes";
 import { ShellHeader } from "./shell/Shell";
 import { StatusPanel } from "./shell/StatusPanel";
@@ -28,7 +28,7 @@ export function Root() {
   const [statusOpen, setStatusOpen] = useState(false);
   const closeStatus = useCallback(() => setStatusOpen(false), []);
   const { desk, error, health, healthError, reload } = useDesk();
-  // The global focus (NQ by default): Today's market section and the header follow it.
+  // The global focus (NQ by default): Today's market section, the header and Explain follow it.
   const focus = useFocusStrip();
 
   const go = useCallback((next: Page, note?: string | null) => {
@@ -61,7 +61,10 @@ export function Root() {
     setAsking(true);
     setAskError(null);
     try {
-      const note = await askDesk();
+      // Explain what the user is looking at: a focus just chosen (save still in
+      // flight) first, then the loaded strip's focus; with neither, the core
+      // uses its saved focus. Never NQ by default.
+      const note = await askDesk(focusSaves.pending?.symbol ?? focus.data?.focus.symbol);
       setOpenId(note.id);
       await reload();
     } catch (err) {

@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 from core.api import desk as desk_api
 from core.desk import identity as ID
 from core.desk.models import NoteKind
+from core.domain.workspace import FocusUpdate
+from core.storage.workspace import WorkspaceStore
 from tests.desk.test_identity import MOVE_AT, falling
 from tests.desk.test_service import FakeWriter, make
 
@@ -84,10 +86,14 @@ async def test_no_es_premarket_is_scheduled():
 # --------------------------------------------------------------------------- POST /desk/ask
 
 
-def client(service) -> TestClient:
+def client(service, focus: str | None = None) -> TestClient:
     app = FastAPI()
     app.include_router(desk_api.router)
     app.state.desk = service
+    if focus is not None:
+        store = WorkspaceStore(":memory:")
+        store.set_focus(FocusUpdate(symbol=focus))
+        app.state.workspace = store
     return TestClient(app)
 
 
@@ -96,6 +102,35 @@ def test_ask_defaults_to_nq():
     response = client(service).post("/api/v1/desk/ask")
     assert response.status_code == 200
     assert response.json()["id"].startswith("ask:2026") and response.json()["instrument"] == "NQ"
+
+
+def test_ask_without_an_instrument_follows_the_saved_focus():
+    service, _, _ = desk(MOVE_AT)
+    response = client(service, focus="ES").post("/api/v1/desk/ask")
+    assert response.status_code == 200
+    assert response.json()["id"].startswith("ask:ES:") and response.json()["instrument"] == "ES"
+
+
+def test_ask_without_an_instrument_on_nq_focus_writes_nq():
+    service, _, _ = desk(MOVE_AT)
+    response = client(service, focus="NQ").post("/api/v1/desk/ask")
+    assert response.status_code == 200
+    assert response.json()["instrument"] == "NQ"
+
+
+@pytest.mark.parametrize("focus", ["YM", "BTC"])
+def test_ask_on_a_focus_the_desk_does_not_write_for_refuses_not_nq(focus):
+    service, _, _ = desk(MOVE_AT)  # NQ and ES only
+    response = client(service, focus=focus).post("/api/v1/desk/ask")
+    assert response.status_code == 400
+    assert response.json()["detail"] == f"The desk does not write for {focus}"
+    assert service.writer.calls == [] and service.store.recent(include_failed=True) == []
+
+
+def test_ask_query_wins_over_the_saved_focus():
+    service, _, _ = desk(MOVE_AT)
+    response = client(service, focus="YM").post("/api/v1/desk/ask", params={"instrument": "ES"})
+    assert response.status_code == 200 and response.json()["instrument"] == "ES"
 
 
 def test_ask_refuses_an_instrument_that_is_not_enabled_before_any_call():

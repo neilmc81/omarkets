@@ -33,11 +33,16 @@ const instruments = { generated_at: "2026-10-22T15:00:00Z", count: 3, instrument
 const strip = { generated_at: null, focus: focusOf("NQ").instrument, watchlist_name: "Default",
   symbols: desk.quotes.map((q) => q.symbol), quotes: desk.quotes };
 
-function serve(body: unknown = desk) {
+const stripFor = (symbol: string) => ({ ...strip, focus: focusOf(symbol).instrument });
+// The core refuses Explain for a focus the desk does not write for (BTC here).
+const refused = (detail: string) => Promise.resolve({ ok: false, status: 400, json: async () => ({ detail }) });
+
+function serve(body: unknown = desk, focusStrip: unknown = strip) {
   const fetcher = vi.fn((url: string) => url === "/health" ? ok(health)
-    : url === "/api/v1/focus/strip" ? ok(strip)
+    : url === "/api/v1/focus/strip" ? ok(focusStrip)
     : url === "/api/v1/instruments" ? ok(instruments)
-    : url === "/api/v1/desk/ask" ? ok({ ...note, id: "ask:1", kind: "ask" })
+    : url === "/api/v1/desk/ask?instrument=BTC" ? refused("The desk does not write for BTC")
+    : url.startsWith("/api/v1/desk/ask") ? ok({ ...note, id: "ask:1", kind: "ask" })
       : url === "/api/v1/desk/learn" ? ok({ count: 0, entries: [] })
         : ok(body));
   vi.stubGlobal("fetch", fetcher);
@@ -157,8 +162,27 @@ describe("shared shell", () => {
     render(<Root />);
     await screen.findByText("All feeds OK");
     press("e");
-    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/ask", expect.objectContaining({ method: "POST" })));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/ask?instrument=NQ", expect.objectContaining({ method: "POST" })));
     expect(current()).toHaveTextContent("Today");
+  });
+
+  it("Explain asks for the global focus instrument, not NQ", async () => {
+    const fetcher = serve(desk, stripFor("ES"));
+    render(<Root />);
+    await screen.findByRole("link", { name: /Focus: S&P 500/ });
+    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/ask?instrument=ES", expect.objectContaining({ method: "POST" })));
+    expect(fetcher.mock.calls.map(([url]) => url)).not.toContain("/api/v1/desk/ask?instrument=NQ");
+  });
+
+  it("Explain on a focus the desk does not write for shows the refusal, with no NQ fallback", async () => {
+    const fetcher = serve(desk, stripFor("BTC"));
+    render(<Root />);
+    await screen.findByRole("link", { name: /Focus: Bitcoin/ });
+    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The desk does not write for BTC");
+    const asks = fetcher.mock.calls.map(([url]) => url).filter((url) => url.startsWith("/api/v1/desk/ask"));
+    expect(asks).toEqual(["/api/v1/desk/ask?instrument=BTC"]);
   });
 
   it("J and K move between notes on Today", async () => {

@@ -293,7 +293,11 @@ export async function fetchPlaybook(signal?: AbortSignal): Promise<Playbook> {
   return playbookSchema.parse(await readJson(response));
 }
 
-export async function askDesk(): Promise<Note> {
-  const response = await fetch("/api/v1/desk/ask", { method: "POST", cache: "no-store" });
+// Explain the global focus instrument right now. The core refuses (400, before
+// any AI) an instrument the desk does not write for; with no symbol it uses the
+// saved focus itself, never NQ by default.
+export async function askDesk(symbol?: string | null): Promise<Note> {
+  const url = symbol ? `/api/v1/desk/ask?instrument=${encodeURIComponent(symbol)}` : "/api/v1/desk/ask";
+  const response = await fetch(url, { method: "POST", cache: "no-store" });
   return noteSchema.parse(await readJson(response));
 }
