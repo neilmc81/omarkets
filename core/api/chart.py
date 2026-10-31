@@ -55,6 +55,8 @@ router = APIRouter(prefix="/api/v1", tags=["chart"])
 
 #: Futures roots that have key levels (they settle and trade the Globex session).
 LEVEL_SYMBOLS = frozenset({"NQ", "ES"})
+#: Charts the release pins belong on: each pin carries NQ's 15-minute move.
+RELEASE_PIN_SYMBOLS = frozenset({"NQ"})
 HOLIDAYS_AHEAD = timedelta(days=21)
 SPARKLINE_SPAN = timedelta(hours=24)
 

@@ -145,6 +145,31 @@ export const sparklinesSchema = z.object({
   })),
 });
 
+// The Chart focus and the watchlist (core/api/workspace.py). The core decides
+// each instrument's label, precision and whether levels and release pins exist.
+export const chartInstrumentSchema = z.object({
+  symbol: z.string().min(1),
+  label: z.string(),
+  unit: z.string(),
+  price_precision: z.number().int().min(0).max(8),
+  levels: z.boolean(),
+  release_pins: z.boolean(),
+});
+
+export const chartInstrumentsSchema = z.object({ instruments: z.array(chartInstrumentSchema) });
+
+export const chartFocusSchema = z.object({
+  symbol: z.string().min(1),
+  updated_at: time.nullable(),
+  instrument: chartInstrumentSchema,
+});
+
+export const watchlistSchema = z.object({
+  name: z.string(),
+  symbols: z.array(z.string().min(1)),
+  updated_at: time.nullable(),
+});
+
 export type Bars = z.infer<typeof barsSchema>;
 export type Bar = z.infer<typeof barSchema>;
 export type ChartSession = z.infer<typeof sessionSchema>;
@@ -155,9 +180,12 @@ export type RiskTone = z.infer<typeof riskToneSchema>;
 export type Pin = z.infer<typeof pinSchema>;
 export type Pins = z.infer<typeof pinsSchema>;
 export type Sparklines = z.infer<typeof sparklinesSchema>;
+export type ChartInstrument = z.infer<typeof chartInstrumentSchema>;
+export type ChartFocus = z.infer<typeof chartFocusSchema>;
+export type Watchlist = z.infer<typeof watchlistSchema>;
 
-async function get<T>(path: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { signal, cache: "no-store" });
+async function get<T>(path: string, schema: z.ZodType<T>, signal?: AbortSignal, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, { signal, cache: "no-store", ...init });
   if (!response.ok) {
     let detail = `HTTP ${response.status}`;
     try {
@@ -179,6 +207,13 @@ export const fetchLevels = (symbol: string, signal?: AbortSignal) =>
 export const fetchRiskTone = (signal?: AbortSignal) => get("/api/v1/risk-tone", riskToneSchema, signal);
 export const fetchPins = (range: ChartRange, signal?: AbortSignal) => get(`/api/v1/chart/pins?range=${range}`, pinsSchema, signal);
 export const fetchSparklines = (signal?: AbortSignal) => get("/api/v1/sparklines", sparklinesSchema, signal);
+export const fetchChartInstruments = (signal?: AbortSignal) => get("/api/v1/chart/instruments", chartInstrumentsSchema, signal);
+export const fetchFocus = (signal?: AbortSignal) => get("/api/v1/chart/focus", chartFocusSchema, signal);
+export const fetchWatchlist = (signal?: AbortSignal) => get("/api/v1/watchlist", watchlistSchema, signal);
+/** Save the Chart page's instrument (the core writes no note and calls no AI). */
+export const saveFocus = (symbol: string) => get("/api/v1/chart/focus", chartFocusSchema, undefined, {
+  method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol }),
+});
 
 /** Intervals the core offers for a range (a month of 5-minute bars is not offered). */
 export function intervalsFor(range: ChartRange): readonly Interval[] {

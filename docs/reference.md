@@ -673,6 +673,9 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | `/api/v1/risk-tone` | GET | Rule-based risk tone `{tone, label, reasons[], inputs[], rules}` |
 | `/api/v1/chart/pins` | GET | Release pins for `range=1d\|5d\|1m`, with result, NQ's 15-minute move and `note_id`; 503 without the desk |
 | `/api/v1/sparklines` | GET | 15-minute closes over the 24 hours to each Today tile's latest quote; null marks a missing bucket |
+| `/api/v1/chart/instruments` | GET | Every registry instrument as the Chart page draws it: `{instruments: [{symbol, label, unit, price_precision, levels, release_pins}]}` |
+| `/api/v1/chart/focus` | GET, PUT | The Chart page's instrument `{symbol, updated_at, instrument}` (default NQ, `updated_at` null). PUT `{symbol}` saves it (422 if not in the registry; 503 without the workspace store). Writes no note and calls no AI |
+| `/api/v1/watchlist` | GET, PUT | The one watchlist `{name, symbols, updated_at}` (default "Desk strip": the eight Today strip symbols). PUT `{name, symbols}` replaces it; symbols must be registry instruments, no repeats (422 otherwise) |
 | `/api/v1/desk/notes` | GET | Written notes by time: `from`, `to` (UTC offset required; half-open; default the 7 days before now), `limit` (1–500, default 100). Returns `{from, to, limit, truncated, notes: [{id, kind, at, headline, summary, tone}]}`, newest first; failed and draftless notes are left out |
 | `/api/v1/desk/notes/{id}` | GET | One desk note |
 | `/api/v1/desk/calendar` | GET | Calendar page: `week=this\|next` (New York Monday–Monday), `all` (default false: medium importance and up), `tz` (IANA zone the days are grouped in; default the desk's reader zone, 422 if unknown). Returns `{generated_at, week, start, end, tz, all, hidden, days: [{date, label, rows}], stale, coverage}`; see "Calendar page" below. 503 without the desk |
@@ -736,6 +739,14 @@ draws. Times are UTC; unavailable values are `null` with a reason, never zero.
   (Fed speeches left out) in the range, `high` or `medium`, with the headline
   result, NQ's move in the first 15 minutes once the delayed feed has it, the
   rule-of-thumb explainer and the desk note's `note_id`.
+- **Chart focus and watchlist** (`core/api/workspace.py`, stored in
+  `workspace.sqlite3`, a file of its own): the Chart page shows the saved focus
+  and switches bars, labels, price precision and errors together. Levels are
+  fetched only where `levels` is true (NQ, ES) and release pins only where
+  `release_pins` is true (NQ: each pin measures NQ's first 15 minutes). The
+  picker lists the watchlist first, then the other instruments. Today, the
+  shell bar and the desk stay on NQ; a stored value that no longer validates
+  reads as the default.
 
 ### Calendar page
 
@@ -881,6 +892,7 @@ full list. Commonly used:
 | `OMARKETS_LOG_LEVEL` | `INFO` | Log level |
 | `OMARKETS_DATA_DIR` | `./data` | Data directory |
 | `OMARKETS_DUCKDB_PATH` | `<data_dir>/omarkets-<mode>.duckdb` | Market observation database; namespaced per mode so demo never mixes with live |
+| `OMARKETS_WORKSPACE_DB_PATH` | `<data_dir>/workspace.sqlite3` | Chart focus and watchlist |
 | `OMARKETS_DATA_PROVIDER` | `fake` | Provider adapter (`fake` only in Phase 1) |
 | `OMARKETS_PROVIDER_UPDATE_INTERVAL` | `2.0` | Seconds between synthetic updates |
 | `OMARKETS_PROVIDER_SEED` | `7` | Deterministic RNG seed for the fake provider |

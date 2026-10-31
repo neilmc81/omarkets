@@ -282,6 +282,13 @@ class Settings(BaseSettings):
     def resolved_desk_db_path(self) -> Path:
         return self.desk_db_path or self.data_dir / "desk.sqlite3"
 
+    #: The Chart focus and the watchlist (``core/storage/workspace.py``).
+    workspace_db_path: Path | None = None
+
+    @property
+    def resolved_workspace_db_path(self) -> Path:
+        return self.workspace_db_path or self.data_dir / "workspace.sqlite3"
+
     # --- Native Omarchy integration (Phase 8) ---
     # Serve the built web workstation from the backend so the native layer and
     # the launcher need one process, not a separate Vite preview server. The

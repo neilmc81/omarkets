@@ -32,6 +32,7 @@ from core.storage.base import ObservationRepository
 from core.storage.duckdb_repo import DuckDBObservationRepository
 from core.storage.economics import SQLiteEconomicRepository
 from core.storage.events import SQLiteEventRepository
+from core.storage.workspace import WorkspaceStore
 from core.theme.omarchy import OmarchyTheme
 
 logger = logging.getLogger(__name__)
@@ -323,6 +324,7 @@ def build_app(settings: Settings):
         theme_source=OmarchyTheme(settings.omarchy_theme_dir),
         news_service=news_service,
         ai_budget=cost_guard,
+        workspace_store=WorkspaceStore(settings.resolved_workspace_db_path),
         frontend_dist=(settings.resolved_frontend_dist if settings.serve_frontend else None),
     )
 
