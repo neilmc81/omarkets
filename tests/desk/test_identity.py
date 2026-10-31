@@ -64,11 +64,15 @@ def test_production_writes_for_nq_only():
 
 
 async def test_nq_and_es_premarkets_carry_their_own_facts_and_ids():
-    service, _, _ = make(RELEASE + timedelta(minutes=35), rows=cpi_rows())
-    service.instruments = (ID.NQ, ID.Instrument.of("ES"))
+    now = RELEASE + timedelta(minutes=35)
+    service, _, _ = make(now, rows=cpi_rows())
+    es = ID.Instrument.of("ES")
+    service.instruments = (ID.NQ, es)
     service._location = lambda now, inst: {f"{inst.symbol.lower()}_price_location":
                                            {"of": inst.symbol}}
     await service.tick()
+    # Only NQ's pre-market is scheduled (phase 2 slice 1); ES's is built directly.
+    await service.build_premarket("premarket:ES:2026-10-20", now, es)
     pre = {n.id: n for n in service.store.recent(include_failed=True)
            if n.kind is NoteKind.PREMARKET}
     assert set(pre) == {"premarket:2026-10-20", "premarket:ES:2026-10-20"}

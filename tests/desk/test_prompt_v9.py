@@ -178,10 +178,14 @@ async def test_v9_nq_snapshot(kind):
 async def test_v9_es_snapshots():
     from tests.desk.test_complete_inputs import inst
 
-    service, writer = nq_and_es(RELEASE + timedelta(minutes=35), rows=cpi_rows())
+    now = RELEASE + timedelta(minutes=35)
+    service, writer = nq_and_es(now, rows=cpi_rows())
     service.sources.market_state().instruments.update({i.symbol: i for i in (
         inst("NQ", 30120.5, change_pct=0.62), inst("ES", 6810.25, change_pct=0.31))})
-    await service.tick()
+    # ES gets no scheduled pre-market (phase 2 slice 1); build it right after
+    # NQ's, where the tick used to, so it sees the same recent lessons.
+    await service.build_premarket("premarket:2026-10-20", now, ID.NQ)
+    await service.build_premarket("premarket:ES:2026-10-20", now, ES)
     facts = es_facts(writer, NoteKind.PREMARKET)
     check("v9_es_premarket.txt", text(P.render(NoteKind.PREMARKET, ES, facts, version=P.V9)))
 
@@ -272,12 +276,15 @@ async def test_es_is_configurable_with_a_v9_writer_and_gets_its_own_notes():
     service = DeskService(sources=base.sources, store=base.store, writer=v9_writer(wire),
                           clock=lambda: clock["now"], instruments=("NQ", "ES"))
     await service.tick()
-    es, nq = service.store.get("premarket:ES:2026-10-20"), service.store.get("premarket:2026-10-20")
-    assert es.status == nq.status == "ok"
+    # NQ's pre-market is scheduled; ES gets move and ask notes only.
+    nq = service.store.get("premarket:2026-10-20")
+    assert service.store.get("premarket:ES:2026-10-20") is None
+    es = await service.ask(ES)
+    assert es.id.startswith("ask:ES:") and es.status == nq.status == "ok"
     assert es.model.endswith("· desk:v9") and nq.model.endswith("· desk:v9")
     systems = {b["messages"][0]["content"] for b in wire.bodies}
     assert P.PROMPTS[P.V9]["ES"].system in systems and P.PROMPTS[P.V9]["NQ"].system in systems
-    _, envelope = service.store.facts("premarket:ES:2026-10-20")
+    _, envelope = service.store.facts(es.id)
     assert envelope["prompt_version"] == "desk:v9" and envelope["instrument"] == "ES"
 
 
