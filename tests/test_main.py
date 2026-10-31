@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from core.config.settings import Settings
 from core.domain.economics import EconomicsMode
 from core.main import build_economic_service
@@ -110,3 +112,59 @@ def test_build_app_wires_only_the_desk_era_services(tmp_path):
     for retired in ("decisions", "analysts", "briefings", "historical", "research",
                     "technical", "notifications"):
         assert not hasattr(app.state, retired), retired
+
+
+# --- desk_instruments wiring (Phase 2 slice 1) ---
+
+
+def _desk_settings(tmp_path, **kwargs):
+    return Settings(_env_file=None, data_dir=tmp_path, market_data_provider="fake",
+                    market_data_mode="demo", economic_mode="disabled", news_enabled=False,
+                    **kwargs)
+
+
+def test_default_desk_writes_for_nq_only_on_desk_v8(tmp_path):
+    from core.main import build_app
+
+    app = build_app(_desk_settings(tmp_path))
+    assert [i.symbol for i in app.state.desk.instruments] == ["NQ"]
+    assert app.state.desk.prompt_version == "desk:v8"
+
+
+def test_enabling_es_under_desk_v8_is_refused_with_a_fix(tmp_path):
+    from core.main import DeskConfigError, build_app
+
+    settings = _desk_settings(tmp_path, desk_instruments=["NQ", "ES"])
+    with pytest.raises(DeskConfigError) as refused:
+        build_app(settings)
+    message = str(refused.value)
+    assert "ES" in message and "desk:v8 has no prompt for it" in message
+    assert "OMARKETS_DESK_PROMPT_VERSION=desk:v9" in message
+    assert "omarketsctl config" in message
+    # Refused before any store was opened.
+    assert not (tmp_path / "desk.sqlite3").exists()
+
+
+def test_refusal_stops_the_server_with_the_message(tmp_path, monkeypatch):
+    import core.main as main
+
+    settings = _desk_settings(tmp_path, desk_instruments=["NQ", "ES"])
+    monkeypatch.setattr(main, "Settings", lambda: settings)
+    monkeypatch.setattr(main.uvicorn, "Config", lambda *a, **k: pytest.fail("server built"))
+    with pytest.raises(SystemExit, match="omarkets: desk_instruments includes ES"):
+        main.main()
+
+
+def test_es_is_wired_through_under_desk_v9(tmp_path):
+    from core.main import build_app
+
+    app = build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "ES"],
+                                   desk_prompt_version="desk:v9"))
+    assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES"]
+
+
+def test_a_disabled_desk_is_not_checked(tmp_path):
+    from core.main import build_app
+
+    app = build_app(_desk_settings(tmp_path, desk_enabled=False, desk_instruments=["NQ", "ES"]))
+    assert app.state.desk is None
