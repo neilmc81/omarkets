@@ -77,6 +77,7 @@ _DIRECTION_BEFORE = re.compile(
 INSTRUMENT_NAMES: dict[str, tuple[str, ...]] = {
     "NQ": ("NQ", "Nasdaq 100 futures", "Nasdaq 100", "Nasdaq futures", "Nasdaq"),
     "ES": ("ES", "S&P 500 futures", "S&P 500", "S&P"),
+    "YM": ("YM", "Dow futures", "Dow Jones", "Dow"),
     "US2Y": ("US2Y", "2-year yield", "2-year", "two-year", "2y"),
     "US10Y": ("US10Y", "10-year yield", "10-year", "ten-year", "10y"),
     "CURVE": ("curve",),

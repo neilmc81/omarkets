@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 SPOKEN_LABELS: dict[str, str] = {
     "NQ": "NQ",
     "ES": "the S&P futures",
+    "YM": "the Dow futures",
     "US2Y": "two-year yields",
     "US10Y": "ten-year yields",
     "DXY": "the dollar",
