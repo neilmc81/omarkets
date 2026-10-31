@@ -5,7 +5,8 @@ number is computed here in the core; the web app only draws it.
 
 * ``GET /api/v1/bars/{symbol}?interval=5m|15m|1h&range=1d|5d|1m``
 * ``GET /api/v1/session`` — where now sits in the futures day (timeline bar).
-* ``GET /api/v1/levels/{symbol}`` — key levels with their explainers.
+* ``GET /api/v1/levels/{symbol}[?date=YYYY-MM-DD]`` — key levels with their explainers,
+  now or as they stood at a past session's cash close.
 * ``GET /api/v1/risk-tone`` — the rule-based risk tone.
 * ``GET /api/v1/chart/pins?range=1d|5d|1m`` — release pins linked to notes.
 * ``GET /api/v1/sparklines`` — the last 24 hours of 15-minute closes per tile.
@@ -14,7 +15,8 @@ number is computed here in the core; the web app only draws it.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -39,7 +41,7 @@ from core.domain.chart import (
     Sparklines,
 )
 from core.domain.instruments import get_instrument, normalize_symbol
-from core.domain.market_calendar import holiday_name, is_early_close
+from core.domain.market_calendar import holiday_name, is_early_close, is_trading_day
 from core.domain.sessions import (
     SessionPhase,
     active_session,
@@ -159,18 +161,52 @@ async def session(service: ServiceDep) -> SessionCalendar:
 
 @router.get("/levels/{symbol}", response_model=KeyLevels,
             responses={404: {"description": "No key levels for this symbol"},
+                       422: {"description": "Date is not a trading day, or is in the future"},
                        503: {"description": "Storage unavailable"}})
-async def levels(symbol: str, service: ServiceDep) -> KeyLevels:
-    """Overnight, prior-day and prior-week levels, the settle and the gap."""
+async def levels(
+    symbol: str,
+    service: ServiceDep,
+    trade_date: Annotated[date | None, Query(alias="date")] = None,
+) -> KeyLevels:
+    """Overnight, prior-day and prior-week levels, the settle and the gap.
+
+    With ``date`` (a trade date), the levels as they stood at that session's cash
+    close, or now while it is still before the close.
+    """
     canonical = _symbol(symbol)
     if canonical not in LEVEL_SYMBOLS:
         raise HTTPException(status_code=404, detail=f"no key levels for {canonical}")
     state = service.current_state()
+    now, instrument = state.generated_at, state.instruments.get(canonical)
+    if trade_date is not None:
+        if not is_trading_day(trade_date):
+            raise HTTPException(status_code=422, detail=f"{trade_date} is not a trading day")
+        if trade_date > active_session(now).trade_date:
+            raise HTTPException(status_code=422, detail=f"{trade_date} has not started yet")
     try:
-        return await asyncio.to_thread(key_levels, canonical, state.instruments.get(canonical),
-                                       service.ohlc, now=state.generated_at)
+        if trade_date is not None and globex_session(trade_date).rth_closes_at < now:
+            now = globex_session(trade_date).rth_closes_at
+            instrument = await asyncio.to_thread(_stored_instrument, service, canonical, now)
+        return await asyncio.to_thread(key_levels, canonical, instrument, service.ohlc, now=now)
     except StorageError as exc:
         raise HTTPException(status_code=503, detail="storage unavailable") from exc
+
+
+def _stored_instrument(service, symbol: str, at: datetime) -> SimpleNamespace | None:
+    """The last stored quote of the session containing ``at``, shaped like live state.
+
+    A past session's settle and contract come from what the feed sent then, not
+    from today's quote.
+    """
+    session = active_session(at)
+    quotes = service.history(symbol, start=session.opens_at, end=at, limit=50)
+    for quote in reversed(quotes):
+        settle = quote.metadata.get("previous_close")
+        if settle is not None:
+            return SimpleNamespace(value=quote.value, previous_close=float(settle),
+                                   contract_code=quote.metadata.get("contract_code"),
+                                   feed_status=quote.metadata.get("feed_status"))
+    return None
 
 
 @router.get("/risk-tone", response_model=RiskTone)
