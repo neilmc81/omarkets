@@ -258,6 +258,15 @@ BASIS_POINT = "1 basis point (bp) = 0.01 percentage point."
 #: Versions whose facts carry ``recent_lessons`` (the Learn boxes of the latest
 #: notes) so a note doesn't teach the same lesson again. desk:v8 never did.
 RECENT_LESSONS_VERSIONS = frozenset({V9})
+#: Facts only some prompt versions are written from → those versions; every
+#: other fact is shared. The one place a version's fact contract differs.
+VERSION_FACTS: Mapping[str, frozenset[str]] = {"recent_lessons": RECENT_LESSONS_VERSIONS}
+
+
+def facts_at(version: str | None, facts: Mapping[str, Any]) -> dict[str, Any]:
+    """A copy of ``facts`` without the fields prompt ``version`` doesn't take."""
+    return {key: value for key, value in facts.items()
+            if key not in VERSION_FACTS or version in VERSION_FACTS[key]}
 
 _V9_SYSTEM = """\
 You are the Omarkets desk writer. Your reader is a new trader who is learning how \

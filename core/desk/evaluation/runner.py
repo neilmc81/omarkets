@@ -155,11 +155,16 @@ class RunLedger:
 
     def _claim_version(self, run_id: str, prompt_version: str) -> None:
         """Inside a write transaction: set the run's version if it has none, or
-        refuse a different one (or results already written at another)."""
+        refuse a different one (or results already written at another). A run
+        with calls but no version (an old ledger whose results named none) is
+        refused: what it was written at is unknown."""
         row = self._db.execute("SELECT prompt_version FROM eval_runs WHERE run_id=?",
                                (run_id,)).fetchone()
         if row is None:
             raise RunRefused(f"unknown run {run_id}")
+        if row[0] is None and self._usage(run_id)[0]:
+            raise RunRefused(f"run {run_id} has calls recorded before prompt versions were "
+                             "kept, so its version is unknown; start a new run")
         other = ({row[0]} if row[0] else set()) | self._recorded_versions(run_id)
         other.discard(prompt_version)
         if other:

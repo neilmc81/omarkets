@@ -447,9 +447,43 @@ def test_eval_cases_take_lessons_from_notes_written_before_them():
         {"id": "c", "created_at": "2026-10-31T09:00:00+00:00", "learn": "Later: w."},
     ]
     assert C.prompt_facts(case, history, P.V9)["recent_lessons"] == ["Newer", "Older"]
-    assert C.prompt_facts(case, history, P.V8) is case.facts
+    assert C.prompt_facts(case, history, P.V8) == case.facts
     captured = replace(case, facts={**case.facts, "recent_lessons": ["Kept"]})
     assert C.prompt_facts(captured, history, P.V9)["recent_lessons"] == ["Kept"]
+
+
+def test_a_v9_capture_replayed_at_v8_is_held_to_the_v8_facts():
+    import copy
+    from dataclasses import replace
+
+    from core.desk.evaluation import cases as C
+
+    v8_case = complete_case("ask:now")
+    v9_case = replace(v8_case, facts={**v8_case.facts, "recent_lessons": ["Basis point"]})
+    saved = copy.deepcopy(v9_case.facts)
+    history = [{"id": "a", "created_at": "2026-10-29T10:00:00+00:00", "learn": "Older: x."}]
+    for version in (P.V8, None):  # None: a result that named no version
+        facts = C.prompt_facts(v9_case, history, version)
+        assert "recent_lessons" not in facts and facts == v8_case.facts
+    rendered = P.render(NoteKind.ASK, ID.NQ, C.prompt_facts(v9_case, history, P.V8),
+                        version=P.V8)
+    assert rendered == P.render(NoteKind.ASK, ID.NQ, v8_case.facts, version=P.V8)
+    assert "recent_lessons" not in rendered.user
+    # The capture itself is never edited.
+    assert v9_case.facts == saved and "recent_lessons" in v9_case.facts
+    # A v8 capture replayed at v9 still takes its lessons from the frozen history.
+    assert C.prompt_facts(v8_case, history, P.V9)["recent_lessons"] == ["Older"]
+    assert "recent_lessons" not in v8_case.facts
+    assert P.facts_at(P.V9, v9_case.facts) == v9_case.facts
+
+
+def test_a_long_lesson_term_is_cut_on_a_word_boundary():
+    from core.desk.lessons import recent_lessons
+
+    term = " ".join(["word"] * 40)  # 199 characters, no colon or full stop
+    (lead,) = recent_lessons([term])
+    assert len(lead) <= 120 and term.startswith(lead) and lead.endswith("word")
+    assert recent_lessons(["x" * 130]) == ["x" * 120]  # one long word: cut at the limit
 
 
 async def test_a_v9_eval_run_sends_the_recent_lessons(tmp_path):
@@ -606,6 +640,27 @@ def test_an_old_ledger_is_upgraded_in_place(tmp_path):
     db.commit()
     db.close()
     assert RunLedger(other).prompt_version("r") == P.V8
+
+
+def test_an_old_run_whose_results_named_no_version_cannot_be_claimed(tmp_path):
+    import sqlite3
+
+    from core.desk.evaluation.runner import RunLedger, RunRefused
+
+    path = tmp_path / "runs.sqlite3"
+    old_ledger(path)
+    db = sqlite3.connect(path)
+    db.execute("INSERT INTO eval_runs VALUES ('r', 'sha', 3, 1000000, 'then')")
+    db.execute("INSERT INTO eval_calls VALUES ('r', 'ask:0', 'm', 1, 1, 'done', 'then', "
+               "'then')")
+    db.commit()
+    db.close()
+    ledger = RunLedger(path)
+    assert ledger.prompt_version("r") is None
+    for version in (P.V8, P.V9):
+        with pytest.raises(RunRefused, match="version is unknown"):
+            ledger.begin("r", "ask:1", MODEL, 0.01, prompt_version=version)
+    assert ledger.prompt_version("r") is None and ledger.attempted("r") == {"ask:0": "done"}
 
 
 def test_eval_run_works_on_an_old_empty_default_ledger(tmp_path, monkeypatch, capsys):

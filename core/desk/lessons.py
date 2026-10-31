@@ -49,12 +49,20 @@ def _lead(text: str) -> str:
     return _SENTENCE.split(text, maxsplit=1)[0]
 
 
+def _clip(text: str, limit: int = 120) -> str:
+    """``text`` cut to ``limit`` characters at a word boundary."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit + 1]
+    return (head.rsplit(" ", 1)[0] if " " in head else text[:limit]).rstrip(" ,;.")
+
+
 def recent_lessons(learns: Iterable[str], limit: int = RECENT) -> list[str]:
     """What the latest lessons taught (each one's term, see ``_lead``), newest
     first and without repeats; ``learns`` is the Learn box texts, newest first."""
     found: list[str] = []
     for text in learns:
-        lead = " ".join(_lead(text or "").split()).strip(" .")[:120]
+        lead = _clip(" ".join(_lead(text or "").split()).strip(" ."))
         if lead and lead.casefold() not in {f.casefold() for f in found}:
             found.append(lead)
         if len(found) == limit:
