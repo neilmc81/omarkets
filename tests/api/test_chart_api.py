@@ -30,12 +30,16 @@ def inst(symbol, value, *, pct=0.0, change=0.0, status="live", feed="delayed", s
 
 
 class StubService:
-    def __init__(self, repo, instruments):
+    def __init__(self, repo, instruments, now=NOW):
         self.repo = repo
         self.instruments = instruments
+        self.now = now
 
     def current_state(self, now=None):
-        return SimpleNamespace(generated_at=NOW, instruments=self.instruments)
+        return SimpleNamespace(generated_at=self.now, instruments=self.instruments)
+
+    def history(self, symbol, *, start=None, end=None, limit=500):
+        return self.repo.history(symbol, start=start, end=end, limit=limit)
 
     def ohlc(self, symbol, *, start, end, bucket_seconds, within=()):
         return self.repo.ohlc(symbol, start=start, end=end, bucket_seconds=bucket_seconds,
@@ -118,6 +122,83 @@ def test_levels_contract(client):
     assert levels["prior_day_high"]["unavailable_reason"]
     assert all(level["explainer"] for level in body["levels"])
     assert client.get("/api/v1/levels/VIX").status_code == 404
+
+
+def utc(*parts):
+    return datetime(*parts, tzinfo=UTC)
+
+
+def es_quote(ts, value, settle, *, received=None, **extra):
+    return MarketObservation(symbol="ES", timestamp=ts, value=value, unit="index points",
+                             source="cnbc", received_at=received or ts + timedelta(minutes=10),
+                             metadata={"feed_status": "delayed", "contract_code": "ESZ26",
+                                       "previous_close": settle, **extra})
+
+
+@pytest.fixture
+def es_client(memory_repo):
+    """ES on Mon Nov 30 2026, 10:00 ET, after the Thanksgiving half day."""
+    memory_repo.store([
+        # Wed Nov 25 session (settle of Tue: 6,760).
+        es_quote(utc(2026, 11, 25, 16, 0), 6_820.0, 6_760.0),
+        # Fri Nov 27: overnight from Thu 18:00 ET, then the short cash session.
+        es_quote(utc(2026, 11, 27, 9, 0), 6_830.0, 6_800.0),
+        es_quote(utc(2026, 11, 27, 14, 30), 6_812.0, 6_800.0),
+        es_quote(utc(2026, 11, 27, 17, 55), 6_840.0, 6_800.0),
+        # After the 13:00 ET cash close but before the 13:15 ET Globex close.
+        es_quote(utc(2026, 11, 27, 18, 10), 6_844.0, 6_800.0),
+        # Seen live: a date-only quote stamped at the cash close, sent hours later
+        # with the next settle. It is not what we knew at the close.
+        es_quote(utc(2026, 11, 27, 18, 0), 6_842.0, 6_842.0, received=utc(2026, 11, 28, 1, 0),
+                 feed_status="stale", exchange_time_known=False),
+        es_quote(utc(2026, 11, 27, 17, 59), 6_842.0, 6_842.0, received=utc(2026, 11, 28, 1, 0)),
+        # Mon Nov 30 (Friday settled 6,842).
+        es_quote(utc(2026, 11, 30, 14, 30), 6_850.0, 6_842.0),
+    ])
+    app = FastAPI()
+    app.include_router(chart.router)
+    app.state.service = StubService(memory_repo, {"ES": SimpleNamespace(
+        value=6_850.0, previous_close=6_842.0, contract_code="ESZ26", feed_status="delayed")},
+        now=utc(2026, 11, 30, 15, 0))
+    app.state.desk = None
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def test_es_levels_for_a_past_half_day_use_that_days_quotes(es_client):
+    body = es_client.get("/api/v1/levels/es?date=2026-11-27").json()
+    assert body["symbol"] == "ES" and body["trade_date"] == "2026-11-27"
+    # As they stood at the 13:00 ET early cash close.
+    assert body["generated_at"] == "2026-11-27T18:00:00Z"
+    assert body["contract"] == "ESZ26" and body["delayed"] is True
+    levels = {level["key"]: level for level in body["levels"]}
+    # The settle is Friday's own (Wednesday's settle): not Monday's live one, and
+    # not the next settle from quotes that arrived after the close.
+    assert levels["prior_settle"]["value"] == 6_800.0
+    assert levels["gap_vs_settle"]["value"] == 12.0
+    assert levels["overnight_high"]["value"] == 6_830.0
+    assert levels["overnight_high"]["window_start"] == "2026-11-26T23:00:00Z"
+    assert levels["prior_day_high"]["value"] == 6_820.0
+    assert levels["prior_day_high"]["window_end"] == "2026-11-25T22:00:00Z"
+
+
+def test_es_levels_now_use_the_short_friday_as_prior_day(es_client):
+    body = es_client.get("/api/v1/levels/ES").json()
+    assert body["trade_date"] == "2026-11-30"
+    levels = {level["key"]: level for level in body["levels"]}
+    assert levels["prior_settle"]["value"] == 6_842.0
+    assert (levels["prior_day_high"]["value"], levels["prior_day_low"]["value"]) == (6_844.0,
+                                                                                   6_812.0)
+    assert levels["prior_day_high"]["window_end"] == "2026-11-27T18:15:00Z"
+    # The current session's own date gives the same live answer.
+    assert es_client.get("/api/v1/levels/ES?date=2026-11-30").json() == body
+
+
+def test_levels_date_must_be_a_past_or_current_trading_day(es_client):
+    holiday = es_client.get("/api/v1/levels/ES?date=2026-11-26")
+    assert holiday.status_code == 422 and "not a trading day" in holiday.json()["detail"]
+    assert es_client.get("/api/v1/levels/ES?date=2026-12-01").status_code == 422
+    assert es_client.get("/api/v1/levels/ES?date=nope").status_code == 422
 
 
 def test_risk_tone_contract(client):
