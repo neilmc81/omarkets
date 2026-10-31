@@ -67,6 +67,16 @@ so a restart cannot produce a duplicate note or notification.
   anything is reserved or sent, and never borrows NQ's prompt. Event notes
   (release, Fed, earnings, auction, primer, review) stay desk-wide on NQ's
   profile.
+- `desk_instruments` (`OMARKETS_DESK_INSTRUMENTS`, JSON list, default
+  `["NQ"]`) is which instruments get their own notes. NQ is always on and gets
+  pre-market, move and ask notes; every other instrument gets move and ask
+  notes only, never the daily pre-market (cost policy;
+  `identity.instrument_kinds`). Each instrument has its own 3-hour move limit
+  and move trigger; the daily ask limit is shared. The service refuses to start
+  when an instrument has no prompt profile at `desk_prompt_version` (ES under
+  desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
+  `?instrument=` (default NQ); one not in `desk_instruments` gets a 400 before
+  anything is sent.
 - `core/desk/service.py` schedules notes and sends one desktop notification per
   successful note. `core/desk/store.py` keeps notes in `data/desk.sqlite3`.
   Each note's exact facts and request envelope (prompt version, SHA-256 of the

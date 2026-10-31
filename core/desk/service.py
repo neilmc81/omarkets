@@ -166,8 +166,10 @@ class DeskService:
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
-        #: Instruments that get pre-market, move and ask notes (NQ only in production).
-        #: Each needs a prompt profile at the writer's prompt version.
+        #: Instruments that get their own notes (``desk_instruments``; NQ by
+        #: default): NQ pre-market, move and ask, the others move and ask only
+        #: (``identity.instrument_kinds``). Each needs a prompt profile at the
+        #: writer's prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)
         #: The prompt version notes are written with: the writer's (test doubles
         #: without one use the production default).
@@ -554,6 +556,8 @@ class DeskService:
             start = session.rth_opens_at - PREMARKET_LEAD
             if start <= now < session.rth_opens_at + timedelta(hours=1):
                 for inst in self.instruments:
+                    if NoteKind.PREMARKET not in ID.instrument_kinds(inst):
+                        continue  # NQ only: the pre-market is the premium-model note
                     pid = ID.note_id(NoteKind.PREMARKET, session.trade_date.isoformat(), inst)
                     if self._should_try(pid):
                         jobs.append((pid, NoteKind.PREMARKET,

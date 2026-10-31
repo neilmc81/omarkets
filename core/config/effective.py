@@ -113,6 +113,8 @@ def _source(names: list[str], environ: Mapping[str, str], dotenv: Mapping[str, s
 def _render(value: object) -> str:
     if isinstance(value, dict):
         return json.dumps({str(k): v for k, v in value.items()}, default=str)
+    if isinstance(value, list | tuple):
+        return json.dumps(list(value), default=str)
     return str(value)
 
 

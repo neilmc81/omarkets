@@ -277,3 +277,27 @@ def test_existing_marketos_database_is_kept(clean_env, tmp_path):
 def test_new_install_uses_omarkets_database(clean_env, tmp_path):
     settings = Settings(_env_file=None, data_dir=tmp_path)
     assert settings.resolved_duckdb_path == tmp_path / "omarkets-live.duckdb"
+
+
+# --- desk_instruments (Phase 2 slice 1) ---
+
+
+def test_desk_defaults_stay_nq_only_on_desk_v8(clean_env):
+    settings = Settings(_env_file=None)
+    assert settings.desk_instruments == ["NQ"]
+    assert settings.desk_prompt_version == "desk:v8"
+
+
+def test_desk_instruments_read_json_from_the_environment(clean_env):
+    clean_env.setenv("OMARKETS_DESK_INSTRUMENTS", '["NQ", "ES", "ES"]')
+    assert Settings(_env_file=None).desk_instruments == ["NQ", "ES"]
+
+
+@pytest.mark.parametrize(("value", "message"), [
+    (["NQ", "es"], "not an instrument symbol"),
+    (["ES"], "cannot be left out"),
+    ([], "cannot be left out"),
+])
+def test_desk_instruments_are_validated(clean_env, value, message):
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, desk_instruments=value)

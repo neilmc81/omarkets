@@ -220,6 +220,32 @@ def build_news_service(
     )
 
 
+class DeskConfigError(RuntimeError):
+    """The desk settings cannot run together; the service refuses to start."""
+
+
+def check_desk_instruments(settings: Settings) -> tuple[str, ...]:
+    """The instruments the desk writes for, refused when one has no prompt
+    profile at ``desk_prompt_version`` (desk:v8 is NQ's text only, so ES needs
+    desk:v9)."""
+    from core.desk.prompts import VERSIONS, has_profile
+
+    version = settings.desk_prompt_version
+    instruments = tuple(settings.desk_instruments)
+    missing = [s for s in instruments if not has_profile(s, version=version)]
+    if not missing:
+        return instruments
+    names = ", ".join(missing)
+    fits = [v for v in VERSIONS if all(has_profile(s, version=v) for s in instruments)]
+    fix = (f"set OMARKETS_DESK_PROMPT_VERSION={fits[-1]} or remove {names} from "
+           "OMARKETS_DESK_INSTRUMENTS" if fits
+           else f"remove {names} from OMARKETS_DESK_INSTRUMENTS")
+    raise DeskConfigError(
+        f"desk_instruments includes {names}, but {version} has no prompt for "
+        f"{'it' if len(missing) == 1 else 'them'}. To fix: {fix}. Run "
+        "`omarketsctl config` to see where each setting comes from.")
+
+
 def build_desk_service(settings: Settings, *, market, economics, news_service, cost_guard):
     """Plain-English desk notes: the Today screen and its notifications."""
     from core.desk.models import NoteKind
@@ -243,6 +269,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
             return []
         return economics.current_state().series
 
+    instruments = check_desk_instruments(settings)
     notifier = NotifySendNotifier()
 
     async def notify(summary: str, body: str) -> None:
@@ -277,6 +304,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
         enabled=settings.desk_enabled,
         local_tz=ZoneInfo(settings.desk_local_timezone),
         daily_plan=settings.desk_daily_plan,
+        instruments=instruments,
     )
 
 
@@ -285,6 +313,8 @@ def build_app(settings: Settings):
     from core.notifications.notifier import NotifySendNotifier
     from core.services.ai_budget import AICostGuard
 
+    if settings.desk_enabled:
+        check_desk_instruments(settings)  # before any store or provider is opened
     cost_guard = AICostGuard(
         settings.resolved_ai_budget_db_path,
         monthly_limit_usd=settings.ai_monthly_budget_usd,
@@ -347,7 +377,11 @@ def main() -> None:
         PRIMARY_SYMBOL,
     )
 
-    app = build_app(settings)
+    try:
+        app = build_app(settings)
+    except DeskConfigError as exc:
+        logger.error("refusing to start: %s", exc)
+        raise SystemExit(f"omarkets: {exc}") from exc
     config = uvicorn.Config(
         app,
         host=settings.api_host,

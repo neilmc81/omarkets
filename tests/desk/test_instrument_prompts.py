@@ -29,8 +29,9 @@ from core.desk.prompts import (
 from core.desk.service import DeskService
 from core.desk.writer import DeskWriter
 from tests.desk.test_evaluation import MODEL, RATES, complete_case, frozen, runner_for
+from tests.desk.test_identity import MOVE_AT, falling
 from tests.desk.test_prompt_snapshot import SNAPSHOTS, facts_for
-from tests.desk.test_service import RELEASE, cpi_rows, make
+from tests.desk.test_service import RELEASE, make
 from tests.desk.test_writer_and_api import GOOD, FakeGuard, completion
 
 ES = ID.Instrument.of("ES")
@@ -131,21 +132,21 @@ async def test_es_without_a_profile_makes_no_call_and_reserves_nothing():
         w.hard_max_cost(NoteKind.PREMARKET, ES_FACTS, model=MODEL, instrument=ES)
 
 
-async def test_es_premarket_fails_closed_in_the_tick_while_nq_is_written():
+async def test_es_move_fails_closed_in_the_tick_while_nq_is_written():
     wire, guard = Wire(), FakeGuard()
-    service, _, _ = make(RELEASE + timedelta(minutes=35), rows=cpi_rows(),
-                         writer=writer(wire, guard))
+    service, _, _ = make(MOVE_AT, writer=writer(wire, guard),
+                         series={"NQ": falling(30000.0), "ES": falling(6000.0)})
     # Injected past the start-up check, as a config slip or a later caller might.
     service.instruments = (ID.NQ, ES)
     service._location = lambda now, inst: {f"{inst.symbol.lower()}_price_location":
                                            {"of": inst.symbol}}
     await service.tick()
-    es = service.store.get("premarket:ES:2026-10-20")
+    es = service.store.get("move:ES:20261020T10")
     assert es.status == "failed" and es.error == "no desk:v8 prompt for ES"
     assert es.instrument == "ES" and es.cost_usd is None
-    _, envelope = service.store.facts("premarket:ES:2026-10-20")
+    _, envelope = service.store.facts("move:ES:20261020T10")
     assert envelope["instrument"] == "ES" and envelope["system_sha256"] is None
-    nq = service.store.get("premarket:2026-10-20")
+    nq = service.store.get("move:20261020T10")
     assert nq.status == "ok" and nq.instrument == "NQ"
     # Nothing was sent for ES, and every reservation belongs to a request sent.
     assert wire.bodies and not any("es_price_location" in json.dumps(b) for b in wire.bodies)

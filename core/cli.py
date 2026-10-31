@@ -268,6 +268,7 @@ _KEY_SETTINGS = {
     "ai_daily_budget_usd",
     "desk_enabled",
     "desk_fallback_model",
+    "desk_instruments",
     "desk_move_threshold_pct",
     "desk_prompt_version",
     "openrouter_api_key",
