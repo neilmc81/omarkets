@@ -189,6 +189,45 @@ def test_headlines_rank_categorised_first_with_stable_ties_and_cap():
     assert [h.title for h in reversed_service.headlines(at - timedelta(hours=6), at)] == titles
 
 
+def test_duplicate_titles_keep_the_same_copy_whatever_the_input_order():
+    at = NOW
+    fillers = [item("cnbc_markets", f"Stocks drift {i}", at - timedelta(minutes=10 + i))
+               for i in range(12)]
+    duplicates = [
+        # Only the tech-feed copy is categorised, so it survives the cap.
+        item("cnbc_markets", "Retailers slip", at - timedelta(hours=5)),
+        item("cnbc_tech", "Retailers slip", at - timedelta(hours=5)),
+        # The newer copy wins.
+        item("cnbc_top", "Dollar edges lower", at - timedelta(minutes=30)),
+        item("cnbc_top", "Dollar edges lower", at - timedelta(minutes=1)),
+        # Same time: a publication time beats a received-only time.
+        item("cnbc_top", "Bond yields dip", None, received=at - timedelta(minutes=2)),
+        item("cnbc_top", "Bond yields dip", at - timedelta(minutes=2)),
+        # Same time, both published: ordered by source.
+        item("cnbc_top", "Gold steadies", at - timedelta(minutes=3)),
+        item("cnbc_markets", "gold steadies", at - timedelta(minutes=3)),
+    ]
+
+    def lines(news):
+        service, _, _ = make(at, news=news)
+        return [(n.headline.source, n.headline.title, n.headline.published_at, n.published,
+                 n.categorised) for n in service.news_lines(at - timedelta(hours=6), at)]
+
+    news = fillers + duplicates
+    expected = lines(news)
+    assert len(expected) == 12
+    assert expected[:5] == [
+        ("cnbc_tech", "Retailers slip", at - timedelta(hours=5), True, True),
+        ("cnbc_top", "Dollar edges lower", at - timedelta(minutes=1), True, False),
+        ("cnbc_top", "Bond yields dip", at - timedelta(minutes=2), True, False),
+        ("cnbc_markets", "gold steadies", at - timedelta(minutes=3), True, False),
+        ("cnbc_markets", "Stocks drift 0", at - timedelta(minutes=10), True, False),
+    ]
+    assert lines(list(reversed(news))) == expected
+    assert lines(duplicates[::-1] + fillers[::-1]) == expected
+    assert lines(duplicates[1::2] + fillers + duplicates[::2]) == expected
+
+
 def test_headline_facts_keep_received_apart_from_published():
     at = NOW
     service, _, _ = make(at, news=[

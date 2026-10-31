@@ -393,12 +393,14 @@ class DeskService:
         """Headlines in ``[since, until]``, one per title, ranked before the cap.
 
         Headlines with a market-moving category (``headlines.categorise``) come
-        first, then the rest; within each, newest first, then source and title,
-        so equal times always rank the same way. A headline without a
+        first, then the rest; within each, newest first, then one with a
+        publication time before one placed only by when it was received, then
+        source, title and link, so equal times always rank the same way.
+        Duplicate titles are ranked the same way and the best one is kept, so
+        which copy survives never depends on input order. A headline without a
         publication time is placed by when it was received, and says so.
         """
-        seen: set[str] = set()
-        result: list[NewsLine] = []
+        ranked: list[tuple[tuple, str, NewsLine]] = []
         for event in self.sources.news_events():
             published = event.published_at or event.received_at
             if published is None or not (since <= published <= until):
@@ -409,17 +411,22 @@ class DeskService:
                 continue
             if match is not None and not match.search(title):
                 continue
-            key = title.casefold()
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append(NewsLine(
+            line = NewsLine(
                 Headline(source=source, title=title[:300], published_at=published,
                          url=event.source_url),
                 published=event.published_at is not None,
-                categorised=HL.categorise(title, source) is not None))
-        result.sort(key=lambda n: (not n.categorised, -n.headline.published_at.timestamp(),
-                                   n.headline.source, n.headline.title))
+                categorised=HL.categorise(title, source) is not None)
+            rank = (not line.categorised, -published.timestamp(), not line.published,
+                    source, title, event.source_url or "")
+            ranked.append((rank, title.casefold(), line))
+        ranked.sort(key=lambda r: r[0])
+        seen: set[str] = set()
+        result: list[NewsLine] = []
+        for _, key, line in ranked:
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(line)
         return result[:limit]
 
     # ------------------------------------------------------------------ scheduling
