@@ -193,16 +193,20 @@ async def levels(
 
 
 def _stored_instrument(service, symbol: str, at: datetime) -> SimpleNamespace | None:
-    """The last stored quote of the session containing ``at``, shaped like live state.
+    """The last quote we had by ``at`` in its session, shaped like live state.
 
     A past session's settle and contract come from what the feed sent then, not
-    from today's quote.
+    from today's quote. Quotes that arrived after ``at`` or carry only a date
+    are skipped: CNBC stamps date-only quotes 16:00 ET and sends them hours
+    later with the *next* session's settle.
     """
     session = active_session(at)
-    quotes = service.history(symbol, start=session.opens_at, end=at, limit=50)
+    quotes = service.history(symbol, start=session.opens_at,
+                             end=at - timedelta(microseconds=1), limit=200)
     for quote in reversed(quotes):
         settle = quote.metadata.get("previous_close")
-        if settle is not None:
+        if (settle is not None and quote.received_at <= at
+                and quote.metadata.get("exchange_time_known") is not False):
             return SimpleNamespace(value=quote.value, previous_close=float(settle),
                                    contract_code=quote.metadata.get("contract_code"),
                                    feed_status=quote.metadata.get("feed_status"))

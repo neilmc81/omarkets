@@ -128,11 +128,11 @@ def utc(*parts):
     return datetime(*parts, tzinfo=UTC)
 
 
-def es_quote(ts, value, settle):
+def es_quote(ts, value, settle, *, received=None, **extra):
     return MarketObservation(symbol="ES", timestamp=ts, value=value, unit="index points",
-                             source="cnbc", received_at=ts + timedelta(minutes=10),
+                             source="cnbc", received_at=received or ts + timedelta(minutes=10),
                              metadata={"feed_status": "delayed", "contract_code": "ESZ26",
-                                       "previous_close": settle})
+                                       "previous_close": settle, **extra})
 
 
 @pytest.fixture
@@ -147,6 +147,11 @@ def es_client(memory_repo):
         es_quote(utc(2026, 11, 27, 17, 55), 6_840.0, 6_800.0),
         # After the 13:00 ET cash close but before the 13:15 ET Globex close.
         es_quote(utc(2026, 11, 27, 18, 10), 6_844.0, 6_800.0),
+        # Seen live: a date-only quote stamped at the cash close, sent hours later
+        # with the next settle. It is not what we knew at the close.
+        es_quote(utc(2026, 11, 27, 18, 0), 6_842.0, 6_842.0, received=utc(2026, 11, 28, 1, 0),
+                 feed_status="stale", exchange_time_known=False),
+        es_quote(utc(2026, 11, 27, 17, 59), 6_842.0, 6_842.0, received=utc(2026, 11, 28, 1, 0)),
         # Mon Nov 30 (Friday settled 6,842).
         es_quote(utc(2026, 11, 30, 14, 30), 6_850.0, 6_842.0),
     ])
@@ -167,7 +172,8 @@ def test_es_levels_for_a_past_half_day_use_that_days_quotes(es_client):
     assert body["generated_at"] == "2026-11-27T18:00:00Z"
     assert body["contract"] == "ESZ26" and body["delayed"] is True
     levels = {level["key"]: level for level in body["levels"]}
-    # The settle is Friday's own (Wednesday's settle), not Monday's live one.
+    # The settle is Friday's own (Wednesday's settle): not Monday's live one, and
+    # not the next settle from quotes that arrived after the close.
     assert levels["prior_settle"]["value"] == 6_800.0
     assert levels["gap_vs_settle"]["value"] == 12.0
     assert levels["overnight_high"]["value"] == 6_830.0
