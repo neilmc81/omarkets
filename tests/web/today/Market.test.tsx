@@ -36,11 +36,13 @@ describe("chart state", () => {
 });
 
 describe("quote tiles", () => {
-  it("show the core's sparkline and explain the instrument on hover", () => {
+  it("show the core's sparkline and explain the instrument on click", () => {
     render(<QuoteStrip quotes={[quote({})]} sparklines={sparklines} asOf={asOf} />);
     expect(screen.getByRole("img", { name: "Nasdaq 100 futures, last 24 hours" })).toBeInTheDocument();
     const tile = screen.getByRole("button", { name: /Nasdaq 100 futures/ });
     fireEvent.mouseEnter(tile.parentElement!);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.click(tile);
     const card = screen.getByRole("tooltip");
     expect(card).toHaveTextContent("Futures on the Nasdaq 100.");
     expect(card).toHaveTextContent("Delayed quote");
@@ -53,7 +55,7 @@ describe("quote tiles", () => {
     expect(screen.queryByText("stale")).toBeNull();
     const tile = screen.getByRole("button", { name: /Nasdaq 100 futures/ });
     expect(tile.closest(".is-stale")).toBeNull();
-    fireEvent.mouseEnter(tile.parentElement!);
+    fireEvent.click(tile);
     expect(screen.getByRole("tooltip")).toHaveTextContent("last value from the latest session");
   });
 
@@ -105,7 +107,7 @@ describe("key levels card", () => {
     expect(within(card).getByText("unavailable")).toHaveClass("t-muted");
     expect(within(card).getByText("+25.00 (+0.09%)")).toBeInTheDocument();
     expect(within(card).queryByText("Prior week high")).toBeNull();
-    fireEvent.focus(within(card).getByRole("button", { name: /Prior day high/ }));
+    fireEvent.click(within(card).getByRole("button", { name: /Prior day high/ }));
     expect(screen.getByRole("tooltip")).toHaveTextContent("Unavailable: no stored quotes for this window.");
   });
 });

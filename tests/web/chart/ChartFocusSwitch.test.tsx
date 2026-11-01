@@ -5,10 +5,10 @@ import { ok } from "../deskFixtures";
 import { bars, btcBars, chartInstruments, focusOf, levels, pins, watchlist } from "../chartFixtures";
 
 // The Chart page with the real SessionChart (only lightweight-charts is faked),
-// so a focus switch is tested down to the hover card and the footer readout.
+// so a focus switch is tested down to the explain card and the footer readout.
 
 type Handler = (param: { time?: number; point?: { x: number; y: number } }) => void;
-const lw = vi.hoisted(() => ({ move: null as Handler | null, click: null as (() => void) | null }));
+const lw = vi.hoisted(() => ({ move: null as Handler | null, click: null as Handler | null }));
 vi.mock("lightweight-charts", () => {
   const series = () => ({
     setData: () => undefined, applyOptions: () => undefined, attachPrimitive: () => undefined,
@@ -24,7 +24,7 @@ vi.mock("lightweight-charts", () => {
       addSeries: series,
       subscribeCrosshairMove: (handler: Handler) => { lw.move = handler; },
       unsubscribeCrosshairMove: () => undefined,
-      subscribeClick: (handler: () => void) => { lw.click = handler; },
+      subscribeClick: (handler: Handler) => { lw.click = handler; },
       unsubscribeClick: () => undefined,
       timeScale: () => ({ fitContent: () => undefined, options: () => ({ barSpacing: 6 }), timeToCoordinate: () => 10 }),
     }),
@@ -69,9 +69,10 @@ describe("Chart focus switch", () => {
     const picker = await screen.findByRole("combobox", { name: "Instrument" });
     await waitFor(() => expect(picker).not.toBeDisabled());
     await screen.findByRole("button", { name: /Jobless claims/ });
-    act(() => lw.move!({ time: seconds("2026-10-22T12:30:00Z"), point: { x: 50, y: 20 } }));
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Jobless claims");
-    act(() => lw.click!());
+    const onPin = { time: seconds("2026-10-22T12:30:00Z"), point: { x: 50, y: 20 } };
+    act(() => lw.move!(onPin));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => lw.click!(onPin));
     expect(screen.getByRole("dialog")).toHaveTextContent("Jobless claims");
     expect(screen.getByText(/O 29,118\.00 H 29,123\.00/)).toBeInTheDocument();
 

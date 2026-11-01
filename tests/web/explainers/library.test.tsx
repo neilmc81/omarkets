@@ -52,7 +52,7 @@ describe("explainer library schema", () => {
   });
 });
 
-describe("hover-card content", () => {
+describe("explain-card content", () => {
   it("shows what it is, why it matters for NQ, and both directions with the core's labels", () => {
     expect(explainerLines(nq)).toEqual([
       "Futures on the Nasdaq 100.",
@@ -78,16 +78,16 @@ describe("hover-card content", () => {
     expect(richLevel.at(-1)).toBe("A rule of thumb, not advice.");
   });
 
-  it("a quote tile's hover card shows the library entry once it loads", async () => {
+  it("a quote tile's card shows the library entry once it loads", async () => {
     const fetcher = serve();
     render(<QuoteStrip quotes={[quote]} sparklines={null} asOf={(iso) => iso} />);
-    fireEvent.mouseEnter(screen.getByRole("button", { name: /Nasdaq 100 futures/ }).parentElement!);
+    fireEvent.click(screen.getByRole("button", { name: /Nasdaq 100 futures/ }));
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("Why it matters for NQ: This is the market the desk follows."));
     expect(screen.getByRole("tooltip")).toHaveTextContent("Falling: Sellers are in charge for now.");
     expect(fetcher).toHaveBeenCalledWith("/api/v1/explainers", expect.anything());
   });
 
-  it("a key level's hover card shows the library entry", async () => {
+  it("a key level's card shows the library entry", async () => {
     serve();
     render(<KeyLevelsCard levels={levels} error={null} />);
     fireEvent.click(screen.getByRole("button", { name: /Overnight high/ }));
@@ -97,7 +97,7 @@ describe("hover-card content", () => {
   it("keeps the payload's short explainer when the library cannot load", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
     render(<QuoteStrip quotes={[quote]} sparklines={null} asOf={(iso) => iso} />);
-    fireEvent.mouseEnter(screen.getByRole("button", { name: /Nasdaq 100 futures/ }).parentElement!);
+    fireEvent.click(screen.getByRole("button", { name: /Nasdaq 100 futures/ }));
     expect(screen.getByRole("tooltip")).toHaveTextContent("Short form from the quote payload.");
   });
 });

@@ -154,7 +154,7 @@ describe("Watchlists page", () => {
     const ym = screen.getByText("YM").closest("tr")!;
     expect(await within(ym).findByText("Demo")).toHaveClass("wl-badge", "wl-demo");
     expect(within(ym).queryByText("Live")).toBeNull();
-    fireEvent.mouseEnter(within(ym).getByText("YM"));
+    fireEvent.click(within(ym).getByText("YM"));
     expect(document.body.textContent).toMatch(/Demo: made-up practice data/);
   });
 

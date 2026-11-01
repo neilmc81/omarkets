@@ -7,7 +7,7 @@ import { fetchCalendar, type CalendarBoard, type CalendarFigure, type CalendarRo
 
 // The Calendar page: a New York week of release moments, grouped by day in
 // your time zone, your time first and New York second. Every number and word
-// in a row comes from the core; the page lays it out and explains it on hover.
+// in a row comes from the core; the page lays it out and explains it on click.
 
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 

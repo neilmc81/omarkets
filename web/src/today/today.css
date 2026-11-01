@@ -632,11 +632,12 @@
 .explain-block > .explain-trigger {
   flex: 1;
   position: relative;
-  cursor: help;
+  cursor: pointer;
 }
 
+/* Cards open on click only, so the cue says "click me", not "hover me". */
 .explain-inline > .explain-trigger {
-  cursor: help;
+  cursor: pointer;
   text-decoration: underline dotted var(--t-muted);
   text-underline-offset: 4px;
 }
@@ -660,19 +661,23 @@
   color: var(--t-accent);
 }
 
+/* Compact: long explainers scroll inside the card instead of covering the page. */
 .explain-card {
   position: fixed;
   z-index: 50;
   width: max-content;
-  max-width: min(340px, calc(100vw - 16px));
-  padding: 10px 12px;
+  max-width: min(272px, calc(100vw - 16px));
+  max-height: min(40vh, 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 10px;
   border: 1px solid var(--t-line);
   border-radius: 8px;
   background: var(--surface-2);
   color: var(--text);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 70%, transparent);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  line-height: 1.4;
   text-align: left;
   /* A card opened from a table header or chip must not inherit its styles. */
   white-space: normal;
@@ -684,9 +689,25 @@
   font-variant-numeric: normal;
 }
 
+.explain-card:focus {
+  outline: none;
+}
+
+/* Reached by keyboard (Enter on the trigger, or Tab): show where focus is. */
+.explain-card:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: -2px;
+}
+
+/* The title stays put while the card scrolls; it covers the top padding too. */
 .explain-title {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
   display: block;
-  margin-bottom: 4px;
+  margin: -8px 0 4px;
+  padding: 8px 0 2px;
+  background: var(--surface-2);
   color: var(--text-strong);
 }
 
@@ -698,6 +719,17 @@
   display: flex;
   gap: 14px;
   margin-top: 6px !important;
+}
+
+/* The links stay pinned to the bottom of a scrolling card, covering the
+   bottom padding like the sticky title does at the top. */
+.explain-card .explain-links {
+  position: sticky;
+  bottom: -8px;
+  z-index: 1;
+  margin-bottom: -8px;
+  padding: 4px 0 8px;
+  background: var(--surface-2);
 }
 
 .explain-links a {
@@ -1058,6 +1090,16 @@
   position: relative;
 }
 
+/* Focus lands on the chart frame when a focused chart card closes. */
+.session-chart:focus {
+  outline: none;
+}
+
+.session-chart:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: 2px;
+}
+
 .session-chart-canvas {
   position: absolute;
   inset: 0;
@@ -1073,12 +1115,12 @@
 .explain-card.chart-card {
   position: absolute;
   z-index: 5;
-  pointer-events: none;
-  max-width: 300px;
 }
 
-.explain-card.chart-card.is-pinned {
-  pointer-events: auto;
+/* The pointer is on a pin or level line: a click opens its card. */
+.session-chart.is-aiming .session-chart-canvas,
+.session-chart.is-aiming .session-chart-canvas * {
+  cursor: pointer !important;
 }
 
 .chart-foot,

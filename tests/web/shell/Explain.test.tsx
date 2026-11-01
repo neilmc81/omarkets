@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Explain, NavigateContext, placeCard } from "../../../web/src/shell/Explain";
 
@@ -13,47 +13,106 @@ function setup(props: Partial<Parameters<typeof Explain>[0]> = {}) {
 }
 
 describe("<Explain>", () => {
-  it("opens on hover and closes shortly after the pointer leaves", async () => {
+  it("never opens on hover or pointer movement", () => {
     const trigger = setup();
-    expect(card()).toBeNull();
     fireEvent.mouseEnter(trigger);
-    expect(card()).toHaveTextContent("2-year yield");
-    expect(card()).toHaveTextContent("As of Thu 08:30 ET");
-    expect(trigger).toHaveAttribute("aria-describedby", card()!.id);
-    fireEvent.mouseLeave(trigger);
-    await waitFor(() => expect(card()).toBeNull());
-    expect(trigger).not.toHaveAttribute("aria-describedby");
+    fireEvent.mouseOver(trigger);
+    fireEvent.mouseMove(trigger);
+    fireEvent.pointerMove(trigger);
+    expect(card()).toBeNull();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("opens on keyboard focus and closes on blur", () => {
+  it("never opens on keyboard focus alone, and closes when focus leaves", () => {
     const trigger = setup();
     act(() => trigger.focus());
+    expect(card()).toBeNull();
+    fireEvent.keyDown(trigger, { key: "Enter" });
     expect(card()).toBeInTheDocument();
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
     act(() => screen.getByRole("button", { name: "elsewhere" }).focus());
     expect(card()).toBeNull();
   });
 
-  it("toggles on click and Enter, and stays open after the pointer leaves", async () => {
+  it("toggles on click, Enter and Space, and stays open after the pointer leaves", async () => {
     const trigger = setup();
     fireEvent.click(trigger);
+    expect(card()).toHaveTextContent("2-year yield");
+    expect(card()).toHaveTextContent("As of Thu 08:30 ET");
+    expect(trigger).toHaveAttribute("aria-describedby", card()!.id);
     fireEvent.mouseLeave(trigger);
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(card()).toBeInTheDocument();
     fireEvent.click(trigger);
     expect(card()).toBeNull();
+    expect(trigger).not.toHaveAttribute("aria-describedby");
     fireEvent.keyDown(trigger, { key: "Enter" });
     expect(card()).toBeInTheDocument();
+    fireEvent.keyDown(trigger, { key: " " });
+    expect(card()).toBeNull();
   });
 
-  it("closes on Escape however it was opened", () => {
+  it("gives the keyboard a way into a long card, and Esc hands focus back to the trigger", () => {
+    const long = Array.from({ length: 30 }, (_, index) => `Line ${index + 1} of a long explainer.`);
+    const trigger = setup({ lines: long });
+    act(() => trigger.focus());
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    // Enter moves focus into the card, which is focusable so arrow keys scroll it.
+    expect(card()).toHaveFocus();
+    expect(card()).toHaveAttribute("tabindex", "0");
+    expect(card()).toHaveTextContent("Line 30 of a long explainer.");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(card()).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("stays open while focus moves between the trigger and its card", () => {
+    const trigger = setup();
+    fireEvent.click(trigger);
+    // A pointer open leaves focus where it was; Tab can still reach the card.
+    expect(card()).not.toHaveFocus();
+    act(() => card()!.focus());
+    expect(card()).toBeInTheDocument();
+    act(() => trigger.focus());
+    expect(card()).toBeInTheDocument();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(card()).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("returns focus to the trigger when Esc closes it from a link inside the card", () => {
+    const trigger = setup({ noteId: "release:x" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveFocus();
+    act(() => screen.getByRole("link", { name: "Read the note →" }).focus());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("closes on Escape and on a press outside, but not on a press inside the card", () => {
     const trigger = setup();
     fireEvent.click(trigger);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(card()).toBeNull();
-    fireEvent.mouseEnter(trigger);
-    fireEvent.keyDown(trigger, { key: "Escape" });
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(card()!);
+    expect(card()).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
     expect(card()).toBeNull();
+  });
+
+  it("keeps only one card open at a time", () => {
+    render(<div>
+      <Explain title="First" lines={["one"]}>first</Explain>
+      <Explain title="Second" lines={["two"]}>second</Explain>
+    </div>);
+    fireEvent.click(screen.getByRole("button", { name: "first" }));
+    expect(screen.getByRole("tooltip", { name: "First" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "second" }));
+    expect(screen.getAllByRole("tooltip")).toHaveLength(1);
+    expect(screen.getByRole("tooltip", { name: "Second" })).toBeInTheDocument();
   });
 
   it("shows a visible cue: dotted text inline, ⓘ on blocks", () => {

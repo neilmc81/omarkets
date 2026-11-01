@@ -90,7 +90,7 @@ describe("Today follows the global focus", () => {
     await expectToday("NQ");
     const tiles = within(screen.getByRole("region", { name: "Markets" })).getAllByText(/./, { selector: ".t-quote-label" });
     expect(tiles.map((t) => t.textContent)).toEqual(watchlist.symbols.map((s) => PRICE[s][0]));
-    expect(await screen.findByText(/^NQZ26 · from delayed quotes · hover/)).toBeInTheDocument();
+    expect(await screen.findByText(/^NQZ26 · from delayed quotes · click/)).toBeInTheDocument();
   });
 
   it("NQ -> ES -> BTC -> NQ moves the strip, chart, levels and header together, never touching the desk", async () => {
@@ -100,7 +100,7 @@ describe("Today follows the global focus", () => {
 
     await pickOnChart("ES");
     await expectToday("ES");
-    expect(await screen.findByText(/^ESZ26 · from delayed quotes · hover/)).toBeInTheDocument();
+    expect(await screen.findByText(/^ESZ26 · from delayed quotes · click/)).toBeInTheDocument();
 
     await pickOnChart("BTC");
     await expectToday("BTC");
@@ -109,7 +109,7 @@ describe("Today follows the global focus", () => {
 
     await pickOnChart("NQ");
     await expectToday("NQ");
-    expect(await screen.findByText(/^NQZ26 · from delayed quotes · hover/)).toBeInTheDocument();
+    expect(await screen.findByText(/^NQZ26 · from delayed quotes · click/)).toBeInTheDocument();
 
     // Sparklines follow the strip's own symbols.
     expect(urls(fetcher)).toContain(`/api/v1/sparklines?symbols=${stripFor("BTC").symbols.join(",")}`);

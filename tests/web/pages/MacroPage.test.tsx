@@ -50,15 +50,17 @@ describe("Macro page", () => {
     expect(screen.getByRole("article", { name: "Next Fed decision" })).toHaveTextContent("Wed Oct 28");
   });
 
-  it("explains a value and its sources on hover", async () => {
+  it("explains a value and its sources on click, not on focus", async () => {
     vi.stubGlobal("fetch", vi.fn((url: string) => ok(url === "/api/v1/desk/macro" ? board : url === "/api/v1/explainers" ? { entries: [] } : { generated_at: "x", interval: "15m", lines: [] })));
     render(<MacroPage />);
     const value = await screen.findByText("+29K");
     fireEvent.focus(value.closest(".explain-trigger")!);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.click(value.closest(".explain-trigger")!);
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("cut both ways"));
-    fireEvent.blur(value.closest(".explain-trigger")!);
     const [info] = screen.getAllByLabelText("Sources");
-    fireEvent.focus(info.closest(".explain-trigger")!);
+    fireEvent.click(info.closest(".explain-trigger")!);
+    expect(screen.getAllByRole("tooltip")).toHaveLength(1);
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("Source: BLS series"));
   });
 });
