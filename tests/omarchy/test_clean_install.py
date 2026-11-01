@@ -1,5 +1,5 @@
 """Phase 2 release cut: a clean install runs on the code defaults (desk:v9, NQ,
-ES and YM) with no systemd drop-in, and the installer says so."""
+ES, YM and GOLD) with no systemd drop-in, and the installer says so."""
 
 import os
 import subprocess
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SUMMARY = "Desk notes: NQ, ES, YM on desk:v9"
+SUMMARY = "Desk notes: NQ, ES, YM, GOLD on desk:v9"
 
 
 def sandbox(tmp_path: Path) -> dict[str, str]:
@@ -70,12 +70,14 @@ def dry_run_with(tmp_path: Path, env_file: str) -> subprocess.CompletedProcess:
 
 
 @pytest.mark.parametrize(("env_file", "reason"), [
-    # ES and YM are code defaults, so a leftover v8 pin alone is unstartable.
+    # ES, YM and GOLD are code defaults, so a leftover v8 pin alone is unstartable.
     ("OMARKETS_DESK_PROMPT_VERSION=desk:v8\n", "desk:v8 has no prompt for them"),
     ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ","ES"]\n',
      "desk:v8 has no prompt for it"),
     ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ","YM"]\n',
      "remove YM"),
+    ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ","GOLD"]\n',
+     "remove GOLD"),
     ('OMARKETS_DESK_INSTRUMENTS=["NQ","ES","YM","BTC"]\n', "desk:v9 has no prompt for it"),
     ('OMARKETS_DESK_INSTRUMENTS=["NQ","BTC"]\n', "remove BTC"),
     ('OMARKETS_DESK_INSTRUMENTS=["ES"]\n', "NQ is the desk's own instrument"),

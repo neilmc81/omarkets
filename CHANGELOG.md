@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Gold now gets desk notes by default.** The default `desk_instruments` is
+  `["NQ", "ES", "YM", "GOLD"]` on `desk:v9`. Gold works like YM: its own move
+  notes (with its own 3-hour limit and move trigger) and "Explain the market
+  now" notes when GOLD is the focus. There is no gold pre-market; only NQ gets
+  the daily briefing (cost policy). Gold notes say they are about gold, and
+  their tone reads "… for GOLD": supportive means pushing gold's price up,
+  negative pushing it down. The prompt explains what usually moves gold
+  (yields and Fed rate expectations, the US dollar, demand for safety), says
+  these are tendencies rather than rules, and gives no trading advice. Gold
+  notes get no NQ vs ES comparison, megacap count or fear gauge (the feeds
+  have no gold gauge; the VIX is never used as one). NQ, ES and YM notes are
+  unchanged. That means a few more notes and a little more AI spend each week.
+  To leave gold out, set `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM"]` in
+  `.env` and restart; listing GOLD with `desk:v8` refuses to start. After
+  updating, the log line reads `desk notes for NQ, ES, YM, GOLD on desk:v9`.
 - **YM (Dow futures) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM"]` on `desk:v9`. YM works like ES:
   its own move notes (with its own 3-hour limit and move trigger) and
@@ -10,8 +25,7 @@
   are about YM / the Dow, and their tone reads "… for YM". That means a few
   more notes and a little more AI spend each week. To leave YM out, set
   `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES"]` in `.env` and restart; listing YM
-  with `desk:v8` still refuses to start. After updating, the log line reads
-  `desk notes for NQ, ES, YM on desk:v9`.
+  with `desk:v8` still refuses to start. Gold joins the defaults too (above).
 - **The bar popup has a new layout.** The focus instrument (NQ by default) sits
   at the top with its price, change, a 24-hour sparkline and last week's
   range. Below it are the desk note's headline, the other instruments grouped
@@ -38,8 +52,8 @@
   - `omarketsctl config` shows `desk_prompt_version` and `desk_instruments`
     and where each came from (`default`, `.env` or the service environment).
   - `systemctl --user status omarkets` shows the service running; the log
-    line `desk notes for NQ, ES, YM on desk:v9` confirms it (with YM's
-    notes, above).
+    line `desk notes for NQ, ES, YM, GOLD on desk:v9` confirms it (with YM's
+    and gold's notes, above).
   - To keep the old behaviour, set both `OMARKETS_DESK_INSTRUMENTS=["NQ"]`
     and `OMARKETS_DESK_PROMPT_VERSION=desk:v8` in `.env`, then restart.
   - A `.env` or systemd drop-in that sets only `desk:v8` no longer starts
