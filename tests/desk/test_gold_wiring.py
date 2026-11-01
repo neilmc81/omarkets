@@ -1,6 +1,6 @@
 """Strip desk coverage starts with GOLD: gold is wired through the desk like YM.
 
-The production default is NQ, ES, YM and GOLD on desk:v9. GOLD gets move and
+GOLD is in the production default on desk:v9. GOLD gets move and
 ask notes with its own 3-hour move limit, never a pre-market (its profile has
 no pre-market text at all), and its notes are written from its own prompt and
 say they are about gold, never NQ. GOLD is already on the Today strip, so its
@@ -58,10 +58,10 @@ def gold_quote(value=4012.5, **kwargs):
 # --------------------------------------------------------------------------- defaults
 
 
-def test_the_default_desk_is_nq_es_ym_and_gold_on_desk_v9():
-    assert ID.PRODUCTION_INSTRUMENTS == ALL
+def test_the_default_desk_includes_gold_on_desk_v9():
+    assert ID.PRODUCTION_INSTRUMENTS[:4] == ALL
     settings = Settings(_env_file=None)
-    assert settings.desk_instruments == list(ALL)
+    assert settings.desk_instruments[:4] == list(ALL)
     assert settings.desk_prompt_version == "desk:v9"
     assert all(P.has_profile(s, version=P.V9) for s in settings.desk_instruments)
 

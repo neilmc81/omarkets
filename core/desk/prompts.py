@@ -220,7 +220,8 @@ class InstrumentSpec:
     asset: AssetClass
     #: What the instrument is and what drives it.
     what: str
-    #: Why yields matter for this instrument in particular (see ``rates_rule``).
+    #: Why yields matter for this instrument in particular (see ``rates_rule``);
+    #: unused where ``yields_matter`` is false.
     rates_link: str
     #: How to read ``normal_move_size``'s fear gauge.
     gauge_rule: str
@@ -240,8 +241,12 @@ class InstrumentSpec:
     participation: bool = True
     #: The per-instrument note kinds its profile has tasks for. Every instrument
     #: but NQ is written move and ask only (``identity.instrument_kinds``); GOLD's
-    #: profile has no pre-market text at all.
+    #: and WTI's profiles have no pre-market text at all.
     kinds: frozenset[NoteKind] = INSTRUMENT_KINDS
+    #: Whether its asset class's yields rule applies. False (WTI: oil is priced
+    #: on supply, demand and the dollar) gives the "not a main driver" rule and
+    #: an optional ``rates_read``, as for an asset class without a rates rule.
+    yields_matter: bool = True
 
 
 ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
@@ -471,8 +476,9 @@ def _v9(spec: InstrumentSpec) -> Profile:
               "location": f"{spec.symbol.lower()}_price_location",
               "benchmark_task": spec.benchmark_task + (_MEGACAP_TASK if spec.participation
                                                        else "")}
-    rates_rule = (defaults.rates_rule.format(**fields, rates_link=spec.rates_link)
-                  if defaults.rates_rule else
+    yields = defaults.rates_rule if spec.yields_matter else None
+    rates_rule = (yields.format(**fields, rates_link=spec.rates_link)
+                  if yields else
                   "Bond yields are not a main driver of {symbol}; mention them only if "
                   "the facts tie them to this note.".format(**fields))
     system = _V9_SYSTEM.format(
@@ -482,13 +488,13 @@ def _v9(spec: InstrumentSpec) -> Profile:
             _COMPARABLE_RULE if spec.participation else ""),
         megacap_rule=spec.megacap_rule.format(**fields),
         macro_rule=spec.macro_rule.format(**fields),
-        rates_field=(_RATES_FIELD if defaults.rates_rule else _NO_RATES_FIELD).format(**fields))
+        rates_field=(_RATES_FIELD if yields else _NO_RATES_FIELD).format(**fields))
     templates = {**{kind: text for kind, text in _V9_INSTRUMENT_TASKS.items()
                     if kind in spec.kinds},
                  **(_V9_EVENT_TASKS if spec.events else {})}
     return Profile(system, {kind: text.format(**fields) for kind, text in templates.items()},
                    f"{defaults.about} {BASIS_POINT}",
-                   rates_read_required=defaults.rates_rule is not None)
+                   rates_read_required=yields is not None)
 
 
 #: Reviewed desk:v9 instrument profiles. An instrument gets one only after its
@@ -605,6 +611,41 @@ SPECS: Mapping[str, InstrumentSpec] = {
         participation=False,
         kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
     ),
+    "WTI": InstrumentSpec(
+        symbol="WTI", name="Crude oil", asset=AssetClass.COMMODITY,
+        what=("WTI is the NYMEX West Texas Intermediate crude oil futures contract, priced "
+              "in US dollars per barrel. Oil is a raw material priced by supply and "
+              "demand, not by company profits. Oil often rises when supply looks tighter "
+              "(OPEC+, the group of big oil-producing countries, cutting output, lower US "
+              "production, or a disruption), when demand looks stronger (faster economic "
+              "growth, especially in China), when the US dollar weakens, or when investors "
+              "are more willing to take risk; it often falls on the opposite. Weekly US "
+              "oil inventory reports (from the API and the EIA) can move it when "
+              "stockpiles change by more or less than expected; mention them only when "
+              "they are in the supplied facts. These are tendencies, not rules: when the "
+              "supplied facts show oil moving against them, say so plainly. Here "
+              "\"supportive\" means pushing oil's price up and \"negative\" means pushing "
+              "it down; neither is advice."),
+        rates_link="",
+        gauge_rule=("its fear gauge where it has one. The facts have no oil fear gauge "
+                    "(no oil volatility index is supplied), so never use the VIX or VXN, "
+                    "which are stock-market gauges, as oil's."),
+        benchmark_rule=("Oil notes get no \"nq_vs_es\". NQ (Nasdaq 100 futures) and ES "
+                        "(S&P 500 futures) in \"markets_today\" show how stocks are "
+                        "doing; use them only as context on investors' appetite for risk, "
+                        "and say they are stock markets, not oil."),
+        benchmark_task=("how stocks are doing (NQ and ES in markets_today) as context on "
+                        "appetite for risk"),
+        megacap_rule=("Oil notes get no \"megacap_participation\": individual stocks "
+                      "are not a driver of oil, so leave them out unless a supplied "
+                      "headline ties one to oil."),
+        macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100), not oil; "
+                    "if you use it, say it is about NQ. For oil, economic data matters "
+                    "mainly as a sign of demand (growth) and through the dollar."),
+        participation=False,
+        kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
+        yields_matter=False,
+    ),
 }
 
 #: Prompt profiles by version, then instrument symbol. desk:v8 is NQ's text
@@ -621,7 +662,7 @@ PROFILES: Mapping[str, Profile] = PROMPTS[PROMPT_VERSION]
 
 class NoPromptProfile(LookupError):
     """No prompt profile for this instrument at this version, or none for this
-    note kind (GOLD has no pre-market): refuse the note."""
+    note kind (GOLD and WTI have no pre-market): refuse the note."""
 
     def __init__(self, symbol: str, version: str = PROMPT_VERSION,
                  kind: NoteKind | None = None) -> None:
