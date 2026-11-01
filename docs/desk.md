@@ -54,7 +54,7 @@ so a restart cannot produce a duplicate note or notification.
   selectable. `desk:v9` (Phase 1 slice 5) is one set of shared rules plus an
   instrument profile on top of its asset class's defaults
   (session hours, what "close" means, the expected delay, how yields matter).
-  NQ's wording lives in NQ's profile; ES, YM, GOLD and WTI have their own reviewed
+  NQ's wording lives in NQ's profile; ES, YM, GOLD, WTI and DXY have their own reviewed
   profiles (YM's: the Dow is 30 price-weighted stocks, `nq_vs_es` and the
   megacaps are NQ/ES context, and the VIX stands in as the S&P 500's gauge).
   GOLD's profile sits on commodity defaults (Globex hours, about 10 minutes
@@ -84,8 +84,24 @@ so a restart cannot produce a duplicate note or notification.
   geopolitics and the dollar move oil, a data surprise is read through fuel demand and the dollar
   (not rate cuts), and the ask task asks for the dollar (when the facts show
   it) and supply, geopolitics or demand headlines, never yields.
+  DXY's profile sits on new FX-index defaults that match how the strip already
+  streams it (CNBC's `.DXY`: the same 18:00–17:00 ET hours, no declared delay,
+  and a change from the previous session's close, not a settle; the location
+  facts' "Prior settle" for DXY is that close). It says what DXY is (the ICE
+  US Dollar Index: the dollar against six major currencies, mostly the euro)
+  and what usually moves it: US rates and the Fed against other countries',
+  US growth against the rest of the world, demand for safety, and inflation
+  surprises that change the Fed outlook, as tendencies rather than rules.
+  Yields matter for the dollar, so `rates_read` is required, and the ask task
+  asks for the 2-year and 10-year yields (not for "the dollar", which DXY
+  is); the feeds carry US yields only, so the prompt says never to claim the
+  gap with other countries' rates. Its tone is pushing the dollar index up
+  (supportive) or down (negative), never advice; like gold it gets no
+  `nq_vs_es`, megacap count or fear gauge, and move and ask tasks only. Like
+  WTI it has its own `drivers`, `forecast_rule` and `ask_drivers`: a data
+  surprise is read through the US economy and the Fed's rate path.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
-  matter (every equity index future, and gold). Each note task has a length target, recorded by
+  matter (every equity index future, gold and DXY). Each note task has a length target, recorded by
   `eval check` and never retried. v9 notes get `recent_lessons` in their facts
   (the terms the latest five Learn boxes taught, newest first) and are told
   not to teach one again; v8 facts never carry it. v9's stated facts include
@@ -98,22 +114,26 @@ so a restart cannot produce a duplicate note or notification.
   (release, Fed, earnings, auction, primer, review) stay desk-wide on NQ's
   profile.
 - `desk_instruments` (`OMARKETS_DESK_INSTRUMENTS`, JSON list, default
-  `["NQ", "ES", "YM", "GOLD", "WTI"]`) is which instruments get their own
-  notes. A fresh install runs NQ, ES, YM, GOLD and WTI on desk:v9 with no
-  setting; `["NQ", "ES", "YM", "GOLD"]`, `["NQ", "ES", "YM"]`, `["NQ", "ES"]`
-  or `["NQ"]` (optionally with `desk:v8`) narrows it back. A YM note's facts always include YM in `markets_today` and
+  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]`) is which instruments get their own
+  notes. A fresh install runs NQ, ES, YM, GOLD, WTI and DXY on desk:v9 with no
+  setting; `["NQ", "ES", "YM", "GOLD", "WTI"]`, `["NQ", "ES", "YM", "GOLD"]`,
+  `["NQ", "ES", "YM"]`, `["NQ", "ES"]` or `["NQ"]` (optionally with `desk:v8`)
+  narrows it back. A YM note's facts always include YM in `markets_today` and
   in the measured moves, though YM is not on the Today strip; GOLD is on the
   strip already, so a gold note reads its own row there and its own move
   window, and NQ, ES and YM facts are the same with or without GOLD enabled.
   Desk coverage of the other strip markets starts with GOLD, then WTI, which
   works the same way (its own "Crude oil" row and move window; NQ, ES, YM and
-  GOLD facts are the same with or without WTI enabled). NQ is always on and
+  GOLD facts are the same with or without WTI enabled), then DXY ("US
+  dollar"): its own row once, its own move window, and NQ, ES, YM, GOLD and
+  WTI facts unchanged with or without DXY. A one-hour DXY move rarely reaches
+  the move trigger's 0.6% floor, so dollar move notes are rare. NQ is always on and
   gets pre-market, move and ask notes; every other instrument gets move and ask
   notes only, never the daily pre-market (cost policy;
   `identity.instrument_kinds`). Each instrument has its own 3-hour move limit
   and move trigger; the daily ask limit is shared. The service refuses to start
   when an instrument has no prompt profile at `desk_prompt_version` (ES, YM,
-  GOLD or WTI under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
+  GOLD, WTI or DXY under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
   `?instrument=`; omitted, it uses the saved workspace focus (the Chart page's
   instrument), and NQ only when no focus is saved or the store can't be read.
   An instrument or saved focus not in `desk_instruments` gets a 400 before
@@ -343,8 +363,8 @@ are skipped, never counted as zero.
   Each instrument reads its own gauge (`VOL_INDEXES`): NQ VXN against VIX, ES
   VIX alone, YM VIX alone as the wider market's gauge (the feeds have no Dow
   gauge, and YM's prompt says the VIX is the S&P 500's); an instrument without
-  one (GOLD and WTI: the feeds have no gold or oil gauge) gets no gauge, never
-  NQ's.
+  one (GOLD, WTI and DXY: the feeds have no gold, oil or currency gauge) gets
+  no gauge, never NQ's.
 
 The same notes as price location get these as `normal_move_size`, as
 ready-made text (prompt `desk:v7`).
@@ -376,7 +396,7 @@ New writer facts, all deterministic and with no prompt change (`desk:v8`):
   their status and change, and how many are up, down or flat (within 0.05%),
   counting live quotes only. NQ, ES and YM notes get both blocks (for YM as
   context on whether tech led the wider market); other instruments (GOLD,
-  WTI) get neither.
+  WTI, DXY) get neither.
 - **Events in the move window** (`events_in_move_window`, move notes): US
   economic and Fed events from 15 minutes before the move to its end, with the
   window checked, so an empty list means "no event on the supplied calendar".

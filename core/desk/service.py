@@ -167,7 +167,7 @@ class DeskService:
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
         #: Instruments that get their own notes (``desk_instruments``; NQ, ES, YM,
-        #: GOLD and WTI by default): NQ pre-market, move and ask, the others move and ask only
+        #: GOLD, WTI and DXY by default): NQ pre-market, move and ask, the others move and ask only
         #: (``identity.instrument_kinds``). Each needs a prompt profile at the
         #: writer's prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)

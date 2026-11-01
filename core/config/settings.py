@@ -266,11 +266,11 @@ class Settings(BaseSettings):
     #: Prompt version new notes are written with (``core/desk/prompts.py``).
     #: desk:v8 (NQ's text only) can still be selected for an NQ-only desk.
     desk_prompt_version: Literal["desk:v8", "desk:v9"] = "desk:v9"
-    #: Instruments that get their own notes (default NQ, ES, YM, GOLD and WTI), e.g.
-    #: ``OMARKETS_DESK_INSTRUMENTS='["NQ"]'``. NQ gets pre-market, move and
-    #: ask notes; every other instrument move and ask only. NQ is always on.
-    #: Each needs a prompt profile at ``desk_prompt_version`` (ES, YM, GOLD,
-    #: WTI: desk:v9), or the service refuses to start
+    #: Instruments that get their own notes (default NQ, ES, YM, GOLD, WTI and
+    #: DXY), e.g. ``OMARKETS_DESK_INSTRUMENTS='["NQ"]'``. NQ gets pre-market,
+    #: move and ask notes; every other instrument move and ask only. NQ is
+    #: always on. Each needs a prompt profile at ``desk_prompt_version`` (ES, YM,
+    #: GOLD, WTI, DXY: desk:v9), or the service refuses to start
     #: (``core.main.check_desk_instruments``).
     desk_instruments: list[str] = Field(default_factory=lambda: list(PRODUCTION_INSTRUMENTS))
     #: NQ move over about an hour that earns its own "why is NQ moving" note, used

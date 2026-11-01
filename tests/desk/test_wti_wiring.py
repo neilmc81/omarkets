@@ -1,7 +1,7 @@
 """Strip desk coverage after GOLD is WTI: crude oil is wired through the desk
 like GOLD.
 
-The production default is NQ, ES, YM, GOLD and WTI on desk:v9. WTI gets move
+WTI is in the production default on desk:v9, before DXY. WTI gets move
 and ask notes with its own 3-hour move limit, never a pre-market (its profile
 has no pre-market text at all), and its notes are written from its own prompt
 and say they are about oil, never NQ. WTI is already on the Today strip, so its
@@ -68,10 +68,10 @@ def gold_quote(value=4012.5, **kwargs):
 # --------------------------------------------------------------------------- defaults
 
 
-def test_the_default_desk_is_nq_es_ym_gold_and_wti_on_desk_v9():
-    assert ID.PRODUCTION_INSTRUMENTS == ALL
+def test_the_default_desk_includes_wti_on_desk_v9():
+    assert ID.PRODUCTION_INSTRUMENTS[:5] == ALL
     settings = Settings(_env_file=None)
-    assert settings.desk_instruments == list(ALL)
+    assert settings.desk_instruments[:5] == list(ALL)
     assert settings.desk_prompt_version == "desk:v9"
     assert all(P.has_profile(s, version=P.V9) for s in settings.desk_instruments)
 

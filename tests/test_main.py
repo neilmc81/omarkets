@@ -123,11 +123,12 @@ def _desk_settings(tmp_path, **kwargs):
                     **kwargs)
 
 
-def test_default_desk_writes_for_nq_es_ym_gold_and_wti_on_desk_v9(tmp_path):
+def test_default_desk_writes_for_nq_es_ym_gold_wti_and_dxy_on_desk_v9(tmp_path):
     from core.main import build_app
 
     app = build_app(_desk_settings(tmp_path))
-    assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES", "YM", "GOLD", "WTI"]
+    assert [i.symbol for i in app.state.desk.instruments] == [
+        "NQ", "ES", "YM", "GOLD", "WTI", "DXY"]
     assert app.state.desk.prompt_version == "desk:v9"
 
 
@@ -173,10 +174,10 @@ def test_es_is_wired_through_under_desk_v9(tmp_path):
     assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES"]
 
 
-def test_the_default_list_under_desk_v8_names_es_ym_gold_and_wti(tmp_path):
+def test_the_default_list_under_desk_v8_names_es_ym_gold_wti_and_dxy(tmp_path):
     from core.main import DeskConfigError, build_app
 
-    with pytest.raises(DeskConfigError, match="includes ES, YM, GOLD, WTI, but desk:v8 has "
+    with pytest.raises(DeskConfigError, match="includes ES, YM, GOLD, WTI, DXY, but desk:v8 has "
                                               "no prompt for them") as refused:
         build_app(_desk_settings(tmp_path, desk_prompt_version="desk:v8"))
     assert "OMARKETS_DESK_PROMPT_VERSION=desk:v9" in str(refused.value)
@@ -236,6 +237,22 @@ def test_wti_is_wired_through_under_desk_v9(tmp_path):
 
     app = build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "WTI"]))
     assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "WTI"]
+def test_enabling_dxy_under_desk_v8_is_refused_with_a_fix(tmp_path):
+    from core.main import DeskConfigError, build_app
+
+    with pytest.raises(DeskConfigError, match="includes DXY, but desk:v8 has no prompt for "
+                                              "it") as refused:
+        build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "DXY"],
+                                 desk_prompt_version="desk:v8"))
+    assert "set OMARKETS_DESK_PROMPT_VERSION=desk:v9 or remove DXY" in str(refused.value)
+    assert not (tmp_path / "desk.sqlite3").exists()
+
+
+def test_dxy_is_wired_through_under_desk_v9(tmp_path):
+    from core.main import build_app
+
+    app = build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "DXY"]))
+    assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "DXY"]
 
 
 def test_an_instrument_without_a_v9_prompt_is_refused(tmp_path):

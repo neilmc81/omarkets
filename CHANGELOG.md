@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **The US Dollar Index (DXY) now gets desk notes by default.** The default
+  `desk_instruments` is `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]` on
+  `desk:v9`. DXY works like gold: its own move notes (with its own 3-hour
+  limit and move trigger) and "Explain the market now" notes when DXY is the
+  focus. There is no DXY pre-market; only NQ gets the daily briefing (cost
+  policy). Dollar notes say they are about the US Dollar Index, and their tone
+  reads "… for DXY": supportive means pushing the dollar index up, negative
+  pushing it down. The prompt explains what DXY is (the dollar against six
+  major currencies, mostly the euro) and what usually moves it (US interest
+  rates and the Fed compared with other countries, US growth compared with the
+  rest of the world, demand for safety, and inflation surprises that change
+  the Fed outlook), says these are tendencies rather than rules, and gives no
+  trading advice. Yields matter for the dollar, so its notes explain them; the
+  feeds carry US yields only, so notes never claim the gap with other
+  countries' rates. Dollar notes get no NQ vs ES comparison, megacap count or
+  fear gauge (the feeds have no currency gauge; the VIX is never used as one).
+  NQ, ES, YM, gold and oil notes are unchanged. That means a few more notes
+  and a little more AI spend each week, though a one-hour move big enough to
+  trigger a dollar note is rare. To leave DXY out, set
+  `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM", "GOLD", "WTI"]` in `.env` and
+  restart; listing DXY with `desk:v8` refuses to start. After updating, the
+  log line reads `desk notes for NQ, ES, YM, GOLD, WTI, DXY on desk:v9`.
 - **Crude oil (WTI) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM", "GOLD", "WTI"]` on `desk:v9`. Oil
   works like gold: its own move notes (with its own 3-hour limit and move
@@ -23,9 +45,8 @@
   oil gauge; the VIX is never used as one). NQ, ES, YM and gold notes are
   unchanged. That means a few more notes and a little more AI spend each week.
   To leave oil out, set `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM", "GOLD"]`
-  in `.env` and restart; listing WTI with `desk:v8` refuses to start. After
-  updating, the log line reads `desk notes for NQ, ES, YM, GOLD, WTI on
-  desk:v9`.
+  in `.env` and restart; listing WTI with `desk:v8` refuses to start. DXY
+  joins the defaults too (above).
 - **Gold now gets desk notes by default.** The default `desk_instruments` is
   `["NQ", "ES", "YM", "GOLD"]` on `desk:v9`. Gold works like YM: its own move
   notes (with its own 3-hour limit and move trigger) and "Explain the market
@@ -39,8 +60,8 @@
   have no gold gauge; the VIX is never used as one). NQ, ES and YM notes are
   unchanged. That means a few more notes and a little more AI spend each week.
   To leave gold out, set `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM"]` in
-  `.env` and restart; listing GOLD with `desk:v8` refuses to start. Oil joins
-  the defaults too (above).
+  `.env` and restart; listing GOLD with `desk:v8` refuses to start. Oil and
+  DXY join the defaults too (above).
 - **YM (Dow futures) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM"]` on `desk:v9`. YM works like ES:
   its own move notes (with its own 3-hour limit and move trigger) and
@@ -76,8 +97,8 @@
   - `omarketsctl config` shows `desk_prompt_version` and `desk_instruments`
     and where each came from (`default`, `.env` or the service environment).
   - `systemctl --user status omarkets` shows the service running; the log
-    line `desk notes for NQ, ES, YM, GOLD, WTI on desk:v9` confirms it (with
-    YM's, gold's and oil's notes, above).
+    line `desk notes for NQ, ES, YM, GOLD, WTI, DXY on desk:v9` confirms it
+    (with YM's, gold's, oil's and the dollar index's notes, above).
   - To keep the old behaviour, set both `OMARKETS_DESK_INSTRUMENTS=["NQ"]`
     and `OMARKETS_DESK_PROMPT_VERSION=desk:v8` in `.env`, then restart.
   - A `.env` or systemd drop-in that sets only `desk:v8` no longer starts
