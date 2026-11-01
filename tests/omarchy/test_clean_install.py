@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SUMMARY = "Desk notes: NQ, ES on desk:v9"
 
@@ -23,16 +25,15 @@ def sandbox(tmp_path: Path) -> dict[str, str]:
     return {**env, "PATH": f"{bin_dir}:{env['PATH']}", "HOME": str(tmp_path),
             "XDG_CONFIG_HOME": str(tmp_path / "config"),
             "XDG_DATA_HOME": str(tmp_path / "data"),
-            "OMARKETS_ENV_FILE": str(tmp_path / "test.env")}
+            "OMARKETS_ENV_FILE": str(tmp_path / "test.env"),
+            # The summary runs on this interpreter, so it is checked even
+            # where the checkout has no .venv.
+            "OMARKETS_PYTHON": sys.executable}
 
 
 def install(env: dict[str, str], *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["bash", str(ROOT / "omarchy/install-plugin"), "--no-prompt", *args],
                           env=env, capture_output=True, text=True, check=False)
-
-
-def has_venv() -> bool:
-    return (ROOT / ".venv/bin/python").exists()
 
 
 def test_a_clean_install_writes_a_unit_with_no_settings_and_no_drop_in(tmp_path):
@@ -49,8 +50,7 @@ def test_a_clean_install_writes_a_unit_with_no_settings_and_no_drop_in(tmp_path)
     env_file = (tmp_path / "test.env").read_text()
     assert env_file == (ROOT / ".env.example").read_text()
     assert "systemctl --user enable --now omarkets.service" in (tmp_path / "calls.log").read_text()
-    if has_venv():
-        assert SUMMARY in result.stdout
+    assert SUMMARY in result.stdout
     assert "omarketsctl config" in result.stdout
 
 
@@ -60,12 +60,55 @@ def test_dry_run_creates_nothing_and_names_the_defaults(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "Dry run" in result.stdout
     assert not (tmp_path / "config").exists() and not (tmp_path / "test.env").exists()
-    if has_venv():
-        assert SUMMARY in result.stdout
+    assert SUMMARY in result.stdout
+
+
+def dry_run_with(tmp_path: Path, env_file: str) -> subprocess.CompletedProcess:
+    env = sandbox(tmp_path)
+    (tmp_path / "test.env").write_text(env_file)
+    return install(env, "--dry-run")
+
+
+@pytest.mark.parametrize(("env_file", "reason"), [
+    # ES is a code default, so a leftover v8 pin alone is now unstartable.
+    ("OMARKETS_DESK_PROMPT_VERSION=desk:v8\n", "desk:v8 has no prompt for it"),
+    ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ","ES"]\n',
+     "desk:v8 has no prompt for it"),
+    ('OMARKETS_DESK_INSTRUMENTS=["NQ","ES","YM"]\n', "desk:v9 has no prompt for it"),
+    ('OMARKETS_DESK_INSTRUMENTS=["NQ","YM"]\n', "remove YM"),
+    ('OMARKETS_DESK_INSTRUMENTS=["ES"]\n', "NQ is the desk's own instrument"),
+])
+def test_the_summary_reports_a_config_the_service_would_refuse(tmp_path, env_file, reason):
+    result = dry_run_with(tmp_path, env_file)
+    assert result.returncode == 0, result.stderr
+    assert "Desk notes:" not in result.stdout
+    assert "no drop-in needed" not in result.stdout + result.stderr
+    assert "service will refuse to start" in result.stderr and reason in result.stderr
+
+
+@pytest.mark.parametrize(("env_file", "line"), [
+    ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ"]\n',
+     "Desk notes: NQ on desk:v8 (code defaults and .env; no drop-in needed)"),
+    ('OMARKETS_DESK_INSTRUMENTS=["NQ"]\n',
+     "Desk notes: NQ on desk:v9 (code defaults and .env; no drop-in needed)"),
+    ("OMARKETS_DESK_ENABLED=false\n", "Desk notes: off"),
+])
+def test_the_summary_names_a_startable_override(tmp_path, env_file, line):
+    result = dry_run_with(tmp_path, env_file)
+    assert result.returncode == 0, result.stderr
+    assert line in result.stdout and "refuse" not in result.stderr
+
+
+def test_the_summary_says_when_it_could_not_check(tmp_path):
+    env = {**sandbox(tmp_path), "OMARKETS_PYTHON": str(tmp_path / "missing/python")}
+    result = install(env, "--dry-run")
+    assert result.returncode == 0, result.stderr
+    assert "Desk notes: not checked" in result.stderr
+    assert "no drop-in needed" not in result.stdout
 
 
 def test_the_smoke_script_passes_on_the_code_defaults(tmp_path):
-    env = {**sandbox(tmp_path), "OMARKETS_PYTHON": sys.executable}
+    env = sandbox(tmp_path)
     result = subprocess.run(["bash", str(ROOT / "omarchy/smoke-defaults")], env=env,
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr

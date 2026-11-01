@@ -63,8 +63,14 @@ Panel {
   readonly property var deskKinds: ({ primer: "WEEK AHEAD", premarket: "PRE-MARKET", release: "ECONOMIC DATA",
     fed: "FEDERAL RESERVE", earnings: "EARNINGS", move: "BIG MOVE", ask: "MARKET NOW",
     review: "WEEK IN REVIEW", auction: "TREASURY AUCTION" })
-  readonly property var deskTones: ({ supportive: "Supportive for NQ", negative: "Negative for NQ",
-    mixed: "Mixed for NQ", neutral: "Neutral for NQ" })
+  readonly property var deskTones: ({ supportive: "Supportive", negative: "Negative",
+    mixed: "Mixed", neutral: "Neutral" })
+  // "Negative for ES": the tone word plus the instrument the note's tone is about.
+  function deskToneText(note) {
+    var word = note ? root.deskTones[note.tone] : ""
+    if (!word) return ""
+    return note.tone_for ? word + " for " + note.tone_for : word
+  }
   function deskTime(iso) {
     var date = new Date(iso)
     return isNaN(date.getTime()) ? "" : Qt.formatDateTime(date, "ddd HH:mm")
@@ -322,7 +328,8 @@ Panel {
           }
           Text {
             width: parent.width
-            text: root.deskNote ? (root.deskTones[root.deskNote.tone] || "") : ""
+            objectName: "omarkets-desk-tone"
+            text: root.deskToneText(root.deskNote)
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

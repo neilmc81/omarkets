@@ -128,7 +128,8 @@ def test_notes_window_is_half_open_and_newest_first():
     assert body["truncated"] is False
     assert body["notes"][0] == {
         "id": "b", "kind": "release", "at": "2026-10-20T13:00:00Z",
-        "headline": "Headline b", "summary": "Bottom line.", "tone": "negative"}
+        "headline": "Headline b", "summary": "Bottom line.", "tone": "negative",
+            "tone_for": "NQ"}
     NoteList.model_validate(body)
 
 

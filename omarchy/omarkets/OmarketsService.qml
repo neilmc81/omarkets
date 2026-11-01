@@ -145,7 +145,7 @@ Item {
     if (status.providers !== undefined && (!Array.isArray(status.providers) || status.providers.some(function(x) { return !fields(x, ["name", "health", "detail"], [], []) || typeof x.name !== "string" || typeof x.health !== "string" }))) return false
     if (data.desk !== undefined && data.desk !== null && (!fields(data.desk, ["session_text"], [], [])
         || (data.desk.note !== undefined && data.desk.note !== null
-          && !fields(data.desk.note, ["id", "kind", "title", "created_at", "headline", "summary", "tone"], [], [])))) return false
+          && !fields(data.desk.note, ["id", "kind", "title", "created_at", "headline", "summary", "tone", "tone_for"], [], [])))) return false
     if (data.theme !== undefined && data.theme !== null && (!objectValue(data.theme) || !objectValue(data.theme.colors)
         || Object.keys(data.theme.colors).some(function(k) { return !/^#[0-9a-fA-F]{6}$/.test(String(data.theme.colors[k])) }))) return false
     if (data.context !== undefined && data.context !== null && (!objectValue(data.context) || (data.context.cross_market !== undefined && (!Array.isArray(data.context.cross_market) || !data.context.cross_market.every(quote))))) return false

@@ -76,8 +76,18 @@ environment before running the installer.
 `install-plugin` installs `omarkets.service` for your checkout and starts it.
 The service runs on the built-in defaults: desk notes for NQ and ES with the
 `desk:v9` prompt. No extra systemd drop-in is needed; to change them, see
-[Configuration](#configuration). If you used `--no-service`, enable it
-yourself:
+[Configuration](#configuration). The installer checks these settings the way
+the service does at startup and warns if the service would refuse them.
+
+**Upgrading from an older install:** if you never set
+`OMARKETS_DESK_PROMPT_VERSION` or `OMARKETS_DESK_INSTRUMENTS`, the desk moves
+from `desk:v8` (NQ only) to `desk:v9` with NQ and ES after the update. That
+means more notes and a little more AI spend. Run `omarketsctl config` to
+check. To keep NQ only, set `OMARKETS_DESK_INSTRUMENTS=["NQ"]` and
+`OMARKETS_DESK_PROMPT_VERSION=desk:v8` in `.env` (see the
+[CHANGELOG](CHANGELOG.md)).
+
+If you used `--no-service`, enable it yourself:
 
 ```bash
 systemctl --user enable --now omarkets.service

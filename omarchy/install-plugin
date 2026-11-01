@@ -72,19 +72,44 @@ backup() {
 
 # One line on the desk settings this checkout starts with: the code defaults
 # plus .env (systemd drop-ins are not seen here; `omarketsctl config` shows
-# the running service). Read-only; silent when the venv is missing.
+# the running service). It runs the same startup check as the service
+# (core.main.check_desk_instruments), so a config the service would refuse is
+# reported as a refusal on stderr, never as healthy. Read-only.
+# OMARKETS_PYTHON overrides the interpreter (default: .venv/bin/python).
 desk_summary() {
-    local py=$repo/.venv/bin/python
-    [[ -x $py ]] || return 0
-    (cd -- "$repo" && env -i PATH="$PATH" HOME="$HOME" \
-        OMK_ENV_FILE="${OMARKETS_ENV_FILE:-$repo/.env}" "$py" - 2>/dev/null <<'PY'
+    local py=${OMARKETS_PYTHON:-$repo/.venv/bin/python}
+    if [[ ! -x $py ]]; then
+        printf 'Desk notes: not checked (no Python at %s yet; after `uv sync`, run omarketsctl config)\n' "$py" >&2
+        return 0
+    fi
+    (cd -- "$repo" && env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 PYTHONPATH="$repo" \
+        OMK_ENV_FILE="${OMARKETS_ENV_FILE:-$repo/.env}" "$py" - <<'PY'
 import os
+import sys
+from pathlib import Path
 
-from core.config.settings import Settings
+try:
+    from core.config.effective import effective_settings
+    from core.main import check_desk_instruments
 
-s = Settings(_env_file=os.environ["OMK_ENV_FILE"])
-print(f"Desk notes: {', '.join(s.desk_instruments)} on {s.desk_prompt_version} "
-      "(code defaults and .env; no drop-in needed)")
+    settings, rows = effective_settings({}, Path(os.environ["OMK_ENV_FILE"]))
+    sources = {row.name: row.source for row in rows}
+    if not settings.desk_enabled:
+        print("Desk notes: off (OMARKETS_DESK_ENABLED is false)")
+        sys.exit(0)
+    instruments = check_desk_instruments(settings)
+except Exception as exc:  # noqa: BLE001 - every failure here stops the service too
+    errors = getattr(exc, "errors", None)  # pydantic ValidationError
+    message = ("; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in errors())
+               if callable(errors) else " ".join(str(exc).split()))
+    print(f"Desk notes: WARNING: the service will refuse to start with these settings: {message}",
+          file=sys.stderr)
+    sys.exit(1)
+names = ("desk_prompt_version", "desk_instruments")
+where = ("code defaults" if all(sources[n] == "default" for n in names)
+         else "code defaults and .env")
+print(f"Desk notes: {', '.join(instruments)} on {settings.desk_prompt_version} "
+      f"({where}; no drop-in needed)")
 PY
     ) || true
 }

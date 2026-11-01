@@ -125,6 +125,10 @@ export const noteSchema = z.object({
   model: z.string().nullable(),
   cost_usd: z.number().nullable(),
   follow_up: followUpSchema.nullable().optional(),
+  // The note's own instrument (null for desk-wide event notes) and the one its
+  // tone is about; an older core sends neither.
+  instrument: z.string().nullish(),
+  tone_for: z.string().optional(),
 });
 
 const watchCardSchema = z.object({
