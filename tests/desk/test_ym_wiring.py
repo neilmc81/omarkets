@@ -1,6 +1,6 @@
 """Phase 2: YM (Dow futures) is wired through the desk like ES.
 
-The production default is NQ, ES and YM on desk:v9. YM gets move and ask notes
+YM is in the production default on desk:v9. YM gets move and ask notes
 with its own 3-hour move limit, never a pre-market, and its notes are written
 from its own prompt and say they are about YM, never NQ."""
 
@@ -46,10 +46,10 @@ def flat(value, now):
 # --------------------------------------------------------------------------- defaults
 
 
-def test_the_default_desk_is_nq_es_and_ym_on_desk_v9():
-    assert ID.PRODUCTION_INSTRUMENTS == ("NQ", "ES", "YM")
+def test_the_default_desk_includes_ym_on_desk_v9():
+    assert ID.PRODUCTION_INSTRUMENTS[:3] == ("NQ", "ES", "YM")
     settings = Settings(_env_file=None)
-    assert settings.desk_instruments == ["NQ", "ES", "YM"]
+    assert settings.desk_instruments[:3] == ["NQ", "ES", "YM"]
     assert settings.desk_prompt_version == "desk:v9"
     assert all(P.has_profile(s, version=P.V9) for s in settings.desk_instruments)
 

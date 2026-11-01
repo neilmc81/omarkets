@@ -72,14 +72,14 @@ def test_production_writes_v9_by_default_and_v8_stays_selectable():
     assert P.PROMPT_VERSION == P.V9 == "desk:v9"
     assert Settings(_env_file=None).desk_prompt_version == "desk:v9"
     assert DeskWriter(api_key="k", model=MODEL).prompt_version == "desk:v9"
-    assert P.PROFILES is P.PROMPTS[P.V9] and set(P.PROFILES) == {"NQ", "ES", "YM"}
+    assert P.PROFILES is P.PROMPTS[P.V9] and set(P.PROFILES) == {"NQ", "ES", "YM", "GOLD"}
     # Every default instrument has a profile at the default version.
     assert all(P.has_profile(s) for s in ID.PRODUCTION_INSTRUMENTS)
     assert Settings(_env_file=None, desk_prompt_version="desk:v8").desk_prompt_version == P.V8
     assert DeskWriter(api_key="k", model=MODEL, prompt_version=P.V8).prompt_version == P.V8
     nq = P.PROMPTS[P.V8]["NQ"]
     assert (nq.system, nq.tasks, nq.stated_facts) == (P.SYSTEM, P.TASKS, P.STATED_FACTS)
-    assert set(P.PROMPTS[P.V9]) == {"NQ", "ES", "YM"}
+    assert set(P.PROMPTS[P.V9]) == {"NQ", "ES", "YM", "GOLD"}
 
 
 def test_the_setting_offers_exactly_the_known_versions():

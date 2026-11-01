@@ -57,12 +57,12 @@ def test_parser_reads_legacy_and_scoped_ids(value, ref):
         assert ID.note_id(NoteKind(ref.kind), ref.rest, ref.instrument) == value
 
 
-def test_production_writes_for_nq_es_and_ym_and_nq_only_stays_selectable():
-    assert ID.PRODUCTION_INSTRUMENTS == ("NQ", "ES", "YM")
+def test_production_writes_for_nq_es_ym_and_gold_and_nq_only_stays_selectable():
+    assert ID.PRODUCTION_INSTRUMENTS == ("NQ", "ES", "YM", "GOLD")
     base, _, _ = make(RELEASE)
     assert [i.symbol for i in base.instruments] == ["NQ"]  # chosen, as desk_instruments can
     service = DeskService(sources=base.sources, store=base.store, writer=base.writer)
-    assert [i.symbol for i in service.instruments] == ["NQ", "ES", "YM"]
+    assert [i.symbol for i in service.instruments] == ["NQ", "ES", "YM", "GOLD"]
 
 
 async def test_nq_and_es_premarkets_carry_their_own_facts_and_ids():

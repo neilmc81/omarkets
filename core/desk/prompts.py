@@ -224,7 +224,8 @@ class InstrumentSpec:
     rates_link: str
     #: How to read ``normal_move_size``'s fear gauge.
     gauge_rule: str
-    #: How to read ``nq_vs_es`` from this instrument's side.
+    #: How to read ``nq_vs_es`` from this instrument's side (or, where
+    #: ``participation`` is false, what the note has instead).
     benchmark_rule: str
     #: The pre-market and ask tasks' line on ``nq_vs_es``.
     benchmark_task: str
@@ -234,6 +235,13 @@ class InstrumentSpec:
     macro_rule: str
     #: Desk-wide event notes (release, Fed, ...) use this profile: NQ's only.
     events: bool = False
+    #: Whether its notes get ``nq_vs_es`` and ``megacap_participation``
+    #: (``facts.PARTICIPATION_INSTRUMENTS``): the stock indexes do, gold doesn't.
+    participation: bool = True
+    #: The per-instrument note kinds its profile has tasks for. Every instrument
+    #: but NQ is written move and ask only (``identity.instrument_kinds``); GOLD's
+    #: profile has no pre-market text at all.
+    kinds: frozenset[NoteKind] = INSTRUMENT_KINDS
 
 
 ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
@@ -250,6 +258,18 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
             "The 2-year yield tracks Fed expectations; the 10-year reflects longer-run "
             "growth and inflation. Explain what the supplied yields did and connect it to "
             "{symbol}, but do not claim yields caused a move unless the facts support it."),
+    ),
+    AssetClass.COMMODITY: AssetDefaults(
+        about=("Prices are about 10 minutes delayed. Futures trade from 18:00 ET to 17:00 ET "
+               "the next day, Sunday to Friday, so they reopen at 18:00 ET. The settle is "
+               "the official closing price the exchange sets for each session. The US stock "
+               "market opens at 09:30 ET and closes at 16:00 ET. Most US economic data is "
+               "released at 08:30 ET."),
+        rates_rule=(
+            "Bond yields matter for {symbol}: {rates_link} The 2-year yield tracks Fed "
+            "expectations; the 10-year reflects longer-run growth and inflation. Explain "
+            "what the supplied yields did and connect it to {symbol}, but do not claim "
+            "yields caused a move unless the facts support it."),
     ),
 }
 
@@ -341,8 +361,7 @@ growth, the Fed's rate): the latest reading, whether it has been rising, falling
 steady, and how the last release compared with forecasts. {macro_rule} Use it for \
 context, e.g. whether today's number fits or breaks the trend. A trend describes the \
 past, not a forecast. Skip it when it is not relevant; treat "stale" data with care.
-18. {benchmark_rule} If "comparable" is false, say the comparison is not available \
-and give its "why_not".
+18. {benchmark_rule}
 19. {megacap_rule}
 
 Return a single JSON object with exactly these fields:
@@ -363,6 +382,12 @@ The task gives a length for the whole note. A shorter note that keeps every rule
 beats a longer one.
 """
 
+#: Rule 18's ending and the tasks' megacap line, for instruments whose notes get
+#: ``nq_vs_es`` and ``megacap_participation`` (``InstrumentSpec.participation``).
+_COMPARABLE_RULE = (' If "comparable" is false, say the comparison is not available '
+                    'and give its "why_not".')
+_MEGACAP_TASK = ", whether the biggest tech stocks moved together (megacap_participation)"
+
 _RATES_FIELD = ("- rates_read: max 70 words on what the 2-year and 10-year yields did "
                 "and why that matters for {symbol}.")
 _NO_RATES_FIELD = ("- rates_read: leave this field out; yields are not a main driver "
@@ -375,8 +400,7 @@ _V9_INSTRUMENT_TASKS: dict[NoteKind, str] = {
         "Lead with any economic data released this morning (released_this_morning): "
         "actual versus forecast, what it means, and how {symbol} and yields reacted in "
         "the measured window. Then cover the overnight session: where {symbol} stands "
-        "(markets_today, {location}), {benchmark_task}, whether the biggest tech stocks "
-        "moved together (megacap_participation), yields, the dollar, oil and the "
+        "(markets_today, {location}), {benchmark_task}, yields, the dollar, oil and the "
         "overnight_headlines that matter. Then what is still scheduled today and why it "
         "matters. If nothing was released this morning, say so in one sentence. "
         "Length: 200-260 words across all fields."),
@@ -393,8 +417,7 @@ _V9_INSTRUMENT_TASKS: dict[NoteKind, str] = {
     NoteKind.ASK: (
         "The reader asked: 'What is going on with {symbol} right now?' Give a clear "
         "snapshot: how {symbol} is doing today and from what baseline (markets_today), "
-        "{benchmark_task}, whether the biggest tech stocks moved together "
-        "(megacap_participation), what yields and the dollar are doing, any important "
+        "{benchmark_task}, what yields and the dollar are doing, any important "
         "headlines, and what is coming up next. Length: 120-160 words across all fields."),
 }
 
@@ -446,7 +469,8 @@ def _v9(spec: InstrumentSpec) -> Profile:
     defaults = ASSET_DEFAULTS[spec.asset]
     fields = {"symbol": spec.symbol, "name": spec.name, "sym": spec.symbol.lower(),
               "location": f"{spec.symbol.lower()}_price_location",
-              "benchmark_task": spec.benchmark_task}
+              "benchmark_task": spec.benchmark_task + (_MEGACAP_TASK if spec.participation
+                                                       else "")}
     rates_rule = (defaults.rates_rule.format(**fields, rates_link=spec.rates_link)
                   if defaults.rates_rule else
                   "Bond yields are not a main driver of {symbol}; mention them only if "
@@ -454,11 +478,14 @@ def _v9(spec: InstrumentSpec) -> Profile:
     system = _V9_SYSTEM.format(
         **fields, what=spec.what, about=defaults.about, rates_rule=rates_rule,
         gauge_rule=spec.gauge_rule.format(**fields),
-        benchmark_rule=spec.benchmark_rule.format(**fields),
+        benchmark_rule=spec.benchmark_rule.format(**fields) + (
+            _COMPARABLE_RULE if spec.participation else ""),
         megacap_rule=spec.megacap_rule.format(**fields),
         macro_rule=spec.macro_rule.format(**fields),
         rates_field=(_RATES_FIELD if defaults.rates_rule else _NO_RATES_FIELD).format(**fields))
-    templates = {**_V9_INSTRUMENT_TASKS, **(_V9_EVENT_TASKS if spec.events else {})}
+    templates = {**{kind: text for kind, text in _V9_INSTRUMENT_TASKS.items()
+                    if kind in spec.kinds},
+                 **(_V9_EVENT_TASKS if spec.events else {})}
     return Profile(system, {kind: text.format(**fields) for kind, text in templates.items()},
                    f"{defaults.about} {BASIS_POINT}",
                    rates_read_required=defaults.rates_rule is not None)
@@ -544,6 +571,40 @@ SPECS: Mapping[str, InstrumentSpec] = {
         macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100); if you use "
                     "it, say it is about NQ, not YM."),
     ),
+    "GOLD": InstrumentSpec(
+        symbol="GOLD", name="Gold", asset=AssetClass.COMMODITY,
+        what=("GOLD is the COMEX gold futures contract, priced in US dollars per troy ounce. "
+              "Gold pays no interest and is bought as a store of value and a safe place "
+              "for money in uncertain times, not for company profits, so stock-market "
+              "news moves it far less than it moves the stock indexes. Gold often rises "
+              "when yields fall or the Fed is expected to cut rates (\"dovish\"), when "
+              "the US dollar weakens, or when worry sends investors toward safety; it "
+              "often falls on the opposite. These are tendencies, not rules: when the "
+              "supplied facts show gold moving against them, say so plainly. Here "
+              "\"supportive\" means pushing gold's price up and \"negative\" means "
+              "pushing it down; neither is advice."),
+        rates_link=("gold pays no interest, so when yields rise, holding it costs more "
+                    "in interest given up and it often falls; when yields fall it often "
+                    "rises. A stronger US dollar also often weighs on gold, because gold "
+                    "is priced in dollars."),
+        gauge_rule=("its fear gauge where it has one. The facts have no gold fear gauge "
+                    "(no gold volatility index is supplied), so never use the VIX or VXN, "
+                    "which are stock-market gauges, as gold's."),
+        benchmark_rule=("Gold notes get no \"nq_vs_es\". NQ (Nasdaq 100 futures) and ES "
+                        "(S&P 500 futures) in \"markets_today\" show how stocks are "
+                        "doing; use them only as context on investors' appetite for risk, "
+                        "and say they are stock markets, not gold."),
+        benchmark_task=("how stocks are doing (NQ and ES in markets_today) as context on "
+                        "appetite for risk"),
+        megacap_rule=("Gold notes get no \"megacap_participation\": individual stocks "
+                      "are not a driver of gold, so leave them out unless a supplied "
+                      "headline ties one to gold."),
+        macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100), not gold; "
+                    "if you use it, say it is about NQ. For gold, inflation and the Fed's "
+                    "rate matter mainly through yields and the dollar."),
+        participation=False,
+        kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
+    ),
 }
 
 #: Prompt profiles by version, then instrument symbol. desk:v8 is NQ's text
@@ -559,12 +620,16 @@ PROFILES: Mapping[str, Profile] = PROMPTS[PROMPT_VERSION]
 
 
 class NoPromptProfile(LookupError):
-    """No prompt profile for this instrument at this version: refuse the note."""
+    """No prompt profile for this instrument at this version, or none for this
+    note kind (GOLD has no pre-market): refuse the note."""
 
-    def __init__(self, symbol: str, version: str = PROMPT_VERSION) -> None:
-        super().__init__(f"no {version} prompt for {symbol}")
+    def __init__(self, symbol: str, version: str = PROMPT_VERSION,
+                 kind: NoteKind | None = None) -> None:
+        what = f"{kind.value} prompt" if kind is not None else "prompt"
+        super().__init__(f"no {version} {what} for {symbol}")
         self.symbol = symbol
         self.version = version
+        self.kind = kind
 
 
 def _sha256(text: str) -> str:
@@ -637,7 +702,9 @@ def render(kind: NoteKind, instrument: Instrument | None, facts: dict[str, Any],
         if instrument is not None:
             raise ValueError(f"{kind.value} notes are desk-wide and carry no instrument")
         profile = profiles[LEGACY]
-    task = profile.tasks[kind]
+    task = profile.tasks.get(kind)
+    if task is None:
+        raise NoPromptProfile(instrument.symbol if instrument else LEGACY, version, kind)
     text = facts_text(facts)
     user = (
         f"TASK\n{task}\n\n"

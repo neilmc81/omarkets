@@ -54,11 +54,20 @@ so a restart cannot produce a duplicate note or notification.
   selectable. `desk:v9` (Phase 1 slice 5) is one set of shared rules plus an
   instrument profile on top of its asset class's defaults
   (session hours, what "close" means, the expected delay, how yields matter).
-  NQ's wording lives in NQ's profile; ES and YM have their own reviewed
+  NQ's wording lives in NQ's profile; ES, YM and GOLD have their own reviewed
   profiles (YM's: the Dow is 30 price-weighted stocks, `nq_vs_es` and the
-  megacaps are NQ/ES context, and the VIX stands in as the S&P 500's gauge). v9 asks
+  megacaps are NQ/ES context, and the VIX stands in as the S&P 500's gauge).
+  GOLD's profile sits on commodity defaults (Globex hours, about 10 minutes
+  delayed) and says what moves gold: it pays no interest, so yields and Fed
+  rate expectations matter, a stronger dollar often weighs on it and worry
+  can lift it, as tendencies rather than rules. Its tone is defined as pushing
+  gold's price up (supportive) or down (negative), never as advice. Gold notes
+  get no `nq_vs_es`, megacap count or fear gauge (`InstrumentSpec.participation`
+  is false; the feeds have no gold gauge and the VIX is never used as one), and
+  GOLD's profile has move and ask tasks only (`InstrumentSpec.kinds`), so a
+  gold pre-market cannot be rendered at all. v9 asks
   for `tone` (stored as `nq_tone`), and `rates_read` only where yields matter
-  (every equity index future). Each note task has a length target, recorded by
+  (every equity index future, and gold). Each note task has a length target, recorded by
   `eval check` and never retried. v9 notes get `recent_lessons` in their facts
   (the terms the latest five Learn boxes taught, newest first) and are told
   not to teach one again; v8 facts never carry it. v9's stated facts include
@@ -71,17 +80,20 @@ so a restart cannot produce a duplicate note or notification.
   (release, Fed, earnings, auction, primer, review) stay desk-wide on NQ's
   profile.
 - `desk_instruments` (`OMARKETS_DESK_INSTRUMENTS`, JSON list, default
-  `["NQ", "ES", "YM"]`) is which instruments get their own notes. A fresh
-  install runs NQ, ES and YM on desk:v9 with no setting; `["NQ", "ES"]` or
-  `["NQ"]` (optionally with `desk:v8`) narrows it back. A YM note's facts
-  always include YM in `markets_today` and in the measured moves, though YM is
-  not on the Today strip. NQ is always on and
+  `["NQ", "ES", "YM", "GOLD"]`) is which instruments get their own notes. A
+  fresh install runs NQ, ES, YM and GOLD on desk:v9 with no setting;
+  `["NQ", "ES", "YM"]`, `["NQ", "ES"]` or `["NQ"]` (optionally with `desk:v8`)
+  narrows it back. A YM note's facts always include YM in `markets_today` and
+  in the measured moves, though YM is not on the Today strip; GOLD is on the
+  strip already, so a gold note reads its own row there and its own move
+  window, and NQ, ES and YM facts are the same with or without GOLD enabled.
+  Desk coverage of the other strip markets starts with GOLD. NQ is always on and
   gets pre-market, move and ask notes; every other instrument gets move and ask
   notes only, never the daily pre-market (cost policy;
   `identity.instrument_kinds`). Each instrument has its own 3-hour move limit
   and move trigger; the daily ask limit is shared. The service refuses to start
-  when an instrument has no prompt profile at `desk_prompt_version` (ES or YM
-  under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
+  when an instrument has no prompt profile at `desk_prompt_version` (ES, YM or
+  GOLD under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
   `?instrument=`; omitted, it uses the saved workspace focus (the Chart page's
   instrument), and NQ only when no focus is saved or the store can't be read.
   An instrument or saved focus not in `desk_instruments` gets a 400 before
@@ -311,7 +323,7 @@ are skipped, never counted as zero.
   Each instrument reads its own gauge (`VOL_INDEXES`): NQ VXN against VIX, ES
   VIX alone, YM VIX alone as the wider market's gauge (the feeds have no Dow
   gauge, and YM's prompt says the VIX is the S&P 500's); an instrument without
-  one gets no gauge, never NQ's.
+  one (GOLD: the feeds have no gold gauge) gets no gauge, never NQ's.
 
 The same notes as price location get these as `normal_move_size`, as
 ready-made text (prompt `desk:v7`).
@@ -342,8 +354,8 @@ New writer facts, all deterministic and with no prompt change (`desk:v8`):
 - **Megacap participation** (`megacap_participation`): the eight megacaps with
   their status and change, and how many are up, down or flat (within 0.05%),
   counting live quotes only. NQ, ES and YM notes get both blocks (for YM as
-  context on whether tech led the wider market); other instruments get
-  neither.
+  context on whether tech led the wider market); other instruments (GOLD)
+  get neither.
 - **Events in the move window** (`events_in_move_window`, move notes): US
   economic and Fed events from 15 minutes before the move to its end, with the
   window checked, so an empty list means "no event on the supplied calendar".
