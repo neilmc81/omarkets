@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Omarkets compact popup panel.
@@ -26,8 +27,11 @@ Panel {
   // Injected by the BarWidget; the single shared connection.
   property var service: null
 
-  readonly property color fg: bar ? bar.foreground : Color.foreground
+  readonly property color fg: bar ? bar.foreground : Commons.Color.foreground
   readonly property color dim: Qt.darker(fg, 1.55)
+  // "Little effect on NQ": a quiet grey that reads on light and dark themes
+  // alike (the foreground at low alpha), not a bold darkened foreground.
+  readonly property color neutralColor: Commons.Util.alpha(root.fg, 0.38)
   // State colours follow the active Omarchy theme. Omarchy's shell retints
   // Color.* instantly; the extra roles come from the core's /api/v1/theme via
   // the collector, refreshed on every theme switch (see BarWidget).
@@ -37,12 +41,12 @@ Panel {
     return (typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)) ? value : fallback
   }
   readonly property color upColor: root.themeColor("green", "#9ece6a")
-  readonly property color downColor: root.themeColor("red", Color.urgent)
+  readonly property color downColor: root.themeColor("red", Commons.Color.urgent)
   readonly property color warnColor: root.themeColor("orange", "#e0af68")
-  readonly property color infoColor: root.themeColor("blue", Color.accent)
-  readonly property color accent: root.themeColor("accent", Color.accent)
+  readonly property color infoColor: root.themeColor("blue", Commons.Color.accent)
+  readonly property color accent: root.themeColor("accent", Commons.Color.accent)
   // Text on a filled pill: the theme background, so it reads on any palette.
-  readonly property color onPill: root.themeColor("background", Color.background)
+  readonly property color onPill: root.themeColor("background", Commons.Color.background)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property string transportState: root.service ? root.service.transportState : "unavailable"
@@ -98,7 +102,7 @@ Panel {
     switch (String(effect || "")) {
       case "helps": return root.upColor
       case "hurts": return root.downColor
-      case "neutral": return root.dim
+      case "neutral": return root.neutralColor
       default: return root.dim
     }
   }
@@ -159,9 +163,32 @@ Panel {
     if (!q) return "—"
     return q.change_bp !== null && q.change_bp !== undefined ? root.fmtBp(q.change_bp) : root.fmtPct(q.change_pct)
   }
+  // Synthetic data must never look real: a demo quote is dimmed, tagged DEMO
+  // and shown without an effect colour, whatever the core says about it.
+  function quoteDemo(q) { return !!q && q.feed_status === "demo" }
+  function quoteDelayed(q) { return !!q && q.feed_status === "delayed" }
+  // The effect to draw: the core's, except on demo data.
+  function shownEffect(q) { return q && !root.quoteDemo(q) ? q.nq_effect : null }
   // A live feed problem, not "the market is shut": shown by dimming the row.
   function quoteDegraded(q) {
-    return !!q && !q.market_closed && (q.status === "stale" || q.status === "unavailable")
+    return root.quoteDemo(q) || (!!q && !q.market_closed && (q.status === "stale" || q.status === "unavailable"))
+  }
+  // Every quote on screen: the hero, then the rows.
+  readonly property var shownQuotes: {
+    var out = root.primary ? [root.primary] : []
+    for (var i = 0; i < root.strip.length; i++)
+      if (root.strip[i] && root.strip[i].symbol !== root.focusSymbol) out.push(root.strip[i])
+    return out
+  }
+  readonly property bool anyDemo: root.shownQuotes.some(root.quoteDemo)
+  readonly property int delayedCount: root.shownQuotes.filter(root.quoteDelayed).length
+  // "Delayed" is said once in the footer when every quote is delayed (the usual
+  // case), like "Closed" in the header; per row only when the feeds are mixed.
+  readonly property bool allDelayed: root.delayedCount > 0 && root.delayedCount === root.shownQuotes.length
+  function feedTag(q) {
+    if (root.quoteDemo(q)) return "DEMO"
+    if (root.quoteDelayed(q) && !root.allDelayed) return "delayed"
+    return ""
   }
   function sparkValues(symbol) {
     var line = root.sparklines ? root.sparklines[symbol] : null
@@ -254,15 +281,24 @@ Panel {
     if (root.aiHealth !== "ok") parts.push("AI " + root.aiHealth)
     return parts.join(" · ")
   }
+  function feedNote() {
+    if (root.delayedCount === 0) return ""
+    return root.allDelayed ? "delayed" : "some delayed"
+  }
   function footerText() {
     if (!root.online)
       return (root.showSnapshot ? "Last known snapshot · " : "") + root.lastResponseText()
     var asOf = root.primary ? root.localTime(root.primary.as_of, "ddd HH:mm") : ""
-    return (asOf ? "Data as of " + asOf + " · " : "") + root.healthText()
+    var parts = []
+    if (root.anyDemo) parts.push("DEMO data, not real prices")
+    if (asOf) parts.push("Data as of " + asOf)
+    if (root.feedNote()) parts.push(root.feedNote())
+    parts.push(root.healthText())
+    return parts.join(" · ")
   }
   readonly property color footerColor: !root.online ? (root.transportState === "unresponsive" ? root.warnColor : root.downColor)
-    : (root.dataHealth === "ok" && root.aiHealth === "ok" ? root.dim
-      : (root.dataHealth === "down" || root.aiHealth === "down" ? root.downColor : root.warnColor))
+    : (root.dataHealth === "down" || root.aiHealth === "down" ? root.downColor
+      : (root.anyDemo || root.dataHealth !== "ok" || root.aiHealth !== "ok" ? root.warnColor : root.dim))
 
   function importanceDots(importance) {
     switch (String(importance || "")) {
@@ -372,11 +408,23 @@ Panel {
       id: pillText
       anchors.centerIn: parent
       text: pill.text
-      color: pill.rated ? root.onPill : root.fg
+      // The neutral fill is a faint grey, so its text stays the foreground.
+      color: pill.rated && pill.effect !== "neutral" ? root.onPill : root.fg
       font.family: root.fontFamily
       font.pixelSize: pill.fontSize
       font.bold: pill.rated
     }
+  }
+
+  // A small DEMO / delayed word beside a symbol; empty for live data.
+  component FeedTag: Text {
+    property var quote: null
+    visible: text !== ""
+    text: root.feedTag(quote)
+    color: root.quoteDemo(quote) ? root.warnColor : root.dim
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    font.bold: root.quoteDemo(quote)
   }
 
   component Divider: Rectangle {
@@ -474,6 +522,7 @@ Panel {
           width: parent.width
           spacing: Style.spacing.md
           visible: root.showSnapshot && root.primary !== null
+          opacity: root.quoteDemo(root.primary) ? 0.7 : 1
 
           Item {
             width: parent.width
@@ -493,9 +542,16 @@ Panel {
                 font.pixelSize: Style.font.displayLarge
                 font.bold: true
               }
+              FeedTag {
+                id: heroTag
+                objectName: "omarkets-hero-tag"
+                anchors.baseline: heroSymbol.baseline
+                quote: root.primary
+              }
               Text {
                 anchors.baseline: heroSymbol.baseline
                 width: heroLeft.width - heroSymbol.width - heroLeft.spacing
+                  - (heroTag.visible ? heroTag.width + heroLeft.spacing : 0)
                 elide: Text.ElideRight
                 text: root.primary ? root.rowLabel(root.primary) : ""
                 color: root.dim
@@ -520,7 +576,7 @@ Panel {
                 objectName: "omarkets-hero-pill"
                 anchors.right: parent.right
                 text: root.quoteChange(root.primary)
-                effect: root.primary ? root.primary.nq_effect : null
+                effect: root.shownEffect(root.primary)
                 fontSize: Style.font.title
               }
             }
@@ -532,8 +588,8 @@ Panel {
             height: Style.space(56)
             visible: root.sparkValues(root.focusSymbol).length > 1
             values: root.sparkValues(root.focusSymbol)
-            lineColor: root.primary && root.effectKnown(root.primary.nq_effect)
-              ? root.effectColor(root.primary.nq_effect) : root.fg
+            lineColor: root.effectKnown(root.shownEffect(root.primary))
+              ? root.effectColor(root.shownEffect(root.primary)) : root.fg
           }
 
           Item {
@@ -633,7 +689,7 @@ Panel {
                 id: quoteRow
                 required property var modelData
                 objectName: "omarkets-row-" + String(modelData.symbol || "")
-                readonly property var effect: modelData.nq_effect
+                readonly property var effect: root.shownEffect(modelData)
                 readonly property int sparkW: Style.space(96)
                 readonly property int valueW: Style.space(72)
                 readonly property int pillW: Style.space(66)
@@ -649,14 +705,25 @@ Panel {
                   anchors.verticalCenter: parent.verticalCenter
                   width: parent.width - quoteRow.sparkW - quoteRow.valueW - quoteRow.pillW - quoteRow.glyphW - quoteRow.gap * 4
                   spacing: 0
-                  Text {
+                  Row {
                     width: parent.width
-                    elide: Text.ElideRight
-                    text: String(quoteRow.modelData.symbol || "")
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.title
-                    font.bold: true
+                    spacing: Style.spacing.md
+                    Text {
+                      id: rowSymbol
+                      width: Math.min(implicitWidth, parent.width - (rowTag.visible ? rowTag.width + parent.spacing : 0))
+                      elide: Text.ElideRight
+                      text: String(quoteRow.modelData.symbol || "")
+                      color: root.fg
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.title
+                      font.bold: true
+                    }
+                    FeedTag {
+                      id: rowTag
+                      objectName: "omarkets-tag-" + String(quoteRow.modelData.symbol || "")
+                      anchors.baseline: rowSymbol.baseline
+                      quote: quoteRow.modelData
+                    }
                   }
                   Text {
                     width: parent.width
@@ -726,7 +793,8 @@ Panel {
                 PanelToolTip {
                   visible: rowHover.containsMouse
                   text: root.rowLabel(quoteRow.modelData) + ": " + root.quoteChange(quoteRow.modelData)
-                    + " · " + root.effectWords(quoteRow.effect)
+                    + " · " + (root.quoteDemo(quoteRow.modelData) ? "demo data, not a real price"
+                      : root.effectWords(quoteRow.effect))
                 }
               }
             }

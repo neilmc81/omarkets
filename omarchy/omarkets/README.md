@@ -23,15 +23,25 @@ verbatim from the core; nothing is calculated, inferred, or invented here.
 
 Colour means **effect on NQ**, not direction. A change pill (and its sparkline)
 is green when the core's `nq_effect` says the move helps NQ, red when it hurts,
-grey when neutral, and an unfilled outline when the core gives no effect (an
-older core, or a quote the risk-tone rules leave out). A ▲/▼/– next to each pill
+a faint grey when neutral, and an unfilled outline when the core gives no
+effect (an older core, or a quote the risk-tone rules leave out). A ▲/▼/– next to each pill
 says the same without colour. A falling yield is therefore green. The popup
 never works an effect out itself.
 
 A shut market is said once, in the header ("Closed · opens in 15h 34m"), not
 on every row. A row whose feed is stale or unavailable while its market is open
-is dimmed. Missing sparklines, hero levels, short names or groups (an older
-core or collector) leave those parts out; the rows still render.
+is dimmed.
+
+Demo data never looks real. A quote whose feed is `demo` is dimmed, tagged
+**DEMO** beside its symbol, and drawn without an effect colour (its pill is an
+outline, its tooltip says "demo data, not a real price"); the footer then leads
+with "DEMO data, not real prices" and turns the warning colour, even when the
+health badges are all OK. Delayed quotes are said once in the footer ("· delayed") when
+every quote on screen is delayed, the usual case; when the feeds are mixed, each
+delayed row carries a small "delayed" tag and the footer says "some delayed".
+
+Missing sparklines, hero levels, short names or groups (an older core or
+collector) leave those parts out; the rows still render.
 
 The collector retains the last successful status and its `updatedAt` timestamp
 when a request fails. It writes the failure count separately, so the popup can

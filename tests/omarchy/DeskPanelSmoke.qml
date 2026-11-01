@@ -114,10 +114,51 @@ ShellRoot {
       // Pill colours follow the core's nq_effect, never the sign of the move.
       ensure(Qt.colorEqual(walk(popup, "omarkets-pill-US2Y").color, "#549e6a"), "falling yield helps NQ: green")
       ensure(Qt.colorEqual(walk(popup, "omarkets-pill-VIX").color, "#ff5345"), "rising VIX hurts NQ: red")
-      ensure(Qt.colorEqual(walk(popup, "omarkets-pill-DXY").color, popup.dim), "neutral is dim")
+      ensure(Qt.colorEqual(walk(popup, "omarkets-pill-DXY").color, popup.neutralColor), "neutral is the neutral grey")
+      ensure(popup.neutralColor.a < 0.5, "neutral is a faint tint, not a bold darkened foreground")
       ensure(walk(popup, "omarkets-pill-VXN").color.a === 0, "no effect from the core: no fill")
       ensure(walk(popup, "omarkets-pill-US2Y").text === "-6.4bp", "yields in bp")
       ensure(walk(popup, "omarkets-footer-status").text.indexOf("all systems OK") > 0, "footer health")
+      // Every quote delayed (the usual case): said once in the footer, not per row.
+      ensure(walk(popup, "omarkets-footer-status").text.indexOf(" · delayed · ") > 0,
+        "footer says delayed: " + walk(popup, "omarkets-footer-status").text)
+      ensure(!walk(popup, "omarkets-tag-US2Y").visible && !walk(popup, "omarkets-hero-tag").visible, "no per-row delayed when all are")
+      // Mixed feeds: the delayed rows say so themselves.
+      fake.crossMarket = shell.richRows().map(function(q) { if (q.symbol === "ES") q.feed_status = "live"; return q })
+      wait(100)
+      ensure(walk(popup, "omarkets-tag-US2Y").visible && walk(popup, "omarkets-tag-US2Y").text === "delayed", "delayed row tagged")
+      ensure(!walk(popup, "omarkets-tag-ES").visible, "live row has no tag")
+      ensure(walk(popup, "omarkets-footer-status").text.indexOf("some delayed") > 0, "footer says some delayed")
+      // Demo data never looks real: tagged, dimmed, no effect colour, footer warns.
+      fake.crossMarket = shell.richRows().map(function(q) { if (q.symbol === "VIX") q.feed_status = "demo"; return q })
+      wait(100)
+      ensure(walk(popup, "omarkets-tag-VIX").visible && walk(popup, "omarkets-tag-VIX").text === "DEMO", "demo row tagged DEMO")
+      ensure(walk(popup, "omarkets-row-VIX").opacity < 1, "demo row dimmed")
+      ensure(walk(popup, "omarkets-pill-VIX").color.a === 0, "demo row: no nq_effect fill")
+      ensure(walk(popup, "omarkets-footer-status").text.indexOf("DEMO data") === 0, "footer leads with demo")
+      ensure(Qt.colorEqual(walk(popup, "omarkets-footer-status").color, popup.warnColor), "demo footer is not the quiet OK colour")
+      ensure(walk(popup, "omarkets-footer-status").text.indexOf("some delayed") > 0, "the rest are still delayed")
+      fake.primary = Object.assign({}, shell.richRows()[1], { feed_status: "demo" })
+      wait(100)
+      ensure(walk(popup, "omarkets-hero-tag").text === "DEMO", "demo hero tagged")
+      ensure(walk(popup, "omarkets-hero-pill").color.a === 0, "demo hero: no nq_effect fill")
+      ensure(walk(popup, "omarkets-hero").opacity < 1, "demo hero dimmed")
+      fake.crossMarket = shell.richRows()
+      fake.primary = shell.richRows()[1]
+      wait(100)
+      ensure(walk(popup, "omarkets-footer-status").text.indexOf("DEMO") < 0, "no demo note without demo data")
+      // A non-NQ focus: ES is the hero, NQ becomes a row, and NQ's levels are not shown as ES's.
+      fake.focusSymbol = "ES"
+      fake.primary = shell.richRows()[0]
+      wait(100)
+      ensure(popup.primary.symbol === "ES" && texts(walk(popup, "omarkets-hero")).indexOf("ES") >= 0, "ES hero")
+      ensure(walk(popup, "omarkets-row-ES") === null && walk(popup, "omarkets-row-NQ") !== null, "NQ is a row under an ES focus")
+      ensure(walk(popup, "omarkets-hero-week").text === "", "NQ's week range is not shown for ES")
+      fake.hero = Object.assign({}, fake.hero, { symbol: "ES", prior_week_low_text: "7,500.00", prior_week_high_text: "7,800.00" })
+      ensure(walk(popup, "omarkets-hero-week").text === "Last week 7,500.00 – 7,800.00", "ES week range")
+      fake.focusSymbol = "NQ"
+      fake.primary = shell.richRows()[1]
+      wait(100)
       // State colours come from the active Omarchy palette, and follow it.
       ensure(Qt.colorEqual(popup.upColor, "#549e6a"), "up colour follows theme green " + popup.upColor)
       ensure(Qt.colorEqual(popup.downColor, "#ff5345"), "down colour follows theme red")

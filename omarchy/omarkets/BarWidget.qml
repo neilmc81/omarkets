@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Omarkets bar widget.
@@ -124,8 +125,8 @@ BarWidget {
     var value = root.themeColors ? root.themeColors[role] : null
     return (typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)) ? value : fallback
   }
-  readonly property color barColor: root.transportDown ? root.themeColor("red", Color.urgent)
-    : (root.transportRetrying ? root.themeColor("orange", "#e0af68") : (bar ? bar.foreground : Color.foreground))
+  readonly property color barColor: root.transportDown ? root.themeColor("red", Commons.Color.urgent)
+    : (root.transportRetrying ? root.themeColor("orange", "#e0af68") : (bar ? bar.foreground : Commons.Color.foreground))
 
   readonly property string tooltip: {
     if (root.transportDown)
