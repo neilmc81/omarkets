@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **Crude oil (WTI) now gets desk notes by default.** The default
+  `desk_instruments` is `["NQ", "ES", "YM", "GOLD", "WTI"]` on `desk:v9`. Oil
+  works like gold: its own move notes (with its own 3-hour limit and move
+  trigger) and "Explain the market now" notes when WTI is the focus. There is
+  no oil pre-market; only NQ gets the daily briefing (cost policy). Oil notes
+  say they are about oil / WTI, and their tone reads "… for WTI": supportive
+  means pushing oil's price up, negative pushing it down. The prompt explains
+  what usually moves oil (supply such as OPEC+ and US production;
+  geopolitics such as wars in producer regions, sanctions and threats to
+  shipping routes like the Strait of Hormuz, only when the headlines show it,
+  never an invented conflict; demand such as growth and China; the US
+  dollar; appetite for risk; and the weekly inventory reports when the facts
+  carry them), says these are tendencies rather than rules, and gives no
+  trading advice. Bond yields are not treated as a main driver of oil, so oil
+  notes don't need a rates section and are never asked to comment on yields;
+  a data surprise is read through fuel demand and the dollar, not rate cuts.
+  Oil notes
+  get no NQ vs ES comparison, megacap count or fear gauge (the feeds have no
+  oil gauge; the VIX is never used as one). NQ, ES, YM and gold notes are
+  unchanged. That means a few more notes and a little more AI spend each week.
+  To leave oil out, set `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM", "GOLD"]`
+  in `.env` and restart; listing WTI with `desk:v8` refuses to start. After
+  updating, the log line reads `desk notes for NQ, ES, YM, GOLD, WTI on
+  desk:v9`.
 - **Gold now gets desk notes by default.** The default `desk_instruments` is
   `["NQ", "ES", "YM", "GOLD"]` on `desk:v9`. Gold works like YM: its own move
   notes (with its own 3-hour limit and move trigger) and "Explain the market
@@ -15,8 +39,8 @@
   have no gold gauge; the VIX is never used as one). NQ, ES and YM notes are
   unchanged. That means a few more notes and a little more AI spend each week.
   To leave gold out, set `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM"]` in
-  `.env` and restart; listing GOLD with `desk:v8` refuses to start. After
-  updating, the log line reads `desk notes for NQ, ES, YM, GOLD on desk:v9`.
+  `.env` and restart; listing GOLD with `desk:v8` refuses to start. Oil joins
+  the defaults too (above).
 - **YM (Dow futures) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM"]` on `desk:v9`. YM works like ES:
   its own move notes (with its own 3-hour limit and move trigger) and
@@ -52,8 +76,8 @@
   - `omarketsctl config` shows `desk_prompt_version` and `desk_instruments`
     and where each came from (`default`, `.env` or the service environment).
   - `systemctl --user status omarkets` shows the service running; the log
-    line `desk notes for NQ, ES, YM, GOLD on desk:v9` confirms it (with YM's
-    and gold's notes, above).
+    line `desk notes for NQ, ES, YM, GOLD, WTI on desk:v9` confirms it (with
+    YM's, gold's and oil's notes, above).
   - To keep the old behaviour, set both `OMARKETS_DESK_INSTRUMENTS=["NQ"]`
     and `OMARKETS_DESK_PROMPT_VERSION=desk:v8` in `.env`, then restart.
   - A `.env` or systemd drop-in that sets only `desk:v8` no longer starts

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Clean-install smoke: a fresh Omarkets install runs on the code defaults
-# (desk notes for NQ, ES, YM and GOLD on desk:v9) with no systemd drop-in.
+# (desk notes for NQ, ES, YM, GOLD and WTI on desk:v9) with no systemd drop-in.
 #
 # Usage: smoke-defaults [--live]
 #   (default)  offline: settings from an empty environment, with no .env and
@@ -48,7 +48,7 @@ repo, work, live = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] == "1"
 from core.config import effective  # noqa: E402
 from core.main import check_desk_instruments  # noqa: E402
 
-WANT = {"desk_prompt_version": "desk:v9", "desk_instruments": '["NQ", "ES", "YM", "GOLD"]'}
+WANT = {"desk_prompt_version": "desk:v9", "desk_instruments": '["NQ", "ES", "YM", "GOLD", "WTI"]'}
 failed = []
 
 
@@ -66,7 +66,7 @@ def check_desk(label: str, environ: dict, env_file: Path | None) -> None:
         check(row.value == want and row.source == "default",
               f"{label}: {name} = {row.value} ({row.source}), want {want} (default)")
     try:
-        check(check_desk_instruments(settings) == ("NQ", "ES", "YM", "GOLD"),
+        check(check_desk_instruments(settings) == ("NQ", "ES", "YM", "GOLD", "WTI"),
               f"{label}: every desk instrument has a prompt")
     except Exception as exc:  # noqa: BLE001 - reported as a failure
         check(False, f"{label}: {exc}")
@@ -133,8 +133,8 @@ if live:
             proc.kill()
             proc.wait()
     text = log.read_text(errors="replace")
-    check("desk notes for NQ, ES, YM, GOLD on desk:v9" in text,
-          "log says: desk notes for NQ, ES, YM, GOLD on desk:v9")
+    check("desk notes for NQ, ES, YM, GOLD, WTI on desk:v9" in text,
+          "log says: desk notes for NQ, ES, YM, GOLD, WTI on desk:v9")
     if failed:
         print(text[-4000:])
 
