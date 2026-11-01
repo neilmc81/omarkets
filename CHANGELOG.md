@@ -13,7 +13,9 @@
   as growth and China, the US dollar, appetite for risk, and the weekly
   inventory reports when the facts carry them), says these are tendencies
   rather than rules, and gives no trading advice. Bond yields are not treated
-  as a main driver of oil, so oil notes don't need a rates section. Oil notes
+  as a main driver of oil, so oil notes don't need a rates section and are
+  never asked to comment on yields; a data surprise is read through fuel
+  demand and the dollar, not rate cuts. Oil notes
   get no NQ vs ES comparison, megacap count or fear gauge (the feeds have no
   oil gauge; the VIX is never used as one). NQ, ES, YM and gold notes are
   unchanged. That means a few more notes and a little more AI spend each week.

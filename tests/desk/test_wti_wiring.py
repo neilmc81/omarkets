@@ -7,6 +7,7 @@ has no pre-market text at all), and its notes are written from its own prompt
 and say they are about oil, never NQ. WTI is already on the Today strip, so its
 notes read its own quote there; NQ, ES, YM and GOLD notes are unchanged."""
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -160,6 +161,57 @@ def test_yields_are_not_a_main_driver_of_oil():
     assert all(spec.yields_matter for symbol, spec in P.SPECS.items() if symbol != "WTI")
 
 
+@pytest.mark.parametrize("kind", [NoteKind.MOVE, NoteKind.ASK])
+def test_wti_tasks_never_demand_yields_commentary(kind):
+    # Rule 10 makes yields optional for oil, so no WTI task may ask for them
+    # outright (the shared ask task asked for "what yields and the dollar are doing").
+    task = P.PROMPTS[P.V9]["WTI"].tasks[kind]
+    assert "yield" not in task.lower()
+
+
+def test_wti_ask_asks_for_oil_s_own_drivers():
+    task = P.PROMPTS[P.V9]["WTI"].tasks[NoteKind.ASK]
+    assert "the US dollar in markets_today, if the facts show it" in task
+    assert "supply (OPEC+, US output, inventories) or demand" in task
+
+
+def test_wti_system_reads_like_an_oil_desk_not_an_equity_one():
+    system = P.PROMPTS[P.V9]["WTI"].system
+    intro = system.split("\n\n")[0]
+    # What moves oil, not what moves a stock index.
+    assert "company earnings" not in intro and "bond yields" not in intro
+    assert "supply, demand, the US dollar" in intro
+    # No rate-cut framing of data surprises.
+    assert "helpful for rate cuts" not in system
+    assert "a sign of weaker demand for oil" in system
+    # No "fear gauge where it has one" followed by "there is none".
+    assert "where it has one" not in system
+    assert "no oil volatility index is supplied" in system
+
+
+#: Digests of the NQ, ES, YM and GOLD desk:v9 profiles (system, stated facts,
+#: rates_read_required and every task) as on main before WTI. WTI's wording is
+#: its own: none of it may leak into another instrument's prompt.
+MAIN_PROFILE_DIGESTS = {
+    "NQ": "cdcb8aff0a45c44a9d56e16eaaf1c3c441a45bfeaf6c7fa6693745112b0ff0ad",
+    "ES": "87ea2d6b78494cc773aaa2289124f30023c80a464f69a9f46eb8af4531596b4c",
+    "YM": "94aec356da80a4cad0d8f44c347ad884cd36c5e6ebb45e90d9d1767df24478a4",
+    "GOLD": "8cc57beb3b1ef6fadb43b90a04eb040fd19c3513f5f6af2f64dcb860307344fa",
+}
+
+
+def profile_digest(profile: P.Profile) -> str:
+    parts = [profile.system, profile.stated_facts, repr(profile.rates_read_required)]
+    parts += [f"{kind.value}\n{task}" for kind, task in
+              sorted(profile.tasks.items(), key=lambda item: item[0].value)]
+    return hashlib.sha256("\x00".join(parts).encode()).hexdigest()
+
+
+@pytest.mark.parametrize("symbol", BEFORE)
+def test_other_v9_profiles_are_byte_identical_to_main(symbol):
+    assert profile_digest(P.PROMPTS[P.V9][symbol]) == MAIN_PROFILE_DIGESTS[symbol]
+
+
 async def test_a_wti_note_without_rates_read_is_accepted():
     body = {k: v for k, v in GOOD.items() if k not in ("nq_tone", "rates_read")}
     without = json.dumps(body | {"tone": "negative"})
@@ -170,7 +222,7 @@ async def test_a_wti_note_without_rates_read_is_accepted():
 
 def test_wti_prompt_says_borrowed_facts_are_about_other_markets():
     system = P.PROMPTS[P.V9]["WTI"].system
-    assert "The facts have no oil fear gauge" in system
+    assert "no fear gauge: no oil volatility index is supplied" in system
     assert "never use the VIX or VXN, which are stock-market gauges, as oil's" in system
     assert 'Oil notes get no "nq_vs_es"' in system
     assert "use them only as context on investors' appetite for risk" in system
