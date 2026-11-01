@@ -82,15 +82,15 @@ def test_the_summary_reports_a_config_the_service_would_refuse(tmp_path, env_fil
     result = dry_run_with(tmp_path, env_file)
     assert result.returncode == 0, result.stderr
     assert "Desk notes:" not in result.stdout
-    assert "no drop-in needed" not in result.stdout + result.stderr
+    assert "drop-ins not checked" not in result.stdout + result.stderr
     assert "service will refuse to start" in result.stderr and reason in result.stderr
 
 
 @pytest.mark.parametrize(("env_file", "line"), [
     ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ"]\n',
-     "Desk notes: NQ on desk:v8 (code defaults and .env; no drop-in needed)"),
+     "Desk notes: NQ on desk:v8 (code defaults and .env; systemd drop-ins not checked)"),
     ('OMARKETS_DESK_INSTRUMENTS=["NQ"]\n',
-     "Desk notes: NQ on desk:v9 (code defaults and .env; no drop-in needed)"),
+     "Desk notes: NQ on desk:v9 (code defaults and .env; systemd drop-ins not checked)"),
     ("OMARKETS_DESK_ENABLED=false\n", "Desk notes: off"),
 ])
 def test_the_summary_names_a_startable_override(tmp_path, env_file, line):
@@ -104,7 +104,20 @@ def test_the_summary_says_when_it_could_not_check(tmp_path):
     result = install(env, "--dry-run")
     assert result.returncode == 0, result.stderr
     assert "Desk notes: not checked" in result.stderr
-    assert "no drop-in needed" not in result.stdout
+    assert "drop-ins not checked" not in result.stdout
+
+
+def test_an_unimportable_venv_is_not_reported_as_a_settings_refusal(tmp_path):
+    # -I -S drop PYTHONPATH and site-packages, so `core` cannot be imported:
+    # a half-synced venv.
+    broken = tmp_path / "python"
+    broken.write_text(f"#!/bin/sh\nexec {sys.executable} -I -S \"$@\"\n")
+    broken.chmod(0o755)
+    env = {**sandbox(tmp_path), "OMARKETS_PYTHON": str(broken)}
+    result = install(env, "--dry-run")
+    assert result.returncode == 0, result.stderr
+    assert "Desk notes: not checked" in result.stderr and "ModuleNotFoundError" in result.stderr
+    assert "refuse" not in result.stderr and "Desk notes:" not in result.stdout
 
 
 def test_the_smoke_script_passes_on_the_code_defaults(tmp_path):

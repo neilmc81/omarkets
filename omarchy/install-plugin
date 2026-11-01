@@ -74,7 +74,9 @@ backup() {
 # plus .env (systemd drop-ins are not seen here; `omarketsctl config` shows
 # the running service). It runs the same startup check as the service
 # (core.main.check_desk_instruments), so a config the service would refuse is
-# reported as a refusal on stderr, never as healthy. Read-only.
+# reported as a refusal on stderr, never as healthy. A venv that cannot import
+# the desk code (not synced yet, half-synced) is reported as "not checked",
+# not as a settings refusal. Read-only.
 # OMARKETS_PYTHON overrides the interpreter (default: .venv/bin/python).
 desk_summary() {
     local py=${OMARKETS_PYTHON:-$repo/.venv/bin/python}
@@ -91,7 +93,13 @@ from pathlib import Path
 try:
     from core.config.effective import effective_settings
     from core.main import check_desk_instruments
+except Exception as exc:  # noqa: BLE001 - a broken or half-synced venv, not a settings problem
+    print(f"Desk notes: not checked (could not load the desk code with {sys.executable}: "
+          f"{type(exc).__name__}: {' '.join(str(exc).split())}; run `uv sync`, then "
+          "omarketsctl config)", file=sys.stderr)
+    sys.exit(0)
 
+try:
     settings, rows = effective_settings({}, Path(os.environ["OMK_ENV_FILE"]))
     sources = {row.name: row.source for row in rows}
     if not settings.desk_enabled:
@@ -109,7 +117,7 @@ names = ("desk_prompt_version", "desk_instruments")
 where = ("code defaults" if all(sources[n] == "default" for n in names)
          else "code defaults and .env")
 print(f"Desk notes: {', '.join(instruments)} on {settings.desk_prompt_version} "
-      f"({where}; no drop-in needed)")
+      f"({where}; systemd drop-ins not checked)")
 PY
     ) || true
 }

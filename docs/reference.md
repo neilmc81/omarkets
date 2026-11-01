@@ -686,7 +686,7 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | `/api/v1/chart/instruments` | GET | Every registry instrument as the Chart page draws it: `{instruments: [{symbol, label, unit, price_precision, levels, release_pins}]}` |
 | `/api/v1/chart/focus` | GET, PUT | The Chart page's instrument `{symbol, updated_at, instrument}` (default NQ, `updated_at` null). PUT `{symbol}` saves it (422 if not in the registry; 503 without the workspace store). Writes no note and calls no AI |
 | `/api/v1/watchlist` | GET, PUT | The one watchlist `{name, symbols, updated_at}` (default "Desk strip": the eight Today strip symbols). PUT `{name, symbols}` replaces it; symbols must be registry instruments, no repeats (422 otherwise) |
-| `/api/v1/desk/notes` | GET | Written notes by time: `from`, `to` (UTC offset required; half-open; default the 7 days before now), `limit` (1–500, default 100). Returns `{from, to, limit, truncated, notes: [{id, kind, at, headline, summary, tone}]}`, newest first; failed and draftless notes are left out |
+| `/api/v1/desk/notes` | GET | Written notes by time: `from`, `to` (UTC offset required; half-open; default the 7 days before now), `limit` (1–500, default 100). Returns `{from, to, limit, truncated, notes: [{id, kind, at, headline, summary, tone, tone_for}]}`, newest first; failed and draftless notes are left out. `tone_for` is the instrument the tone is about: the note's own (pre-market, move, ask) or NQ for a desk-wide event note |
 | `/api/v1/desk/notes/{id}` | GET | One desk note |
 | `/api/v1/desk/calendar` | GET | Calendar page: `week=this\|next` (New York Monday–Monday), `all` (default false: medium importance and up), `tz` (IANA zone the days are grouped in; default the desk's reader zone, 422 if unknown). Returns `{generated_at, week, start, end, tz, all, hidden, days: [{date, label, rows}], stale, coverage}`; see "Calendar page" below. 503 without the desk |
 | `/api/v1/desk/ask` | POST | Write an "Explain the market now" note for `?instrument=`; omitted, the saved workspace focus (`/api/v1/chart/focus`), and NQ only when no focus is saved or the store can't be read. An instrument (or saved focus) not in `desk_instruments` gets a 400 before any AI call, never an NQ note. The header Explain sends no instrument, after any focus save in flight lands |
@@ -767,7 +767,7 @@ draws. Times are UTC; unavailable values are `null` with a reason, never zero.
   is the focus then the watchlist; Today's chart, its key levels (only where
   `levels` is true) and the header's focus chip follow it, and each draws only
   the focus's own data. The Omarchy bar's primary quote and strip follow it
-  too (see "Shell API"). The desk does not: notes, their tone ("for NQ"), the
+  too (see "Shell API"). The desk does not: notes, their tone (worded for the note's own instrument, `tone_for`: "for ES" on an ES note, "for NQ" on NQ and desk-wide event notes), the
   writer's schedule and the risk tone stay as they were, and changing the
   focus writes no note and calls no AI. Without a readable focus, Today shows
   NQ with the desk's tiles.
