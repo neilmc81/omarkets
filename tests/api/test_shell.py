@@ -10,6 +10,9 @@ from starlette.testclient import TestClient
 
 from core.api.app import create_app
 from core.api.shell_view import (
+    CONTEXT_SYMBOLS,
+    GROUPS,
+    SHORT_LABELS,
     aggregate_health,
     build_context,
     build_cross_quotes,
@@ -109,6 +112,33 @@ def test_strip_copies_values_and_feed_status_verbatim():
 def test_strip_missing_symbols_are_skipped_not_invented():
     strip = build_strip(market_state(), ("NQ", "GOLD"))
     assert [q.symbol for q in strip] == ["NQ"]
+
+
+def test_strip_quotes_carry_short_label_group_and_nq_effect():
+    market = market_state()
+    market.instruments["US2Y"] = instrument("US2Y", 4.59).model_copy(
+        update={"change": -0.064, "change_pct": -1.4})
+    market.instruments["VIX"] = instrument("VIX", 19.42).model_copy(
+        update={"change_pct": 12.9})
+    strip = build_strip(market, ("NQ", "US2Y", "VIX"), now=NOW)
+    by = {q.symbol: q for q in strip}
+    assert by["NQ"].short_label == "Nasdaq 100 futures" and by["NQ"].group == "equities"
+    assert by["US2Y"].short_label == "2-year Treasury yield" and by["US2Y"].group == "rates"
+    assert by["VIX"].group == "dollar_volatility"
+    # The colour cue is the move's meaning for NQ, not its raw direction:
+    # NQ +0.42% helps, a falling 2-year yield helps, a jumping VIX hurts.
+    assert [by[s].nq_effect for s in ("NQ", "US2Y", "VIX")] == ["helps", "helps", "hurts"]
+    # The raw label is still the registry's own name, unchanged.
+    assert by["NQ"].label == "NQ display"
+
+
+def test_strip_without_now_leaves_nq_effect_out():
+    assert all(q.nq_effect is None for q in build_strip(market_state(), ("NQ", "VIX")))
+
+
+def test_every_context_symbol_has_a_short_label_and_group():
+    assert set(CONTEXT_SYMBOLS) <= set(SHORT_LABELS)
+    assert set(CONTEXT_SYMBOLS) <= set(GROUPS)
 
 
 def test_next_event_picks_soonest_future_high_or_critical():
@@ -246,6 +276,18 @@ def test_cross_quotes_prefer_market_state_for_value():
     # US2Y gets the market value plus the cross-market basis-point move.
     assert by["US2Y"].change_bp == 6.6
 
+    # Every context row carries its effect on NQ, judged by the core.
+    rows = {q.symbol: q for q in build_cross_quotes(cross, CONTEXT_SYMBOLS, market_state(),
+                                                    now=NOW)}
+    assert rows["NQ"].nq_effect == "helps"
+    # Market-state US2Y is stale (not closed): left out, never coloured.
+    assert rows["US2Y"].nq_effect is None
+    # Cross-only rows: US10Y stale during the session is left out too.
+    assert rows["US10Y"].nq_effect is None
+    # ES has only a withheld change in the cross state: no effect is invented.
+    assert rows["ES"].nq_effect is None
+    assert rows["VXN"].short_label == "Nasdaq volatility index"
+
 
 def test_cross_quotes_preserve_unavailable_status():
     """An unavailable feed must not be relabelled as merely stale."""
@@ -351,6 +393,11 @@ def test_shell_context_endpoint_degrades_safely(client):
     assert isinstance(body["cross_market"], list)
     assert body["upcoming_events"] == []
     assert "recent_analyses" not in body
+    # Additive popup fields on every row; the effect is one of the core's words.
+    for row in body["cross_market"]:
+        assert row["short_label"] == SHORT_LABELS[row["symbol"]]
+        assert row["group"] == GROUPS[row["symbol"]]
+        assert row["nq_effect"] in ("helps", "hurts", "neutral", None)
 
 
 class _FakeDesk:

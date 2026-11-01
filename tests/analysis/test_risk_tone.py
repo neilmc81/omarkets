@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.analysis.risk_tone import risk_tone
+from core.analysis.risk_tone import nq_effect, risk_tone
 
 # Thursday Oct 22 2026, 10:00 ET: VIX is being computed.
 OPEN = datetime(2026, 10, 22, 14, 0, tzinfo=UTC)
@@ -85,3 +85,63 @@ def test_reasons_put_signals_first_and_left_out_inputs_last():
     tone = risk_tone(state(us2y_bp=4), now=OPEN)
     assert tone.reasons[0].startswith("2-year yield +4.0bp")
     assert tone.rules.startswith("Rules:")
+
+
+# --- effect on NQ, per quote ------------------------------------------------
+
+
+def quote(value, *, pct=None, change=None, status="live", market_closed=False):
+    return SimpleNamespace(value=value, change_pct=pct, change=change, status=status,
+                           market_closed=market_closed)
+
+
+@pytest.mark.parametrize(("symbol", "row", "effect"), [
+    # Equity futures move with NQ.
+    ("NQ", quote(29_000, pct=0.25), "helps"),
+    ("ES", quote(7_600, pct=-1.79), "hurts"),
+    ("YM", quote(47_000, pct=0.1), "neutral"),
+    # Rising yields hurt; falling yields help (the change is in percentage points).
+    ("US2Y", quote(4.59, change=-0.064), "helps"),
+    ("US10Y", quote(4.93, change=0.03), "hurts"),
+    ("US10Y", quote(4.93, change=0.029), "neutral"),
+    # A firmer dollar hurts.
+    ("DXY", quote(101.96, pct=0.25), "hurts"),
+    ("DXY", quote(101.96, pct=-0.07), "neutral"),
+    # Rising fear hurts; a high gauge hurts even when flat.
+    ("VIX", quote(19.42, pct=12.91), "hurts"),
+    ("VIX", quote(15.0, pct=-5.0), "helps"),
+    ("VIX", quote(25.0, pct=0.0), "hurts"),
+    ("VXN", quote(28.5, pct=13.19), "hurts"),
+    ("VXN", quote(22.0, pct=-5.0), "helps"),
+    ("VXN", quote(29.0, pct=0.0), "neutral"),
+    ("VXN", quote(30.0, pct=-6.0), "hurts"),
+])
+def test_nq_effect_follows_the_risk_tone_rules(symbol, row, effect):
+    assert nq_effect(symbol, row, now=OPEN) == effect
+
+
+def test_nq_effect_agrees_with_the_risk_tone_signals():
+    market = state(nq=0.5, us2y_bp=4, dxy=-0.3, vix=1)
+    tone = risk_tone(market, now=OPEN)
+    effects = {"helps": 1, "hurts": -1, "neutral": 0}
+    for row in tone.inputs:
+        effect = nq_effect(row.symbol, market.instruments[row.symbol], now=OPEN)
+        assert effects[effect] == row.signal
+
+
+def test_nq_effect_leaves_out_what_the_rules_leave_out():
+    assert nq_effect("US2Y", quote(4.6, change=0.05, status="stale"), now=OPEN) is None
+    assert nq_effect("NQ", quote(None, pct=None, status="unavailable"), now=OPEN) is None
+    assert nq_effect("ES", quote(7_600, pct=None), now=OPEN) is None
+    assert nq_effect("ES", None, now=OPEN) is None
+    # Instruments the rules do not cover have no effect rather than a guess.
+    assert nq_effect("GOLD", quote(4_000, pct=2.0), now=OPEN) is None
+    assert nq_effect("NVDA", quote(180, pct=-3.0), now=OPEN) is None
+
+
+def test_nq_effect_reads_a_closed_market_as_its_last_session():
+    closed = quote(28_542, pct=-3.45, status="stale", market_closed=True)
+    assert nq_effect("NQ", closed, now=NIGHT) == "hurts"
+    # Cash volatility gauges after Cboe hours are their close, not stale.
+    assert nq_effect("VXN", quote(28.5, pct=13.19, status="stale"), now=NIGHT) == "hurts"
+    assert nq_effect("VXN", quote(28.5, pct=13.19, status="stale"), now=OPEN) is None

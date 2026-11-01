@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Omarkets bar data collector.
 
-Fetches the compact, versioned shell status from the local Omarkets API and
-writes it atomically to ``$XDG_STATE_HOME/omarkets/bar.json``. The QML bar widget
+Fetches the compact, versioned shell status (and the popup's context, sparklines
+and hero levels) from the local Omarkets API and writes it atomically to
+``$XDG_STATE_HOME/omarkets/bar.json``. The QML bar widget
 and popup read that one file, so the UI holds no market logic and never talks to
 a provider or assembles several backend models.
 
@@ -97,12 +98,98 @@ def theme_summary(theme: object) -> dict | None:
     return {"version": version if isinstance(version, str) else None, "colors": colors}
 
 
+#: A registry symbol, safe to put in a URL path or query.
+_SYMBOL = re.compile(r"^[A-Z0-9]{1,10}$")
+#: The most sparklines one request may name (the core's own limit).
+MAX_SPARKLINES = 20
+
+
+def _symbol(value: object) -> str | None:
+    return value if isinstance(value, str) and _SYMBOL.match(value) else None
+
+
+def _number(value: object) -> float | None:
+    """A finite JSON number (never a bool), else None."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if value == value and abs(value) != float("inf") else None
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def popup_symbols(status: dict, context: object) -> list[str]:
+    """The popup rows' symbols, in order: the context strip, else the bar strip."""
+    rows = context.get("cross_market") if isinstance(context, dict) else None
+    if not isinstance(rows, list) or not rows:
+        rows = status.get("strip")
+    symbols: list[str] = []
+    for row in rows if isinstance(rows, list) else []:
+        symbol = _symbol(row.get("symbol")) if isinstance(row, dict) else None
+        if symbol and symbol not in symbols:
+            symbols.append(symbol)
+    return symbols[:MAX_SPARKLINES]
+
+
+def sparklines_summary(data: object) -> dict | None:
+    """The core's 24-hour sparklines, keyed by symbol, values only.
+
+    Each line keeps its first and last bucket times so the popup can say what
+    span it covers; a missing bucket stays ``None`` (a gap, never zero).
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
+        return None
+    lines: dict[str, dict] = {}
+    for line in data["lines"]:
+        if not isinstance(line, dict) or not isinstance(line.get("points"), list):
+            continue
+        symbol = _symbol(line.get("symbol"))
+        points = [p for p in line["points"] if isinstance(p, dict)]
+        if not symbol or len(points) != len(line["points"]):
+            continue
+        lines[symbol] = {
+            "start": _text(points[0].get("time")) if points else None,
+            "end": _text(points[-1].get("time")) if points else None,
+            "values": [_number(p.get("value")) for p in points],
+        }
+    return {"interval": _text(data.get("interval")),
+            "generated_at": _text(data.get("generated_at")), "lines": lines}
+
+
+def hero_summary(levels: object, symbol: str) -> dict | None:
+    """The focus instrument's prior-week range and prior settle, from the core's
+    key levels (``GET /api/v1/levels/{symbol}``), with the core's own text."""
+    if not isinstance(levels, dict) or levels.get("symbol") != symbol:
+        return None
+    rows = levels.get("levels")
+    by_key = {row.get("key"): row for row in rows if isinstance(row, dict)} \
+        if isinstance(rows, list) else {}
+    hero: dict[str, object] = {
+        "symbol": symbol,
+        "trade_date": _text(levels.get("trade_date")),
+        "contract": _text(levels.get("contract")),
+        "delayed": levels.get("delayed") is True,
+    }
+    for key in ("prior_week_high", "prior_week_low", "prior_settle"):
+        row = by_key.get(key, {})
+        hero[key] = _number(row.get("value"))
+        hero[f"{key}_text"] = _text(row.get("value_text")) if hero[key] is not None else None
+    week = by_key.get("prior_week_high", {})
+    hero["week_start"] = _text(week.get("window_start"))
+    hero["week_end"] = _text(week.get("window_end"))
+    hero["week_unavailable_reason"] = _text(week.get("unavailable_reason"))
+    return hero
+
+
 def collect(base: str) -> dict:
     """Fetch and shape the shell payload. Copies core values verbatim.
 
     The status endpoint is required; the context endpoint is optional (used by
     the popup for the wider cross-asset strip) and its failure does not fail the
-    whole collection.
+    whole collection. So are the popup's sparklines and the focus instrument's
+    prior-week levels (the hero); an instrument without key levels (404) simply
+    has no hero.
     """
     status, status_err = get(base, "/api/v1/shell/status")
     errors = {"status": status_err}
@@ -118,6 +205,15 @@ def collect(base: str) -> dict:
 
     theme, theme_err = get(base, "/api/v1/theme")
     errors["theme"] = theme_err
+
+    symbols = popup_symbols(status, context)
+    sparklines, sparklines_err = (get(base, "/api/v1/sparklines?symbols=" + ",".join(symbols))
+                                  if symbols else (None, None))
+    errors["sparklines"] = sparklines_err
+
+    focus = _symbol(status.get("focus")) or "NQ"
+    levels, levels_err = get(base, f"/api/v1/levels/{focus}")
+    errors["levels"] = None if levels_err == "http 404" else levels_err
 
     version = status.get("version")
     if version != SUPPORTED_VERSION:
@@ -135,6 +231,8 @@ def collect(base: str) -> dict:
         "context": context if isinstance(context, dict) else None,
         "desk": desk_summary(desk),
         "theme": theme_summary(theme),
+        "sparklines": sparklines_summary(sparklines),
+        "hero": hero_summary(levels, focus),
     }
 
 

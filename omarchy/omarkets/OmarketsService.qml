@@ -84,6 +84,11 @@ Item {
   // Active Omarchy palette roles (green/red/orange/blue...) served by the core.
   readonly property var themeColors: root.snapshot && root.snapshot.theme && root.snapshot.theme.colors
     ? root.snapshot.theme.colors : null
+  // 24-hour sparklines keyed by symbol ({start, end, values}); {} when unavailable.
+  readonly property var sparklines: root.snapshot && root.snapshot.sparklines && root.snapshot.sparklines.lines
+    ? root.snapshot.sparklines.lines : ({})
+  // The focus instrument's prior-week range and prior settle; null when unavailable.
+  readonly property var hero: root.snapshot && root.snapshot.hero ? root.snapshot.hero : null
 
   // Ticking clock so age-based bindings re-evaluate even when the file is not
   // being rewritten (for example while the backend is down).
@@ -130,8 +135,12 @@ Item {
     return true
   }
   function quote(value) {
-    return fields(value, ["symbol", "label", "feed_status", "status", "as_of"], ["value", "change", "change_pct", "change_bp", "age_seconds"], [])
+    return fields(value, ["symbol", "label", "short_label", "group", "nq_effect", "feed_status", "status", "as_of"], ["value", "change", "change_pct", "change_bp", "age_seconds"], [])
       && typeof value.symbol === "string"
+  }
+  function sparkline(value) {
+    return fields(value, ["start", "end"], [], []) && Array.isArray(value.values)
+      && value.values.every(function(x) { return x === null || (typeof x === "number" && isFinite(x)) })
   }
   function validSnapshot(data) {
     if (!objectValue(data) || !objectValue(data.status)) return false
@@ -148,6 +157,12 @@ Item {
           && !fields(data.desk.note, ["id", "kind", "title", "created_at", "headline", "summary", "tone", "tone_for"], [], [])))) return false
     if (data.theme !== undefined && data.theme !== null && (!objectValue(data.theme) || !objectValue(data.theme.colors)
         || Object.keys(data.theme.colors).some(function(k) { return !/^#[0-9a-fA-F]{6}$/.test(String(data.theme.colors[k])) }))) return false
+    if (data.sparklines !== undefined && data.sparklines !== null && (!fields(data.sparklines, ["interval", "generated_at"], [], [])
+        || !objectValue(data.sparklines.lines)
+        || Object.keys(data.sparklines.lines).some(function(k) { return !sparkline(data.sparklines.lines[k]) }))) return false
+    if (data.hero !== undefined && data.hero !== null && (!fields(data.hero,
+        ["symbol", "trade_date", "contract", "prior_week_high_text", "prior_week_low_text", "prior_settle_text", "week_start", "week_end", "week_unavailable_reason"],
+        ["prior_week_high", "prior_week_low", "prior_settle"], ["delayed"]) || typeof data.hero.symbol !== "string")) return false
     if (data.context !== undefined && data.context !== null && (!objectValue(data.context) || (data.context.cross_market !== undefined && (!Array.isArray(data.context.cross_market) || !data.context.cross_market.every(quote))))) return false
     return true
   }

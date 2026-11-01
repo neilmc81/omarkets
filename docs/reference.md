@@ -512,7 +512,10 @@ desktop. The Omarkets core remains the source of truth; the shell renders.
 
 The plugin holds **no market logic**. It reads one file the collector writes,
 `$XDG_STATE_HOME/omarkets/bar.json`, sourced from `GET /api/v1/shell/status`,
-`/shell/context`, `/desk?limit=1` and `/theme`.
+`/shell/context`, `/desk?limit=1`, `/theme`, `/sparklines` (the popup rows'
+24-hour lines, as `sparklines.lines[symbol] = {start, end, values}`) and
+`/levels/{focus}` (the hero's prior-week high/low and prior settle, as
+`hero`; null for an instrument without key levels).
 
 ### Shell API
 
@@ -528,6 +531,15 @@ Both return safe defaults for unavailable sections (never a 500), so a missing
 service cannot blank the shell. The popup shows the risk-tone line and the next
 high-impact event with a countdown; QML only displays them (`risk_tone` is an
 additive field, so the contract version stays 2).
+
+Every shell quote also carries three additive fields: `short_label` (a short
+row name, e.g. "2-year Treasury yield"), `group` (`equities`, `rates` or
+`dollar_volatility`) and `nq_effect` (`helps`, `hurts`, `neutral`, or null).
+`nq_effect` is what the move means for NQ under the risk-tone rules, extended
+to ES and YM (move with NQ, ±0.25%), the 10-year yield (±3bp, rising hurts) and
+VXN (±5%, or at 30 or above), so the popup colours a row by its effect on NQ
+rather than its raw direction. A quote the rules would leave out (stale, or no
+change) has no effect; QML never judges one.
 
 The bar follows the **global focus** (the Chart page's saved focus, see "Chart
 focus and watchlist"): the strip is the focus, then the first two symbols of the
