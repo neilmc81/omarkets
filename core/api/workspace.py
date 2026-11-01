@@ -8,8 +8,9 @@
   strip symbols).
 
 These routes read and write only the workspace store. They never call the
-desk, so a focus change cannot write a note or spend on AI. Today and the
-shell bar follow the saved focus (:mod:`core.api.focus`); the desk stays on NQ.
+desk, so a focus change cannot write a note or spend on AI. Today, the shell
+bar and Explain/Ask (``POST /api/v1/desk/ask``) follow the saved focus
+(:mod:`core.api.focus`); Explain refuses a focus the desk does not write for.
 """
 
 from __future__ import annotations

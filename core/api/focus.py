@@ -10,7 +10,9 @@ them:
   watchlist, as desk quote tiles.
 
 Nothing here calls the desk, so reading or changing the focus can never write a
-note or spend on AI. The desk itself stays on its own instruments.
+note or spend on AI. Explain/Ask (``POST /api/v1/desk/ask``) writes for the
+focus when it is one of the desk's instruments (``desk_instruments``) and
+refuses otherwise; scheduled notes stay on the desk's own instruments.
 """
 
 from __future__ import annotations

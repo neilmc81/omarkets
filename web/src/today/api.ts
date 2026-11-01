@@ -293,6 +293,9 @@ export async function fetchPlaybook(signal?: AbortSignal): Promise<Playbook> {
   return playbookSchema.parse(await readJson(response));
 }
 
+// Explain the saved global focus right now. With no instrument the core reads
+// its saved focus (NQ only when none is saved or it can't be read) and refuses
+// (400, before any AI) a focus the desk does not write for.
 export async function askDesk(): Promise<Note> {
   const response = await fetch("/api/v1/desk/ask", { method: "POST", cache: "no-store" });
   return noteSchema.parse(await readJson(response));
