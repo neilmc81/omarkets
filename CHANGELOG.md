@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The bar popup's data now includes a 24-hour sparkline for each row, last
+  week's high and low for the focus instrument, and for each quote a short
+  name and whether its move helps or hurts NQ (worked out by the core from the
+  risk-tone rules). The popup itself looks the same until its redesign lands.
 - **Upgrading changes the desk without asking.** If your install never set
   `OMARKETS_DESK_PROMPT_VERSION` or `OMARKETS_DESK_INSTRUMENTS` (it ran on the
   old code defaults, `desk:v8` and NQ only), after updating it writes new

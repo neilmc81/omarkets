@@ -17,6 +17,7 @@ Two rules encoded here:
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -61,6 +62,13 @@ class ShellQuote(BaseModel):
     market_closed: bool = False
     as_of: UTCDatetime | None = None
     age_seconds: float | None = Field(default=None, ge=0)
+    #: Short display name for a popup row, e.g. "2-year Treasury yield".
+    short_label: str | None = None
+    #: Popup row group: "equities", "rates" or "dollar_volatility"; None otherwise.
+    group: Literal["equities", "rates", "dollar_volatility"] | None = None
+    #: What this move means for NQ under the risk-tone rules
+    #: (``core.analysis.risk_tone.nq_effect``); None when the rules leave it out.
+    nq_effect: Literal["helps", "hurts", "neutral"] | None = None
 
 
 class ShellSession(BaseModel):

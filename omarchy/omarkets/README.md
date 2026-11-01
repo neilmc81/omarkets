@@ -84,7 +84,7 @@ If the bar does not refresh or a plugin rescan retains old popup code, run
 | File | Role |
 | --- | --- |
 | `manifest.json` | Omarchy plugin manifest (`bar-widget`) |
-| `update.py` | Fetches `GET /api/v1/shell/status` → `bar.json` (stdlib only, atomic) |
+| `update.py` | Fetches `GET /api/v1/shell/status` (plus context, desk, theme, sparklines and the focus's key levels) → `bar.json` (stdlib only, atomic) |
 | `OmarketsService.qml` | The single shared poller/FileView; widgets consume it |
 | `BarWidget.qml` | Bar label + panel wiring |
 | `Panel.qml` | Compact popup (latest desk note, strip, next event, health) |

@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from core.analysis.risk_tone import risk_tone
+from core.analysis.risk_tone import nq_effect, risk_tone
 from core.domain.cross_market import Availability, CrossMarketState, Value
 from core.domain.economics import EconomicEvent, Importance
 from core.domain.instruments import PRIMARY_SYMBOL
@@ -42,6 +42,23 @@ STRIP_SIZE = len(STRIP_SYMBOLS)
 DEFAULT_COMPANIONS: tuple[str, ...] = STRIP_SYMBOLS[1:]
 #: Popup cross-market strip, in display order.
 CONTEXT_SYMBOLS: tuple[str, ...] = ("NQ", "ES", "US2Y", "US10Y", "DXY", "VIX", "VXN")
+#: Short popup names (the instrument registry's names are long and formal).
+SHORT_LABELS: dict[str, str] = {
+    "NQ": "Nasdaq 100 futures",
+    "ES": "S&P 500 futures",
+    "YM": "Dow futures",
+    "US2Y": "2-year Treasury yield",
+    "US10Y": "10-year Treasury yield",
+    "DXY": "US dollar index",
+    "VIX": "S&P volatility index",
+    "VXN": "Nasdaq volatility index",
+}
+#: Popup row groups, in display order.
+GROUPS: dict[str, str] = {
+    "NQ": "equities", "ES": "equities", "YM": "equities",
+    "US2Y": "rates", "US10Y": "rates",
+    "DXY": "dollar_volatility", "VIX": "dollar_volatility", "VXN": "dollar_volatility",
+}
 #: Event importances eligible for the bar/countdown.
 BAR_IMPORTANCE: frozenset[str] = frozenset({Importance.HIGH.value, Importance.CRITICAL.value})
 
@@ -66,6 +83,19 @@ def _maybe(value: Value) -> float | None:
     return value.value if value.availability is Availability.AVAILABLE else None
 
 
+def _presented(quote: ShellQuote, now: datetime | None) -> ShellQuote:
+    """Attach the short label, group and (given ``now``) the effect on NQ.
+
+    The effect is computed from the quote's own copied fields by the risk-tone
+    rules, so the shell never judges a move itself.
+    """
+    update: dict[str, object] = {"short_label": SHORT_LABELS.get(quote.symbol),
+                                 "group": GROUPS.get(quote.symbol)}
+    if now is not None:
+        update["nq_effect"] = nq_effect(quote.symbol, quote, now=now)
+    return quote.model_copy(update=update)
+
+
 def _quote_from_state(symbol: str, instrument) -> ShellQuote:
     return ShellQuote(
         symbol=symbol,
@@ -85,12 +115,15 @@ def build_strip(
     market: MarketState | None,
     symbols: Sequence[str],
     cross: CrossMarketState | None = None,
+    *,
+    now: datetime | None = None,
 ) -> list[ShellQuote]:
     """The glanceable bar strip from the market state, enriched with the
     deterministic basis-point move from the cross-market state for yields.
 
     The market observation carries no basis-point field (it is a price), so the
     bp is copied from the already-computed cross-market change, not recalculated.
+    With ``now``, each quote also carries its effect on NQ.
     """
     if market is None:
         return []
@@ -109,7 +142,7 @@ def build_strip(
         bp = bp_by_symbol.get(symbol)
         if bp is not None:
             quote = quote.model_copy(update={"change_bp": bp})
-        quotes.append(quote)
+        quotes.append(_presented(quote, now))
     return quotes
 
 
@@ -117,6 +150,8 @@ def build_cross_quotes(
     cross: CrossMarketState | None,
     symbols: Sequence[str],
     market: MarketState | None = None,
+    *,
+    now: datetime | None = None,
 ) -> list[ShellQuote]:
     """Cross-market quotes, using the pre-computed change basis points for yields.
 
@@ -128,7 +163,7 @@ def build_cross_quotes(
     if cross is None and market is None:
         return []
     if cross is None:
-        return build_strip(market, symbols)
+        return build_strip(market, symbols, now=now)
     change_pct_only = {
         "NQ": (cross.nq_change_pct, cross.nq_feed_status),
         "ES": (cross.es_change_pct, cross.es_feed_status),
@@ -147,7 +182,7 @@ def build_cross_quotes(
             quote = _quote_from_state(symbol, market.instruments[symbol])
             if symbol in assets:
                 quote = quote.model_copy(update={"change_bp": _maybe(assets[symbol].change_bp)})
-            quotes.append(quote)
+            quotes.append(_presented(quote, now))
             continue
         if symbol in change_pct_only:
             change_pct, feed = change_pct_only[symbol]
@@ -160,19 +195,20 @@ def build_cross_quotes(
                 status = DataStatus.UNAVAILABLE
             else:
                 status = DataStatus.STALE
-            quotes.append(
+            quotes.append(_presented(
                 ShellQuote(
                     symbol=symbol,
                     change_pct=_maybe(change_pct),
                     feed_status=feed,
                     status=status,
-                )
-            )
+                ),
+                now,
+            ))
             continue
         asset = assets.get(symbol)
         if asset is None:
             continue
-        quotes.append(
+        quotes.append(_presented(
             ShellQuote(
                 symbol=symbol,
                 value=_maybe(asset.price),
@@ -182,8 +218,9 @@ def build_cross_quotes(
                 feed_status=asset.feed_status,
                 status=asset.status,
                 as_of=asset.timestamp,
-            )
-        )
+            ),
+            now,
+        ))
     return quotes
 
 
@@ -337,10 +374,10 @@ def build_status(
     """The bar payload. ``focus`` leads the strip and is the primary quote;
     ``watchlist`` is the saved watchlist (``None`` while the default applies)."""
     symbols = bar_symbols(focus, watchlist)
-    strip = build_strip(market, symbols, cross)
+    strip = build_strip(market, symbols, cross, now=now)
     # Fall back to cross-market only when the market state itself is absent.
     if not strip and cross is not None:
-        strip = build_cross_quotes(cross, symbols)
+        strip = build_cross_quotes(cross, symbols, now=now)
     # Only the focus's own quote is primary; never another instrument's.
     primary = next((quote for quote in strip if quote.symbol == focus), None)
     return ShellStatus(
@@ -388,7 +425,8 @@ def build_context(
     return ShellContext(
         generated_at=now,
         cross_market=build_cross_quotes(
-            cross, focus_symbols(focus, CONTEXT_SYMBOLS, len(CONTEXT_SYMBOLS) + 1), market),
+            cross, focus_symbols(focus, CONTEXT_SYMBOLS, len(CONTEXT_SYMBOLS) + 1), market,
+            now=now),
         upcoming_events=[build_event(event) for event in upcoming],
         diagnostics=list(diagnostics),
     )
@@ -398,6 +436,8 @@ __all__ = [
     "BAR_IMPORTANCE",
     "CONTEXT_SYMBOLS",
     "DEFAULT_COMPANIONS",
+    "GROUPS",
+    "SHORT_LABELS",
     "STRIP_SIZE",
     "STRIP_SYMBOLS",
     "aggregate_health",
