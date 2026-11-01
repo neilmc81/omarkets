@@ -74,3 +74,6 @@ def test_desk_panel_renders_note_theme_and_opens_today(tmp_path: Path, with_note
     assert result.returncode == 0, output[-4000:]
     assert "DESK_QML_OK" in output, output[-4000:]
     assert "TypeError" not in output and "ReferenceError" not in output, output[-4000:]
+    # A bare `Color` resolves to undefined inside a shell Panel; theme fallbacks
+    # must be `Commons.Color.*` so they never silently fail to bind.
+    assert "Unable to assign [undefined]" not in output, output[-4000:]

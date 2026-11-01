@@ -5,9 +5,13 @@ A thin Omarchy/Quickshell bar widget and popup for the Omarkets workstation.
 - **Bar**: a compact launcher icon (Nerd Font `nf-md-finance`, U+F081F). An orange marker means a collection
   failed and a retry is pending; a red warning means repeated failures or an
   aged snapshot. The bar carries no market numbers.
-- **Popup**: cross-asset strip (NQ, ES, US2Y, US10Y, DXY, VIX), each with value,
-  change, change %, and feed status; the next scheduled economic events with a
-  live countdown; core health; and the data-source timestamp.
+- **Popup**: one session status line; the focus instrument (NQ by default) as a
+  hero with price, change, a 24-hour sparkline, last week's range and the prior
+  settle; the latest desk note's headline and tone; the other instruments
+  grouped as Equities, Rates and Dollar · Volatility, each on two lines (symbol
+  and short name) with a 24-hour sparkline, value and change pill; the next
+  high-importance event on one line with a live countdown; and a footer with
+  Open Omarkets, Calendar, Refresh and a single "data as of · health" line.
 - **Notifications**: delivered by the Omarkets core (Phase 8), not this plugin.
 
 ## Thin by design
@@ -17,8 +21,27 @@ The plugin holds **no market logic**. It reads
 Omarkets API (`127.0.0.1:8765`). Every value and every feed status is copied
 verbatim from the core; nothing is calculated, inferred, or invented here.
 
-The status label is deliberate: a delayed or stale quote is shown as such, a
-shut market shows CLOSED, and nothing is coloured as a live tick.
+Colour means **effect on NQ**, not direction. A change pill (and its sparkline)
+is green when the core's `nq_effect` says the move helps NQ, red when it hurts,
+a faint grey when neutral, and an unfilled outline when the core gives no
+effect (an older core, or a quote the risk-tone rules leave out). A ▲/▼/– next to each pill
+says the same without colour. A falling yield is therefore green. The popup
+never works an effect out itself.
+
+A shut market is said once, in the header ("Closed · opens in 15h 34m"), not
+on every row. A row whose feed is stale or unavailable while its market is open
+is dimmed.
+
+Demo data never looks real. A quote whose feed is `demo` is dimmed, tagged
+**DEMO** beside its symbol, and drawn without an effect colour (its pill is an
+outline, its tooltip says "demo data, not a real price"); the footer then leads
+with "DEMO data, not real prices" and turns the warning colour, even when the
+health badges are all OK. Delayed quotes are said once in the footer ("· delayed") when
+every quote on screen is delayed, the usual case; when the feeds are mixed, each
+delayed row carries a small "delayed" tag and the footer says "some delayed".
+
+Missing sparklines, hero levels, short names or groups (an older core or
+collector) leave those parts out; the rows still render.
 
 The collector retains the last successful status and its `updatedAt` timestamp
 when a request fails. It writes the failure count separately, so the popup can
@@ -46,7 +69,7 @@ otherwise source edits can hot-reload independently of the backend. QML does not
 assemble notes or call a model. See the current repair ledger for the
 actual installed release and its live acceptance.
 
-Each quote in the popup strip shows its status as text:
+The bar tooltip shows the focus quote's feed status as text:
 
 | Status | Meaning |
 | --- | --- |
@@ -87,7 +110,7 @@ If the bar does not refresh or a plugin rescan retains old popup code, run
 | `update.py` | Fetches `GET /api/v1/shell/status` (plus context, desk, theme, sparklines and the focus's key levels) → `bar.json` (stdlib only, atomic) |
 | `OmarketsService.qml` | The single shared poller/FileView; widgets consume it |
 | `BarWidget.qml` | Bar label + panel wiring |
-| `Panel.qml` | Compact popup (latest desk note, strip, next event, health) |
+| `Panel.qml` | Compact popup (session, focus hero, desk headline, grouped rows, next event, footer) |
 
 ## Startup
 

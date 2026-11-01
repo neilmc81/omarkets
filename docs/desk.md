@@ -109,7 +109,7 @@ so a restart cannot produce a duplicate note or notification.
   open Chart, `?section=macro|calendar|news` open those pages, and retired
   deep links (`analysts`, `briefings`, `history`, `technical`) open Today. Core
   and source diagnostics are in the status panel behind the feeds dot. The
-  Omarchy popup shows the latest note's headline and summary.
+  Omarchy popup shows the latest note's headline and its tone.
 
 ## Configuration
 
