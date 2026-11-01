@@ -123,11 +123,11 @@ def _desk_settings(tmp_path, **kwargs):
                     **kwargs)
 
 
-def test_default_desk_writes_for_nq_and_es_on_desk_v9(tmp_path):
+def test_default_desk_writes_for_nq_es_and_ym_on_desk_v9(tmp_path):
     from core.main import build_app
 
     app = build_app(_desk_settings(tmp_path))
-    assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES"]
+    assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES", "YM"]
     assert app.state.desk.prompt_version == "desk:v9"
 
 
@@ -143,7 +143,8 @@ def test_nq_only_on_desk_v8_can_still_be_selected(tmp_path):
 def test_enabling_es_under_desk_v8_is_refused_with_a_fix(tmp_path):
     from core.main import DeskConfigError, build_app
 
-    settings = _desk_settings(tmp_path, desk_prompt_version="desk:v8")
+    settings = _desk_settings(tmp_path, desk_instruments=["NQ", "ES"],
+                              desk_prompt_version="desk:v8")
     with pytest.raises(DeskConfigError) as refused:
         build_app(settings)
     message = str(refused.value)
@@ -172,12 +173,41 @@ def test_es_is_wired_through_under_desk_v9(tmp_path):
     assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES"]
 
 
+def test_the_default_list_under_desk_v8_names_es_and_ym(tmp_path):
+    from core.main import DeskConfigError, build_app
+
+    with pytest.raises(DeskConfigError, match="includes ES, YM, but desk:v8 has no prompt for "
+                                              "them") as refused:
+        build_app(_desk_settings(tmp_path, desk_prompt_version="desk:v8"))
+    assert "OMARKETS_DESK_PROMPT_VERSION=desk:v9" in str(refused.value)
+    assert not (tmp_path / "desk.sqlite3").exists()
+
+
+def test_enabling_ym_under_desk_v8_is_refused_with_a_fix(tmp_path):
+    from core.main import DeskConfigError, build_app
+
+    with pytest.raises(DeskConfigError, match="includes YM, but desk:v8 has no prompt for "
+                                              "it") as refused:
+        build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "YM"],
+                                 desk_prompt_version="desk:v8"))
+    message = str(refused.value)
+    assert "set OMARKETS_DESK_PROMPT_VERSION=desk:v9 or remove YM" in message
+    assert not (tmp_path / "desk.sqlite3").exists()
+
+
+def test_ym_is_wired_through_under_desk_v9(tmp_path):
+    from core.main import build_app
+
+    app = build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "YM"]))
+    assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "YM"]
+
+
 def test_an_instrument_without_a_v9_prompt_is_refused(tmp_path):
     from core.main import DeskConfigError, build_app
 
-    with pytest.raises(DeskConfigError, match="includes YM, but desk:v9 has no prompt") as refused:
-        build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "ES", "YM"]))
-    assert "remove YM from OMARKETS_DESK_INSTRUMENTS" in str(refused.value)
+    with pytest.raises(DeskConfigError, match="includes BTC, but desk:v9 has no prompt") as refused:
+        build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "ES", "YM", "BTC"]))
+    assert "remove BTC from OMARKETS_DESK_INSTRUMENTS" in str(refused.value)
     assert not (tmp_path / "desk.sqlite3").exists()
 
 

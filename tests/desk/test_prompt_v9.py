@@ -29,6 +29,7 @@ from tests.desk.test_writer_and_api import GOOD, FakeGuard, completion
 
 ES = ID.Instrument.of("ES")
 YM = ID.Instrument.of("YM")
+BTC = ID.Instrument.of("BTC")
 NOW = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
 NO_NUMBERS = {**GOOD, "market_reaction": "NQ slipped.", "rates_read": "Yields rose."}
 
@@ -71,14 +72,14 @@ def test_production_writes_v9_by_default_and_v8_stays_selectable():
     assert P.PROMPT_VERSION == P.V9 == "desk:v9"
     assert Settings(_env_file=None).desk_prompt_version == "desk:v9"
     assert DeskWriter(api_key="k", model=MODEL).prompt_version == "desk:v9"
-    assert P.PROFILES is P.PROMPTS[P.V9] and set(P.PROFILES) == {"NQ", "ES"}
+    assert P.PROFILES is P.PROMPTS[P.V9] and set(P.PROFILES) == {"NQ", "ES", "YM"}
     # Every default instrument has a profile at the default version.
     assert all(P.has_profile(s) for s in ID.PRODUCTION_INSTRUMENTS)
     assert Settings(_env_file=None, desk_prompt_version="desk:v8").desk_prompt_version == P.V8
     assert DeskWriter(api_key="k", model=MODEL, prompt_version=P.V8).prompt_version == P.V8
     nq = P.PROMPTS[P.V8]["NQ"]
     assert (nq.system, nq.tasks, nq.stated_facts) == (P.SYSTEM, P.TASKS, P.STATED_FACTS)
-    assert set(P.PROMPTS[P.V9]) == {"NQ", "ES"}
+    assert set(P.PROMPTS[P.V9]) == {"NQ", "ES", "YM"}
 
 
 def test_the_setting_offers_exactly_the_known_versions():
@@ -229,10 +230,13 @@ def test_es_renders_with_its_own_profile_only_at_v9():
 
 def test_unknown_instruments_are_refused_and_never_fall_back_to_nq():
     for version in P.VERSIONS:
-        with pytest.raises(P.NoPromptProfile, match=f"no {version} prompt for YM"):
-            P.render(NoteKind.ASK, YM, {}, version=version)
-        assert not P.has_profile("YM", version=version)
-    assert P.has_profile("ES") and not P.has_profile("ES", version=P.V8)
+        with pytest.raises(P.NoPromptProfile, match=f"no {version} prompt for BTC"):
+            P.render(NoteKind.ASK, BTC, {}, version=version)
+        assert not P.has_profile("BTC", version=version)
+    for symbol in ("ES", "YM"):
+        assert P.has_profile(symbol) and not P.has_profile(symbol, version=P.V8)
+    with pytest.raises(P.NoPromptProfile, match="no desk:v8 prompt for YM"):
+        P.render(NoteKind.ASK, YM, {}, version=P.V8)
 
 
 def test_event_notes_stay_desk_wide_and_use_nq_v9():
@@ -260,7 +264,7 @@ def v9_writer(wire: Wire, guard=None) -> DeskWriter:
                       prompt_version=P.V9)
 
 
-async def test_a_v9_writer_writes_es_and_still_refuses_ym_without_a_call():
+async def test_a_v9_writer_writes_es_and_still_refuses_btc_without_a_call():
     wire, guard = Wire(), FakeGuard()
     w = v9_writer(wire, guard)
     result = await w.write(NoteKind.PREMARKET, {"es": "+0.31%"}, instrument=ES)
@@ -270,8 +274,8 @@ async def test_a_v9_writer_writes_es_and_still_refuses_ym_without_a_call():
     envelope = w.envelope(NoteKind.PREMARKET, result, instrument=ES)
     assert envelope["prompt_version"] == "desk:v9" and envelope["instrument"] == "ES"
     sent = len(wire.bodies)
-    refused = await w.write(NoteKind.PREMARKET, {}, instrument=YM)
-    assert refused.error == "no desk:v9 prompt for YM" and refused.prompt is None
+    refused = await w.write(NoteKind.PREMARKET, {}, instrument=BTC)
+    assert refused.error == "no desk:v9 prompt for BTC" and refused.prompt is None
     assert len(wire.bodies) == sent and len(guard.reserved) == sent
 
 

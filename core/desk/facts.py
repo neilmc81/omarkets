@@ -406,6 +406,12 @@ def change_between(symbol: str, start_value: float, end_value: float) -> tuple[f
     return round((end_value - start_value) / start_value * 100.0, 2), "%"
 
 
+def with_symbol(symbols: Sequence[str], symbol: str) -> tuple[str, ...]:
+    """``symbols`` with ``symbol`` added at the end if it is missing: a note's
+    own instrument (YM) is always among the markets it is written from."""
+    return tuple(symbols) if symbol in symbols else (*symbols, symbol)
+
+
 def measure_moves(
     history: HistoryFn,
     *,
@@ -563,8 +569,9 @@ def market_rows(state: Any, symbols: Sequence[str] = STRIP_SYMBOLS) -> list[dict
 
 #: The eight megacaps on the desk, in the order they are listed to the writer.
 MEGACAPS: tuple[str, ...] = ("NVDA", "MSFT", "AAPL", "AMZN", "META", "GOOGL", "AVGO", "TSLA")
-#: Instruments whose notes get NQ vs ES and megacap participation.
-PARTICIPATION_INSTRUMENTS = frozenset({"NQ", "ES"})
+#: Instruments whose notes get NQ vs ES and megacap participation (for YM, the
+#: Dow, both are context on whether tech led the wider market).
+PARTICIPATION_INSTRUMENTS = frozenset({"NQ", "ES", "YM"})
 #: A megacap counts as up or down only beyond this change (percent).
 FLAT_PCT = 0.05
 
@@ -644,7 +651,7 @@ def megacap_participation(state: Any, symbols: Sequence[str] = MEGACAPS) -> dict
 
 
 def participation(state: Any, symbol: str) -> dict[str, Any]:
-    """NQ vs ES and megacap participation for an NQ or ES note (else nothing)."""
+    """NQ vs ES and megacap participation for an NQ, ES or YM note (else nothing)."""
     if symbol not in PARTICIPATION_INSTRUMENTS:
         return {}
     return {"nq_vs_es": nq_vs_es(state), "megacap_participation": megacap_participation(state)}
@@ -726,9 +733,11 @@ def price_location(levels: Any, price: float | None,
 VOL_INDEX_SKEW = timedelta(minutes=30)
 
 #: Each instrument's own implied-volatility index and the broad one it is
-#: compared with: NQ reads VXN against VIX, ES reads VIX alone. An instrument
-#: not listed gets no fear gauge rather than another market's.
-VOL_INDEXES: dict[str, tuple[str, str | None]] = {"NQ": ("VXN", "VIX"), "ES": ("VIX", None)}
+#: compared with: NQ reads VXN against VIX, ES reads VIX alone, and YM reads VIX
+#: as the wider US market's gauge (the feeds carry no Dow gauge; its prompt says
+#: so). An instrument not listed gets no fear gauge rather than another market's.
+VOL_INDEXES: dict[str, tuple[str, str | None]] = {
+    "NQ": ("VXN", "VIX"), "ES": ("VIX", None), "YM": ("VIX", None)}
 
 
 def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,

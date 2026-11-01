@@ -1,7 +1,8 @@
 """Phase 2 slice 1: ES is wired through the desk (``desk_instruments``).
 
-Since the Phase 2 release cut NQ and ES on desk:v9 is the production default;
-an NQ-only desk (``desk_instruments=["NQ"]``) still refuses ES."""
+Since the Phase 2 release cut NQ and ES (and now YM, ``test_ym_wiring``) on
+desk:v9 is the production default; an NQ-only desk (``desk_instruments=["NQ"]``)
+still refuses ES."""
 
 from datetime import UTC, datetime, timedelta
 

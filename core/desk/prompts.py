@@ -516,6 +516,34 @@ SPECS: Mapping[str, InstrumentSpec] = {
         macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100); if you use "
                     "it, say it is about NQ, not ES."),
     ),
+    "YM": InstrumentSpec(
+        symbol="YM", name="Dow futures", asset=AssetClass.EQUITY_INDEX_FUTURE,
+        what=("YM is the E-mini futures contract on the Dow Jones Industrial Average (the "
+              "Dow): 30 large, well-known US companies such as banks, industrial firms, "
+              "healthcare and consumer brands, plus a few big technology names. The Dow "
+              "is price-weighted, so the stocks with the highest share prices move it "
+              "most, not the biggest companies."),
+        rates_link=("the Dow usually feels this less than the tech-heavy Nasdaq 100, "
+                    "because it holds fewer fast-growing tech companies and more banks, "
+                    "which can even gain from higher yields."),
+        gauge_rule=("the VIX, the S&P 500 \"fear gauge\" (how much movement options prices "
+                    "expect, as a yearly rate). The facts have no Dow gauge, so the VIX "
+                    "stands in for the wider US market: say it is the S&P 500's gauge, "
+                    "not the Dow's. Check \"vix_as_of\" for how fresh it is."),
+        benchmark_rule=("\"nq_vs_es\" compares NQ (Nasdaq 100 futures) with ES (S&P 500 "
+                        "futures) from the same baseline; it does not include YM. Use it "
+                        "only as context on whether tech led or lagged the wider market, "
+                        "and say it is about NQ and ES, not the Dow."),
+        benchmark_task="whether tech led or lagged the wider market (nq_vs_es, NQ against ES)",
+        megacap_rule=("\"megacap_participation\" counts how many of the biggest Nasdaq "
+                      "stocks are up, down or flat today, from live quotes only "
+                      "(\"flat_means\" gives the band). Only some of them are in the Dow, "
+                      "and the Dow weights stocks by share price, so they explain much "
+                      "less of YM's move than of NQ's. Stocks marked closed, stale or "
+                      "unavailable are not counted: never call them up or down."),
+        macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100); if you use "
+                    "it, say it is about NQ, not YM."),
+    ),
 }
 
 #: Prompt profiles by version, then instrument symbol. desk:v8 is NQ's text

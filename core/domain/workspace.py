@@ -74,7 +74,7 @@ class ChartInstrument(_Frozen):
     unit: str
     #: Decimals the venue quotes; the chart's price scale uses it.
     price_precision: int = Field(ge=0, le=8)
-    #: True when ``/api/v1/levels/{symbol}`` has key levels (NQ, ES).
+    #: True when ``/api/v1/levels/{symbol}`` has key levels (NQ, ES, YM).
     levels: bool
     #: True when the release pins (measured on NQ) belong on this chart.
     release_pins: bool

@@ -166,8 +166,8 @@ class DeskService:
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
-        #: Instruments that get their own notes (``desk_instruments``; NQ and ES
-        #: by default): NQ pre-market, move and ask, the others move and ask only
+        #: Instruments that get their own notes (``desk_instruments``; NQ, ES
+        #: and YM by default): NQ pre-market, move and ask, the others move and ask only
         #: (``identity.instrument_kinds``). Each needs a prompt profile at the
         #: writer's prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)
@@ -654,13 +654,15 @@ class DeskService:
 
     # ------------------------------------------------------------------ builders
 
-    def _common(self, now: datetime) -> tuple[dict[str, Any], Any]:
+    def _common(self, now: datetime, inst: Instrument = NQ) -> tuple[dict[str, Any], Any]:
+        """Facts every note shares. ``markets_today`` always has the note's own
+        instrument (YM is not on the Today strip)."""
         state = self.sources.market_state()
         rates = F.rates_view(state, self.sources.history, now=now)
         return {
             "now": et(now),
             "session": self.session_text(now),
-            "markets_today": F.market_rows(state),
+            "markets_today": F.market_rows(state, F.with_symbol(F.STRIP_SYMBOLS, inst.symbol)),
             "breaking_alerts": [
                 {"what": a.label, "headline": a.headline, "source": a.source,
                  "published": et(a.published_at)}
@@ -884,7 +886,7 @@ class DeskService:
 
     async def build_premarket(self, note_id: str, now: datetime,
                               inst: Instrument = NQ) -> DeskNote:
-        common, rates = await asyncio.to_thread(self._common, now)
+        common, rates = await asyncio.to_thread(self._common, now, inst)
         session = active_session(now)
         upcoming = [i for i in await self.upcoming(now, days=2)
                     if i.at and i.at < session.rth_closes_at + timedelta(hours=8)]
@@ -983,10 +985,10 @@ class DeskService:
 
     async def build_move(self, note_id: str, move: Move, now: datetime,
                          inst: Instrument = NQ) -> DeskNote:
-        common, rates = await asyncio.to_thread(self._common, now)
+        common, rates = await asyncio.to_thread(self._common, now, inst)
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history, start=move.start_at, end=move.end_at,
-            delayed=self._delayed(),
+            delayed=self._delayed(), symbols=F.with_symbol(F.REACTION_SYMBOLS, inst.symbol),
         )
         news = self.news_lines(move.start_at - timedelta(minutes=60), now)
         recent = [n for n in self.store.recent(5)
@@ -1039,10 +1041,11 @@ class DeskService:
             return await self._produce_locked(aid, NoteKind.ASK, lambda: self._ask(aid, now, inst))
 
     async def _ask(self, aid: str, now: datetime, inst: Instrument) -> DeskNote:
-        common, rates = await asyncio.to_thread(self._common, now)
+        common, rates = await asyncio.to_thread(self._common, now, inst)
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history, start=now - timedelta(hours=2), end=now,
             delayed=self._delayed(), min_window=timedelta(minutes=30),
+            symbols=F.with_symbol(F.REACTION_SYMBOLS, inst.symbol),
         )
         news = self.news_lines(now - timedelta(hours=6), now)
         facts = {**common, **(await asyncio.to_thread(self._nq_context, now, inst)),

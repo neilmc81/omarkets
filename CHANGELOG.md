@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **YM (Dow futures) now gets desk notes by default.** The default
+  `desk_instruments` is `["NQ", "ES", "YM"]` on `desk:v9`. YM works like ES:
+  its own move notes (with its own 3-hour limit and move trigger) and
+  "Explain the market now" notes when YM is the focus. There is no YM
+  pre-market; only NQ gets the daily briefing (cost policy). YM notes say they
+  are about YM / the Dow, and their tone reads "… for YM". That means a few
+  more notes and a little more AI spend each week. To leave YM out, set
+  `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES"]` in `.env` and restart; listing YM
+  with `desk:v8` still refuses to start. After updating, the log line reads
+  `desk notes for NQ, ES, YM on desk:v9`.
 - **The bar popup has a new layout.** The focus instrument (NQ by default) sits
   at the top with its price, change, a 24-hour sparkline and last week's
   range. Below it are the desk note's headline, the other instruments grouped
@@ -28,7 +38,8 @@
   - `omarketsctl config` shows `desk_prompt_version` and `desk_instruments`
     and where each came from (`default`, `.env` or the service environment).
   - `systemctl --user status omarkets` shows the service running; the log
-    line `desk notes for NQ, ES on desk:v9` confirms it.
+    line `desk notes for NQ, ES, YM on desk:v9` confirms it (with YM's
+    notes, above).
   - To keep the old behaviour, set both `OMARKETS_DESK_INSTRUMENTS=["NQ"]`
     and `OMARKETS_DESK_PROMPT_VERSION=desk:v8` in `.env`, then restart.
   - A `.env` or systemd drop-in that sets only `desk:v8` no longer starts
@@ -41,7 +52,7 @@
   the `desk:v9` prompt, with no extra settings. ES gets move and ask notes;
   the daily pre-market stays NQ only. To go back to NQ only, set
   `OMARKETS_DESK_INSTRUMENTS=["NQ"]` (and `OMARKETS_DESK_PROMPT_VERSION=desk:v8`
-  for the older prompt) in `.env`. YM has no desk notes yet.
+  for the older prompt) in `.env`. YM joins the defaults too (above).
 - If you set `OMARKETS_DESK_PROMPT_VERSION=desk:v8` on its own, also set
   `OMARKETS_DESK_INSTRUMENTS=["NQ"]`: desk:v8 has no ES prompt, so the
   service now refuses to start and says which setting to change.
