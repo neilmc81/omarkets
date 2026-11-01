@@ -61,10 +61,11 @@ export function Root() {
     setAsking(true);
     setAskError(null);
     try {
-      // Explain what the user is looking at: a focus just chosen (save still in
-      // flight) first, then the loaded strip's focus; with neither, the core
-      // uses its saved focus. Never NQ by default.
-      const note = await askDesk(focusSaves.pending?.symbol ?? focus.data?.focus.symbol);
+      // Explain the saved focus: let any focus save already started land, then
+      // ask with no instrument so the core reads its own saved focus. The strip
+      // may still show the previous instrument, so it is not asked.
+      await focusSaves.queue;
+      const note = await askDesk();
       setOpenId(note.id);
       await reload();
     } catch (err) {

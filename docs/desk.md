@@ -75,8 +75,10 @@ so a restart cannot produce a duplicate note or notification.
   and move trigger; the daily ask limit is shared. The service refuses to start
   when an instrument has no prompt profile at `desk_prompt_version` (ES under
   desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
-  `?instrument=` (default NQ); one not in `desk_instruments` gets a 400 before
-  anything is sent.
+  `?instrument=`; omitted, it uses the saved workspace focus (the Chart page's
+  instrument), and NQ only when no focus is saved or the store can't be read.
+  An instrument or saved focus not in `desk_instruments` gets a 400 before
+  anything is sent, never an NQ note instead.
 - `core/desk/service.py` schedules notes and sends one desktop notification per
   successful note. `core/desk/store.py` keeps notes in `data/desk.sqlite3`.
   Each note's exact facts and request envelope (prompt version, SHA-256 of the

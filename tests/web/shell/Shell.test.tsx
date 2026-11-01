@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Root } from "../../../web/src/Root";
 import { feedsStatus } from "../../../web/src/shell/feeds";
+import { queueFocusSave } from "../../../web/src/shell/focus";
 import { deskSchema } from "../../../web/src/today/api";
 import { desk, draft, note, ok } from "../deskFixtures";
 import { health } from "../fixtures";
@@ -37,17 +38,45 @@ const stripFor = (symbol: string) => ({ ...strip, focus: focusOf(symbol).instrum
 // The core refuses Explain for a focus the desk does not write for (BTC here).
 const refused = (detail: string) => Promise.resolve({ ok: false, status: 400, json: async () => ({ detail }) });
 
-function serve(body: unknown = desk, focusStrip: unknown = strip) {
-  const fetcher = vi.fn((url: string) => url === "/health" ? ok(health)
-    : url === "/api/v1/focus/strip" ? ok(focusStrip)
-    : url === "/api/v1/instruments" ? ok(instruments)
-    : url === "/api/v1/desk/ask?instrument=BTC" ? refused("The desk does not write for BTC")
-    : url.startsWith("/api/v1/desk/ask") ? ok({ ...note, id: "ask:1", kind: "ask" })
-      : url === "/api/v1/desk/learn" ? ok({ count: 0, entries: [] })
-        : ok(body));
+type Gates = { save?: Promise<unknown>; refetch?: Promise<unknown> };
+
+// A fake core holding the saved focus: the strip reports it, a focus PUT
+// changes it (after `gates.save`), and Explain writes for `?instrument=` or,
+// with none, the saved focus. `asked` is what each Explain request wrote for.
+function serve(body: unknown = desk, focus = "NQ", gates: Gates = {}) {
+  let saved = focus;
+  let strips = 0;
+  const asked: string[] = [];
+  const fetcher = vi.fn((url: string, init?: RequestInit) => {
+    if (url === "/health") return ok(health);
+    if (url === "/api/v1/focus/strip") {
+      const reply = stripFor(saved);
+      return strips++ > 0 && gates.refetch ? gates.refetch.then(() => ok(reply)) : ok(reply);
+    }
+    if (url === "/api/v1/chart/focus" && init?.method === "PUT") {
+      const { symbol } = JSON.parse(String(init.body)) as { symbol: string };
+      return (gates.save ?? Promise.resolve()).then(() => { saved = symbol; return ok(focusOf(symbol)); });
+    }
+    if (url === "/api/v1/instruments") return ok(instruments);
+    if (url.startsWith("/api/v1/desk/ask")) {
+      const written = new URL(url, "http://core").searchParams.get("instrument") ?? saved;
+      asked.push(written);
+      return written === "BTC" ? refused("The desk does not write for BTC") : ok({ ...note, id: "ask:1", kind: "ask" });
+    }
+    if (url === "/api/v1/desk/learn") return ok({ count: 0, entries: [] });
+    return ok(body);
+  });
   vi.stubGlobal("fetch", fetcher);
-  return fetcher;
+  return Object.assign(fetcher, { asked });
 }
+
+const asks = (fetcher: ReturnType<typeof serve>) =>
+  fetcher.mock.calls.map(([url]) => url).filter((url) => url.startsWith("/api/v1/desk/ask"));
+const gate = () => {
+  let open!: () => void;
+  const promise = new Promise<void>((resolve) => { open = resolve; });
+  return { promise, open };
+};
 
 const current = () => screen.getByRole("link", { current: "page" });
 const press = (key: string, target: Element | Window = window) => fireEvent.keyDown(target, { key });
@@ -162,27 +191,55 @@ describe("shared shell", () => {
     render(<Root />);
     await screen.findByText("All feeds OK");
     press("e");
-    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/ask?instrument=NQ", expect.objectContaining({ method: "POST" })));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/ask", expect.objectContaining({ method: "POST" })));
     expect(current()).toHaveTextContent("Today");
   });
 
-  it("Explain asks for the global focus instrument, not NQ", async () => {
-    const fetcher = serve(desk, stripFor("ES"));
+  it("Explain asks the core for its saved focus, not NQ", async () => {
+    const fetcher = serve(desk, "ES");
     render(<Root />);
     await screen.findByRole("link", { name: /Focus: S&P 500/ });
     fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
-    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/ask?instrument=ES", expect.objectContaining({ method: "POST" })));
-    expect(fetcher.mock.calls.map(([url]) => url)).not.toContain("/api/v1/desk/ask?instrument=NQ");
+    await waitFor(() => expect(asks(fetcher)).toEqual(["/api/v1/desk/ask"]));
+    expect(fetcher.asked).toEqual(["ES"]);
+  });
+
+  it("Explain right after saving ES, before the strip has refetched, asks for ES", async () => {
+    const refetch = gate();
+    const fetcher = serve(desk, "NQ", { refetch: refetch.promise });
+    render(<Root />);
+    await screen.findByRole("link", { name: /Focus: Nasdaq/ });
+    await act(() => queueFocusSave(focusOf("ES").instrument));
+    // The save has landed but the strip still shows NQ.
+    expect(screen.getByRole("link", { name: /Focus: Nasdaq/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    await waitFor(() => expect(fetcher.asked).toEqual(["ES"]));
+    expect(asks(fetcher)).toEqual(["/api/v1/desk/ask"]);
+    await act(async () => refetch.open());
+  });
+
+  it("Explain while an ES save is still in flight waits for it, then asks for ES", async () => {
+    const save = gate();
+    const fetcher = serve(desk, "NQ", { save: save.promise });
+    render(<Root />);
+    await screen.findByRole("link", { name: /Focus: Nasdaq/ });
+    let saving: Promise<unknown> = Promise.resolve();
+    act(() => { saving = queueFocusSave(focusOf("ES").instrument); });
+    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(asks(fetcher)).toEqual([]);
+    await act(async () => { save.open(); await saving; });
+    await waitFor(() => expect(fetcher.asked).toEqual(["ES"]));
   });
 
   it("Explain on a focus the desk does not write for shows the refusal, with no NQ fallback", async () => {
-    const fetcher = serve(desk, stripFor("BTC"));
+    const fetcher = serve(desk, "BTC");
     render(<Root />);
     await screen.findByRole("link", { name: /Focus: Bitcoin/ });
     fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The desk does not write for BTC");
-    const asks = fetcher.mock.calls.map(([url]) => url).filter((url) => url.startsWith("/api/v1/desk/ask"));
-    expect(asks).toEqual(["/api/v1/desk/ask?instrument=BTC"]);
+    expect(asks(fetcher)).toEqual(["/api/v1/desk/ask"]);
+    expect(fetcher.asked).toEqual(["BTC"]);
   });
 
   it("J and K move between notes on Today", async () => {
