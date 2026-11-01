@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **The bar popup has a new layout.** The focus instrument (NQ by default) sits
+  at the top with its price, change, a 24-hour sparkline and last week's
+  range. Below it are the desk note's headline, the other instruments grouped
+  as Equities, Rates and Dollar · Volatility (each with a sparkline), the next
+  event on one line, and a short footer. Change pills are coloured by what the
+  move means for NQ, not by whether it went up or down, so a falling yield
+  shows green. "Closed" now appears once in the header instead of on every row,
+  and the sources/diagnostics section is gone from the popup (it stays in the
+  web app's status panel). After updating, run `omarchy-restart-shell` to see it.
 - The bar popup's data now includes a 24-hour sparkline for each row, last
   week's high and low for the focus instrument, and for each quote a short
   name and whether its move helps or hurts NQ (worked out by the core from the
