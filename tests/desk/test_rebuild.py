@@ -24,7 +24,8 @@ def test_frozen_v8_cases_are_complete_and_render():
     for case in cases.cases:
         assert case.facts_complete and case.baseline["prompt_version"] == "desk:v8"
         assert case.envelope["reconstructed"]["limits"] == list(RB.LIMITS)
-        prompt = render(NoteKind(case.kind), C.case_instrument(case), case.facts)
+        prompt = render(NoteKind(case.kind), C.case_instrument(case), case.facts,
+                        version=case.baseline["prompt_version"])
         assert prompt.version == "desk:v8" and prompt.facts_text
         for key, value in case.facts.items():
             if "headlines" in key:

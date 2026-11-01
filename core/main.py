@@ -270,6 +270,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
         return economics.current_state().series
 
     instruments = check_desk_instruments(settings)
+    logger.info("desk notes for %s on %s", ", ".join(instruments), settings.desk_prompt_version)
     notifier = NotifySendNotifier()
 
     async def notify(summary: str, body: str) -> None:

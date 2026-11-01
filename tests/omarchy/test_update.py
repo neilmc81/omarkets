@@ -12,6 +12,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 UPDATE_PATH = Path(__file__).resolve().parents[2] / "omarchy" / "omarkets" / "update.py"
 
 
@@ -164,8 +166,22 @@ def test_desk_summary_keeps_only_the_latest_note_headline():
     assert summary == {"session_text": "US market open", "note": {
         "id": "release:x", "kind": "release", "title": "CPI",
         "created_at": "2026-10-14T12:51:00Z", "headline": "Hot inflation",
-        "summary": "Cuts less likely.", "tone": "negative"}}
+        "summary": "Cuts less likely.", "tone": "negative", "tone_for": None}}
     assert update.desk_summary({"notes": [{"id": "x", "draft": None}]})["note"] is None
+
+
+@pytest.mark.parametrize(("note", "tone_for"), [
+    ({"tone_for": "ES", "instrument": "ES"}, "ES"),
+    ({"tone_for": "NQ", "instrument": None}, "NQ"),  # desk-wide event note
+    ({"instrument": "ES"}, "ES"),                    # an older core
+    ({}, None),
+])
+def test_desk_summary_names_the_instrument_the_tone_is_about(note, tone_for):
+    desk = {"notes": [{
+        "id": "move:ES:x", "kind": "move", "title": "ES move", "created_at": "2026-10-14T12:51:00Z",
+        "draft": {"headline": "ES slid", "summary": "Selling.", "tone": "negative"}, **note,
+    }]}
+    assert update.desk_summary(desk)["note"]["tone_for"] == tone_for
     assert update.desk_summary(None) is None
 
 

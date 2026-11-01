@@ -1,5 +1,8 @@
 """Phase 1 slice 3: every request is built for its note's instrument, and an
-instrument with no prompt profile is refused before anything is reserved or sent."""
+instrument with no prompt profile is refused before anything is reserved or sent.
+
+Written against desk:v8 (NQ's text only), pinned here since production now
+defaults to desk:v9: ES has no v8 profile, so it must fail closed."""
 
 import hashlib
 import json
@@ -17,11 +20,13 @@ from core.desk.evaluation import cases as C
 from core.desk.evaluation.runner import RunRefused
 from core.desk.models import NoteKind
 from core.desk.prompts import (
-    PROFILES,
     PROMPT_VERSION,
+    PROMPTS,
     STATED_FACTS,
     SYSTEM,
     TASKS,
+    V8,
+    V9,
     NoPromptProfile,
     Profile,
     render,
@@ -31,12 +36,12 @@ from core.desk.writer import DeskWriter
 from tests.desk.test_evaluation import MODEL, RATES, complete_case, frozen, runner_for
 from tests.desk.test_identity import MOVE_AT, falling
 from tests.desk.test_prompt_snapshot import SNAPSHOTS, facts_for
-from tests.desk.test_service import RELEASE, make
+from tests.desk.test_service import RELEASE, FakeWriter, make
 from tests.desk.test_writer_and_api import GOOD, FakeGuard, completion
 
 ES = ID.Instrument.of("ES")
 
-#: A test-only ES profile. Production has none at desk:v8 (slice 5 adds a reviewed one).
+#: A test-only ES profile. There is none at desk:v8 (desk:v9 has a reviewed one).
 ES_PROFILE = Profile(
     system="You write ES desk notes about S&P 500 futures. Return JSON.",
     tasks={kind: f"ES {kind.value.upper()} task." for kind in ID.INSTRUMENT_KINDS},
@@ -70,9 +75,10 @@ class Wire:
 
 
 def writer(wire: Wire, guard=None, profiles=None) -> DeskWriter:
+    """A desk:v8 writer."""
     return DeskWriter(api_key="k", model=MODEL, model_rates=RATES, cost_guard=guard,
                       client=httpx.AsyncClient(transport=httpx.MockTransport(wire)),
-                      profiles=profiles)
+                      profiles=profiles, prompt_version=V8)
 
 
 # --------------------------------------------------------------------------- NQ unchanged
@@ -87,7 +93,7 @@ async def test_nq_request_on_the_wire_is_byte_identical_to_before():
     assert system == SYSTEM and user == old_user_message(NoteKind.PREMARKET, facts)
     assert (SNAPSHOTS / "nq_premarket.txt").read_text() == f"SYSTEM\n{system}\n\nUSER\n{user}\n"
     envelope = w.envelope(NoteKind.PREMARKET, result, instrument=ID.NQ)
-    assert envelope["prompt_version"] == PROMPT_VERSION == "desk:v8"
+    assert envelope["prompt_version"] == V8 == "desk:v8"
     assert envelope["system_sha256"] == sha(SYSTEM)
     assert envelope["task_sha256"] == sha(TASKS[NoteKind.PREMARKET])
     assert envelope["instrument"] == "NQ"
@@ -110,12 +116,12 @@ async def test_event_notes_keep_nq_text_and_carry_no_instrument():
 # --------------------------------------------------------------------------- ES fails closed
 
 
-def test_production_profiles_are_nq_only_at_v8():
-    assert set(PROFILES) == {"NQ"}
-    nq = PROFILES["NQ"]
+def test_v8_profiles_are_nq_only():
+    assert set(PROMPTS[V8]) == {"NQ"}
+    nq = PROMPTS[V8]["NQ"]
     assert (nq.system, nq.tasks, nq.stated_facts) == (SYSTEM, TASKS, STATED_FACTS)
     with pytest.raises(NoPromptProfile, match="no desk:v8 prompt for ES"):
-        render(NoteKind.PREMARKET, ES, ES_FACTS)
+        render(NoteKind.PREMARKET, ES, ES_FACTS, version=V8)
 
 
 async def test_es_without_a_profile_makes_no_call_and_reserves_nothing():
@@ -159,7 +165,7 @@ async def test_es_move_fails_closed_in_the_tick_while_nq_is_written():
 async def test_a_test_only_es_profile_shapes_the_whole_request():
     draft = {**GOOD, "summary": "ES notes use a 12-minute window."}
     wire, guard = Wire(json.dumps(draft)), FakeGuard()
-    w = writer(wire, guard, profiles={**PROFILES, "ES": ES_PROFILE})
+    w = writer(wire, guard, profiles={**PROMPTS[V8], "ES": ES_PROFILE})
     result = await w.write(NoteKind.PREMARKET, ES_FACTS, instrument=ES)
     assert result.draft is not None and len(wire.bodies) == 1
     system, user = (m["content"] for m in wire.bodies[0]["messages"])
@@ -200,9 +206,17 @@ async def test_ask_refuses_an_instrument_the_desk_does_not_write_for():
 
 def test_an_instrument_without_a_prompt_profile_cannot_be_configured():
     service, _, _ = make(RELEASE)
+    v8 = FakeWriter()
+    v8.prompt_version = V8
     with pytest.raises(ValueError, match="no desk:v8 prompt for ES"):
-        DeskService(sources=service.sources, store=service.store, writer=service.writer,
+        DeskService(sources=service.sources, store=service.store, writer=v8,
                     instruments=("NQ", "ES"))
+    # At the default (desk:v9) ES has one, YM still has none.
+    DeskService(sources=service.sources, store=service.store, writer=service.writer,
+                instruments=("NQ", "ES"))
+    with pytest.raises(ValueError, match=f"no {V9} prompt for YM"):
+        DeskService(sources=service.sources, store=service.store, writer=service.writer,
+                    instruments=("NQ", "ES", "YM"))
 
 
 async def test_kind_and_instrument_must_agree():
@@ -257,7 +271,7 @@ def test_an_es_case_is_refused_at_plan_time_without_paid(tmp_path, monkeypatch, 
         runner.plan(cases, run_id="r", max_calls=2, allowance_usd=1.0)
     settings = Settings(_env_file=None, openrouter_api_key="k", ai_weekly_budget_usd=2.5,
                         ai_budget_db_path=tmp_path / "budget.sqlite3", data_dir=tmp_path,
-                        desk_model=MODEL, desk_model_rates=RATES)
+                        desk_model=MODEL, desk_model_rates=RATES, desk_prompt_version=V8)
     monkeypatch.setattr(cli, "_eval_settings", lambda: (settings, tmp_path))
 
     async def forbidden(*args, **kwargs):
@@ -279,5 +293,7 @@ def test_render_writes_the_production_prompt(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_eval_settings", lambda: (settings, tmp_path))
     out = tmp_path / "prompts"
     assert cli.main(["eval", "render", str(cases.directory), str(out)]) == 0
-    sent = render(NoteKind.ASK, ID.NQ, cases.cases[0].facts)
+    case = cases.cases[0]
+    sent = render(NoteKind.ASK, ID.NQ, C.prompt_facts(case, cases.history, PROMPT_VERSION))
+    assert sent.version == V9
     assert Path(out / "ask_0.txt").read_text() == f"SYSTEM\n{sent.system}\n\nUSER\n{sent.user}\n"

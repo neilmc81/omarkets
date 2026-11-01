@@ -75,7 +75,10 @@ def desk_summary(desk: object) -> dict | None:
             "summary": draft.get("summary"), "tone": draft.get("nq_tone") or draft.get("tone"),
         }
         if all(isinstance(value, str) for value in fields.values()):
-            summary = fields
+            # The instrument the tone is about; an older core sends only
+            # ``instrument`` (None for desk-wide notes), and then none is named.
+            tone_for = note.get("tone_for") or note.get("instrument")
+            summary = {**fields, "tone_for": tone_for if isinstance(tone_for, str) else None}
     session = desk.get("session_text")
     return {"session_text": session if isinstance(session, str) else None, "note": summary}
 

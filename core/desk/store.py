@@ -157,7 +157,7 @@ class DeskStore:
                 " attempts=desk_notes.attempts+1"
                 " WHERE desk_notes.status != 'ok'",
                 (note.id, note.kind.value, note.status, note.created_at.isoformat(),
-                 note.model_dump_json(exclude={"follow_up", "instrument"}),
+                 note.model_dump_json(exclude={"follow_up", "instrument", "tone_for"}),
                  instrument_of(note.id)),
             )
             if cursor.rowcount == 1 and captured is not None:

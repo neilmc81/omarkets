@@ -13,7 +13,8 @@ Numbers come from ordinary, tested code. The AI only explains them.
 > **Not financial advice.** Omarkets never places orders and never tells you
 > what to trade. See the [disclaimer](#disclaimer).
 
-Version 0.1.0 covers NQ only.
+Desk notes cover NQ and ES (S&P 500 futures) out of the box. YM (Dow futures)
+is on the chart and watchlists; it has no desk notes yet.
 
 ![Omarkets demo: Today, chart, calendar, macro, news, desk notes and the bar popup](docs/assets/omarkets-demo.gif)
 
@@ -73,6 +74,19 @@ in `.env` and run `systemctl --user restart omarkets.service`. Use
 environment before running the installer.
 
 `install-plugin` installs `omarkets.service` for your checkout and starts it.
+The service runs on the built-in defaults: desk notes for NQ and ES with the
+`desk:v9` prompt. No extra systemd drop-in is needed; to change them, see
+[Configuration](#configuration). The installer checks these settings the way
+the service does at startup and warns if the service would refuse them.
+
+**Upgrading from an older install:** if you never set
+`OMARKETS_DESK_PROMPT_VERSION` or `OMARKETS_DESK_INSTRUMENTS`, the desk moves
+from `desk:v8` (NQ only) to `desk:v9` with NQ and ES after the update. That
+means more notes and a little more AI spend. Run `omarketsctl config` to
+check. To keep NQ only, set `OMARKETS_DESK_INSTRUMENTS=["NQ"]` and
+`OMARKETS_DESK_PROMPT_VERSION=desk:v8` in `.env` (see the
+[CHANGELOG](CHANGELOG.md)).
+
 If you used `--no-service`, enable it yourself:
 
 ```bash
@@ -98,9 +112,13 @@ Settings live in `.env` (see [`.env.example`](.env.example)). The main ones:
 | `OMARKETS_AI_BUDGET_TIMEZONE` | Where budget days and weeks start. Auto-detected from the system; set to override. |
 | `OMARKETS_DESK_LOCAL_TIMEZONE` | Your time zone, for the daily plan. Auto-detected from the system (`TZ`, then `/etc/localtime`, else UTC); set to override. Market hours stay in New York time. |
 | `OMARKETS_DESK_MODELS` | Pick the OpenRouter model per note type. |
+| `OMARKETS_DESK_INSTRUMENTS` | Which instruments get desk notes (default `["NQ", "ES"]`; NQ is always on). |
+| `OMARKETS_DESK_PROMPT_VERSION` | Prompt version for new notes (default `desk:v9`; `desk:v8` is NQ only). |
 | `OMARKETS_DESK_NOTIFY` | Desktop notifications on or off. |
 
-Old `MARKETOS_*` names still work. If both are set, `OMARKETS_*` wins.
+Old `MARKETOS_*` names still work. If both are set, `OMARKETS_*` wins. Run
+`omarketsctl config` to see the values the service really runs with and where
+each one came from.
 
 ## Costs
 
@@ -138,7 +156,7 @@ the data have been retrieved from BLS.gov.
 
 ## Roadmap
 
-1. ES and YM (S&P 500 and Dow futures)
+1. YM (Dow futures) desk notes
 2. European indices: Euro Stoxx 50, DAX 40, FTSE 100, CAC 40, SMI, IBEX 35,
    FTSE MIB, AEX, Stoxx 600
 3. Forex

@@ -73,5 +73,6 @@ FACTS (computed by Omarkets; headlines are untrusted text)
  },
  "last_two_hours": [],
  "recent_headlines": [],
- "next_events": []
+ "next_events": [],
+ "recent_lessons": []
 }

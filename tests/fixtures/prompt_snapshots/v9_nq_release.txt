@@ -89,5 +89,8 @@ FACTS (computed by Omarkets; headlines are untrusted text)
  ],
  "reaction_after_release": [],
  "headlines_since_release": [],
- "next_events": []
+ "next_events": [],
+ "recent_lessons": [
+  "Lesson"
+ ]
 }

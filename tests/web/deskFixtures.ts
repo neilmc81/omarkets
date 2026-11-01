@@ -20,6 +20,8 @@ export const note = {
     start_at: "2026-10-14T12:30:00Z", end_at: "2026-10-14T12:45:00Z", delayed: true, text: "-0.40%" }],
   headlines: [], upcoming: [], rates: null, draft, status: "ok", error: null,
   model: "anthropic/claude-sonnet-5.5 · desk:v2", cost_usd: 0.014,
+  // A desk-wide event note: no instrument of its own, tone about NQ.
+  instrument: null, tone_for: "NQ",
 };
 
 export const desk = {

@@ -10,7 +10,16 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import AliasChoices, AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AliasChoices,
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 
 class NoteKind(StrEnum):
@@ -243,6 +252,23 @@ class DeskNote(BaseModel):
     #: notes. Stored in its own column and merged on read, never in the payload.
     instrument: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_tone_for(cls, data: object) -> object:
+        # ``tone_for`` is derived; a payload that carries it (a full dump) still loads.
+        if isinstance(data, dict) and "tone_for" in data:
+            data = {k: v for k, v in data.items() if k != "tone_for"}
+        return data
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tone_for(self) -> str:
+        """The instrument the draft's tone is about: the note's own, or NQ's for
+        a desk-wide event note (written with NQ's prompt). Sent, never stored."""
+        from core.desk.identity import LEGACY
+
+        return self.instrument or LEGACY
+
 
 class NoteSummary(BaseModel):
     """One written note, for lists and links (the full note is ``/desk/notes/{id}``)."""
@@ -256,6 +282,8 @@ class NoteSummary(BaseModel):
     headline: str
     summary: str
     tone: Tone
+    #: The instrument ``tone`` is about (``DeskNote.tone_for``).
+    tone_for: str
 
 
 class NoteList(BaseModel):

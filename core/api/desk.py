@@ -120,7 +120,8 @@ async def desk_notes(
         raise HTTPException(status_code=422, detail="from must be before to; ranges are half-open")
     found = desk.store.readable(start, end, limit + 1)
     notes = [NoteSummary(id=n.id, kind=n.kind, at=n.created_at, headline=n.draft.headline,
-                         summary=n.draft.summary, tone=n.draft.nq_tone)
+                         summary=n.draft.summary, tone=n.draft.nq_tone,
+                         tone_for=n.tone_for)
              for n in found[:limit] if n.draft is not None]
     return NoteList(start=start, end=end, limit=limit, truncated=len(found) > limit, notes=notes)
 

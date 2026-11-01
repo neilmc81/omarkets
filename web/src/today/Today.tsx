@@ -20,16 +20,17 @@ export const KIND_LABEL: Record<Note["kind"], string> = {
   auction: "Treasury auction",
 };
 
-const TONE_LABEL: Record<NonNullable<Note["draft"]>["nq_tone"], string> = {
-  supportive: "Supportive for NQ",
-  negative: "Negative for NQ",
-  mixed: "Mixed for NQ",
-  neutral: "Neutral for NQ",
-};
-
 const TONE_SHORT: Record<NonNullable<Note["draft"]>["nq_tone"], string> = {
   supportive: "Supportive", negative: "Negative", mixed: "Mixed", neutral: "Neutral",
 };
+
+// "Negative for ES": the tone word plus the instrument the core says the tone
+// is about (an event note's is NQ's). No instrument named when it sends none.
+export function toneLabel(note: Note): string {
+  const tone = note.draft ? TONE_SHORT[note.draft.nq_tone] : "";
+  const symbol = note.tone_for ?? note.instrument;
+  return tone && symbol ? `${tone} for ${symbol}` : tone;
+}
 
 const VERDICT_LABEL: Record<Figure["verdict"], string> = {
   above: "Above forecast",
@@ -105,7 +106,7 @@ function NoteCard({ note, open, onToggle, now, headRef }: { note: Note; open: bo
       {note.follow_up && <p className={`t-followup ${note.follow_up.verdict ?? ""}`} title="Did the first reaction hold? Measured by Omarkets from delayed quotes.">
         <b>Did it hold?</b> {note.follow_up.text}
       </p>}
-      <span className={`t-tone ${draft.nq_tone}`}>{TONE_LABEL[draft.nq_tone]}</span>
+      <span className={`t-tone ${draft.nq_tone}`}>{toneLabel(note)}</span>
     </button>
     {open && <div className="t-note-body">
       <Figures figures={note.figures} />
@@ -201,7 +202,7 @@ function NoteRow({ note, group, isNew, onOpen }: { note: Note; group: DayGroup; 
     <span className="t-row-time">{group === "earlier" && <>{etDate.format(when)} · </>}{etClock.format(when)} ET</span>
     <span className="t-row-kind">{KIND_LABEL[note.kind]}</span>
     <span className="t-row-headline">{draft.headline}</span>
-    <span className={`t-tone ${draft.nq_tone}`} title={TONE_LABEL[draft.nq_tone]}>{TONE_SHORT[draft.nq_tone]}</span>
+    <span className={`t-tone ${draft.nq_tone}`} title={toneLabel(note)}>{TONE_SHORT[draft.nq_tone]}</span>
   </button>;
 }
 

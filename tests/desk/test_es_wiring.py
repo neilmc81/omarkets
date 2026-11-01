@@ -1,5 +1,7 @@
-"""Phase 2 slice 1: ES can be switched on (``desk_instruments``) without
-changing the production default (NQ only, desk:v8)."""
+"""Phase 2 slice 1: ES is wired through the desk (``desk_instruments``).
+
+Since the Phase 2 release cut NQ and ES on desk:v9 is the production default;
+an NQ-only desk (``desk_instruments=["NQ"]``) still refuses ES."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -134,7 +136,7 @@ def test_ask_query_wins_over_the_saved_focus():
 
 
 def test_ask_refuses_an_instrument_that_is_not_enabled_before_any_call():
-    service, _, _ = make(MOVE_AT)  # production default: NQ only
+    service, _, _ = make(MOVE_AT)  # desk_instruments=["NQ"]
     response = client(service).post("/api/v1/desk/ask", params={"instrument": "ES"})
     assert response.status_code == 400
     assert response.json()["detail"] == "The desk does not write for ES"

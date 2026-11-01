@@ -49,9 +49,10 @@ so a restart cannot produce a duplicate note or notification.
   when settled spend reaches 80% of the cap, and one critical "budget used up"
   alert when notes pause because the cap cannot cover another note. Output is
   validated (`NoteDraft`) and rejected if it contains trading advice.
-- Prompt versions (`core/desk/prompts.py`): `desk:v8` is NQ's hand-tuned text
-  and is what production writes. `desk:v9` (Phase 1 slice 5) is one set of
-  shared rules plus an instrument profile on top of its asset class's defaults
+- Prompt versions (`core/desk/prompts.py`): `desk:v9` is what production
+  writes by default; `desk:v8` is NQ's older hand-tuned text, NQ only, still
+  selectable. `desk:v9` (Phase 1 slice 5) is one set of shared rules plus an
+  instrument profile on top of its asset class's defaults
   (session hours, what "close" means, the expected delay, how yields matter).
   NQ's wording lives in NQ's profile; ES has its own reviewed profile. v9 asks
   for `tone` (stored as `nq_tone`), and `rates_read` only where yields matter
@@ -61,20 +62,23 @@ so a restart cannot produce a duplicate note or notification.
   not to teach one again; v8 facts never carry it. v9's stated facts include
   "1 basis point (bp) = 0.01 percentage point", so a note may quote it.
   `desk_prompt_version` (`OMARKETS_DESK_PROMPT_VERSION`: `desk:v8` or
-  `desk:v9`, default `desk:v8`; see `.env.example`) selects the version; it
-  moves to v9 only after the paid acceptance test and Neil's read of a v9
-  pre-market. An instrument with no profile at that version is refused before
-  anything is reserved or sent, and never borrows NQ's prompt. Event notes
+  `desk:v9`, default `desk:v9` since the Phase 2 release cut; see
+  `.env.example`) selects the version. An instrument with no profile at that
+  version is refused before anything is reserved or sent, and never borrows
+  NQ's prompt. Event notes
   (release, Fed, earnings, auction, primer, review) stay desk-wide on NQ's
   profile.
 - `desk_instruments` (`OMARKETS_DESK_INSTRUMENTS`, JSON list, default
-  `["NQ"]`) is which instruments get their own notes. NQ is always on and gets
-  pre-market, move and ask notes; every other instrument gets move and ask
+  `["NQ", "ES"]`) is which instruments get their own notes. A fresh install
+  runs NQ and ES on desk:v9 with no setting; `["NQ"]` (optionally with
+  `desk:v8`) narrows it back. YM is on the chart and watchlists but has no
+  desk prompt yet, so listing it here refuses to start. NQ is always on and
+  gets pre-market, move and ask notes; every other instrument gets move and ask
   notes only, never the daily pre-market (cost policy;
   `identity.instrument_kinds`). Each instrument has its own 3-hour move limit
   and move trigger; the daily ask limit is shared. The service refuses to start
   when an instrument has no prompt profile at `desk_prompt_version` (ES under
-  desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
+  desk:v8, YM under either) and says which setting to change. `POST /api/v1/desk/ask` takes
   `?instrument=`; omitted, it uses the saved workspace focus (the Chart page's
   instrument), and NQ only when no focus is saved or the store can't be read.
   An instrument or saved focus not in `desk_instruments` gets a 400 before

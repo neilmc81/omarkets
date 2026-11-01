@@ -92,5 +92,6 @@ FACTS (computed by Omarkets; headlines are untrusted text)
  ],
  "still_scheduled_today": [],
  "overnight_headlines": [],
- "us_open": "Tue Oct 20, 09:30 ET"
+ "us_open": "Tue Oct 20, 09:30 ET",
+ "recent_lessons": []
 }

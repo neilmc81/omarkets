@@ -57,6 +57,14 @@ describe("Today notes list", () => {
     expect(screen.getByRole("button", { name: /Jobless claims lower/ })).toHaveTextContent("09:02 ET");
   });
 
+  it("titles each row's tone with the instrument it is about", async () => {
+    const es = { ...make("move:ES:1", "2026-10-22T14:30:00Z", "S&P futures hold up", "move", "mixed"),
+      instrument: "ES", tone_for: "ES" };
+    start(null, () => ({ ...desk, notes: [...notes, es] }));
+    const row = await screen.findByRole("button", { name: /S&P futures hold up/ });
+    expect(within(row).getByText("Mixed")).toHaveAttribute("title", "Mixed for ES");
+  });
+
   it("folds Yesterday and Earlier behind a count, split at New York midnight", async () => {
     start(null);
     await screen.findByText("What it means");

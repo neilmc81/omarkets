@@ -19,7 +19,7 @@ ShellRoot {
     property var crossMarket: []
     property var strip: []
     property var nextEvent: null
-    property var deskNote: shell.withNote ? ({ id: "release:x", kind: "release", title: "Consumer prices (CPI)", created_at: "2026-10-14T12:51:00Z", headline: "Inflation ran hotter than expected", summary: "Hotter prices make Fed cuts less likely.", tone: "negative" }) : null
+    property var deskNote: shell.withNote ? ({ id: "move:ES:20261014T13", kind: "move", title: "ES moved sharply", created_at: "2026-10-14T13:05:00Z", headline: "ES fell 1.2% in an hour", summary: "Sellers pushed the index lower after the open.", tone: "negative", tone_for: "ES" }) : null
     property var themeColors: ({ green: "#549e6a", red: "#ff5345", orange: "#a2734b", blue: "#509475" })
     property var providers: [{ name: "desk", health: "ok", detail: null }]
     property string dataHealth: "ok"
@@ -51,6 +51,11 @@ ShellRoot {
       wait(400)
       var note = walk(popup, "omarkets-desk-note")
       ensure(note !== null && note.visible === shell.withNote, "desk note shown only when present")
+      if (shell.withNote) {
+        var tone = walk(popup, "omarkets-desk-tone")
+        ensure(tone !== null && tone.text === "Negative for ES", "tone names the note's instrument: " + (tone && tone.text))
+        ensure(popup.deskToneText({ tone: "supportive", tone_for: null }) === "Supportive", "no instrument named when unknown")
+      }
       // "Open Omarkets" opens the Today screen (no section).
       walk(popup, "omarkets-open-button").clicked()
       ensure(shell.launched === "http://127.0.0.1:8765/", "opens Today: " + shell.launched)

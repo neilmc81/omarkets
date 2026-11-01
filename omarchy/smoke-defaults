@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# Clean-install smoke: a fresh Omarkets install runs on the code defaults
+# (desk notes for NQ and ES on desk:v9) with no systemd drop-in.
+#
+# Usage: smoke-defaults [--live]
+#   (default)  offline: settings from an empty environment, with no .env and
+#              with a fresh .env (a copy of .env.example, as setup-env makes);
+#              the unit template carries no settings or user paths
+#   --live     also start a throwaway backend (demo data, no calendar or news
+#              fetches, no API key, temp data dir, free port), wait for
+#              /health, read its effective settings the way
+#              `omarketsctl config` reads the service's, then stop it
+#
+# It never touches the installed service, ~/.config or the project .env.
+# OMARKETS_PYTHON overrides the interpreter (default: .venv/bin/python).
+set -euo pipefail
+
+repo="$(cd -- "$(dirname -- "$(realpath -- "$0")")/.." && pwd)"
+live=0
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --live) live=1; shift ;;
+        --help|-h) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) printf 'smoke-defaults: unknown argument: %s\n' "$1" >&2; exit 2 ;;
+    esac
+done
+
+py=${OMARKETS_PYTHON:-$repo/.venv/bin/python}
+[[ -x $py ]] || { printf 'smoke-defaults: no Python at %s (set OMARKETS_PYTHON)\n' "$py" >&2; exit 1; }
+
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
+
+# An empty environment: only what Python needs to run and find this checkout.
+env -i PATH="$PATH" HOME="$work" LANG=C.UTF-8 PYTHONPATH="$repo" \
+    "$py" - "$repo" "$work" "$live" <<'PY'
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+repo, work, live = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] == "1"
+
+from core.config import effective  # noqa: E402
+from core.main import check_desk_instruments  # noqa: E402
+
+WANT = {"desk_prompt_version": "desk:v9", "desk_instruments": '["NQ", "ES"]'}
+failed = []
+
+
+def check(ok: bool, what: str) -> None:
+    print(f"  {'ok  ' if ok else 'FAIL'} {what}")
+    if not ok:
+        failed.append(what)
+
+
+def check_desk(label: str, environ: dict, env_file: Path | None) -> None:
+    settings, rows = effective.effective_settings(environ, env_file)
+    rows = {row.name: row for row in rows}
+    for name, want in WANT.items():
+        row = rows[name]
+        check(row.value == want and row.source == "default",
+              f"{label}: {name} = {row.value} ({row.source}), want {want} (default)")
+    try:
+        check(check_desk_instruments(settings) == ("NQ", "ES"),
+              f"{label}: every desk instrument has a prompt")
+    except Exception as exc:  # noqa: BLE001 - reported as a failure
+        check(False, f"{label}: {exc}")
+
+
+print("Settings on a clean install (no drop-in, no OMARKETS_* in the environment)")
+check_desk("no .env", {}, None)
+fresh = work / "fresh"
+fresh.mkdir()
+(fresh / ".env").write_text((repo / ".env.example").read_text())
+check_desk(".env from .env.example", {}, fresh / ".env")
+
+print("Unit template")
+unit = (repo / "omarchy" / "omarkets.service").read_text()
+lines = [line.strip() for line in unit.splitlines() if not line.lstrip().startswith("#")]
+check(not any(line.startswith(("Environment=", "EnvironmentFile=")) for line in lines),
+      "sets no Environment= or EnvironmentFile=")
+check("/home/" not in unit and "OMARKETS_" not in unit,
+      "carries no user paths or OMARKETS_* settings (only @REPO@)")
+
+if live:
+    print("Throwaway backend")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    run = work / "run"
+    run.mkdir()
+    (run / ".env").write_text((repo / ".env.example").read_text())
+    # Only what keeps the smoke offline and quiet; nothing desk-related.
+    env = {"PATH": os.environ["PATH"], "HOME": str(work), "LANG": "C.UTF-8",
+           "PYTHONPATH": str(repo), "OMARKETS_API_PORT": str(port),
+           "OMARKETS_MARKET_DATA_MODE": "demo", "OMARKETS_MARKET_DATA_PROVIDER": "fake",
+           "OMARKETS_ECONOMIC_MODE": "disabled", "OMARKETS_NEWS_ENABLED": "false",
+           "OMARKETS_DESK_NOTIFY": "false", "OMARKETS_DESK_DAILY_PLAN": "false"}
+    log = run / "omarkets.log"
+    with log.open("wb") as out:
+        proc = subprocess.Popen([sys.executable, "-c", "from core.main import main; main()"],
+                                cwd=run, env=env, stdout=out, stderr=subprocess.STDOUT)
+    health = None
+    try:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and proc.poll() is None:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
+                    health = json.loads(r.read())
+                if health.get("status") == "ok":
+                    break
+            except OSError:
+                pass
+            time.sleep(0.5)
+        check(health is not None and health.get("status") == "ok",
+              f"GET /health on port {port}: status {health and health.get('status')}")
+        if proc.poll() is None:
+            environ = dict(item.split("=", 1) for item in
+                           Path(f"/proc/{proc.pid}/environ").read_bytes()
+                           .decode("utf-8", "replace").split("\0") if "=" in item)
+            cwd = Path(os.readlink(f"/proc/{proc.pid}/cwd"))
+            check_desk("running process", environ, cwd / ".env")
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+    text = log.read_text(errors="replace")
+    check("desk notes for NQ, ES on desk:v9" in text, "log says: desk notes for NQ, ES on desk:v9")
+    if failed:
+        print(text[-4000:])
+
+if failed:
+    print(f"smoke-defaults: {len(failed)} check(s) failed")
+    sys.exit(1)
+print("smoke-defaults: all checks passed")
+PY

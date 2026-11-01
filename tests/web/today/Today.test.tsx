@@ -24,6 +24,25 @@ describe("Today", () => {
     expect(screen.getByText(/about 10 minutes delayed/)).toBeInTheDocument();
   });
 
+  it("labels each note's tone with the instrument it is about", async () => {
+    const es = { ...note, id: "move:ES:1", kind: "move", instrument: "ES", tone_for: "ES",
+      draft: { ...note.draft, headline: "S&P futures slide", nq_tone: "supportive" } };
+    vi.stubGlobal("fetch", vi.fn(() => ok({ ...desk, notes: [es] })));
+    render(<Root />);
+    expect(await screen.findByText("Supportive for ES")).toBeInTheDocument();
+    expect(screen.queryByText(/for NQ/, { selector: ".t-tone" })).not.toBeInTheDocument();
+  });
+
+  it("names no instrument when an older core sends none", async () => {
+    const old: Record<string, unknown> = { ...note };
+    delete old.tone_for;
+    delete old.instrument;
+    vi.stubGlobal("fetch", vi.fn(() => ok({ ...desk, notes: [old] })));
+    render(<Root />);
+    expect(await screen.findByText("Negative", { selector: ".t-tone" })).toBeInTheDocument();
+    expect(screen.queryByText(/for NQ/, { selector: ".t-tone" })).not.toBeInTheDocument();
+  });
+
   it("collapses a note and asks for an on-demand explanation", async () => {
     const fetcher = vi.fn((url: string) => ok(url === "/api/v1/desk/ask" ? { ...note, id: "ask:1", kind: "ask" } : desk));
     vi.stubGlobal("fetch", fetcher);
