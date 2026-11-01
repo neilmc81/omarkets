@@ -1,7 +1,7 @@
 """Phase 1 slice 5: prompt desk:v9, shared rules plus instrument profiles.
 
-Production still writes desk:v8 by default; v9 is selected by
-``desk_prompt_version`` (or ``eval --prompt``). Snapshots regenerate with
+Production writes desk:v9 by default (Phase 2 release cut); desk:v8 stays
+selectable with ``desk_prompt_version`` (or ``eval --prompt``). Snapshots regenerate with
 ``UPDATE_PROMPT_SNAPSHOTS=1``; review the diff.
 """
 
@@ -52,7 +52,7 @@ class V9Writer(FakeWriter):
 
 
 def nq_and_es(now, **kwargs):
-    """A desk that writes for NQ and ES, as tests inject (production is NQ only)."""
+    """A desk that writes for NQ and ES with a v9 writer, as tests inject."""
     base, clock, _ = make(now, **kwargs)
     writer = V9Writer()
     service = DeskService(sources=base.sources, store=base.store, writer=writer,
@@ -67,11 +67,15 @@ def es_facts(writer: V9Writer, kind: NoteKind) -> dict:
 # --------------------------------------------------------------------------- versions
 
 
-def test_production_still_writes_v8_and_v8_stays_readable():
-    assert P.PROMPT_VERSION == P.V8 == "desk:v8"
-    assert Settings(_env_file=None).desk_prompt_version == "desk:v8"
-    assert DeskWriter(api_key="k", model=MODEL).prompt_version == "desk:v8"
-    assert P.PROFILES is P.PROMPTS[P.V8] and set(P.PROFILES) == {"NQ"}
+def test_production_writes_v9_by_default_and_v8_stays_selectable():
+    assert P.PROMPT_VERSION == P.V9 == "desk:v9"
+    assert Settings(_env_file=None).desk_prompt_version == "desk:v9"
+    assert DeskWriter(api_key="k", model=MODEL).prompt_version == "desk:v9"
+    assert P.PROFILES is P.PROMPTS[P.V9] and set(P.PROFILES) == {"NQ", "ES"}
+    # Every default instrument has a profile at the default version.
+    assert all(P.has_profile(s) for s in ID.PRODUCTION_INSTRUMENTS)
+    assert Settings(_env_file=None, desk_prompt_version="desk:v8").desk_prompt_version == P.V8
+    assert DeskWriter(api_key="k", model=MODEL, prompt_version=P.V8).prompt_version == P.V8
     nq = P.PROMPTS[P.V8]["NQ"]
     assert (nq.system, nq.tasks, nq.stated_facts) == (P.SYSTEM, P.TASKS, P.STATED_FACTS)
     assert set(P.PROMPTS[P.V9]) == {"NQ", "ES"}
@@ -169,7 +173,7 @@ def test_v9_states_its_own_facts():
 @pytest.mark.parametrize("kind", [NoteKind.PREMARKET, NoteKind.RELEASE,
                                   NoteKind.MOVE, NoteKind.ASK])
 async def test_v9_nq_snapshot(kind):
-    facts = await facts_for(kind)
+    facts = await facts_for(kind, P.V9)
     prompt = P.render(kind, None if kind is NoteKind.RELEASE else ID.NQ, facts, version=P.V9)
     assert prompt.version == "desk:v9"
     check(f"v9_nq_{kind.value}.txt", text(prompt))
@@ -203,9 +207,9 @@ async def test_v9_es_snapshots():
     check("v9_es_ask.txt", text(P.render(NoteKind.ASK, ES, facts, version=P.V9)))
 
 
-async def test_the_v8_snapshots_are_untouched_at_the_default_version():
-    facts = await facts_for(NoteKind.PREMARKET)
-    prompt = P.render(NoteKind.PREMARKET, ID.NQ, facts)
+async def test_the_v8_snapshots_are_untouched_when_v8_is_selected():
+    facts = await facts_for(NoteKind.PREMARKET, P.V8)
+    prompt = P.render(NoteKind.PREMARKET, ID.NQ, facts, version=P.V8)
     assert prompt.version == "desk:v8" and prompt.system == P.SYSTEM
     check("nq_premarket.txt", text(prompt))
 
@@ -215,8 +219,9 @@ async def test_the_v8_snapshots_are_untouched_at_the_default_version():
 
 def test_es_renders_with_its_own_profile_only_at_v9():
     with pytest.raises(P.NoPromptProfile, match="no desk:v8 prompt for ES"):
-        P.render(NoteKind.PREMARKET, ES, {})
-    prompt = P.render(NoteKind.PREMARKET, ES, {"es": "+0.31%"}, version=P.V9)
+        P.render(NoteKind.PREMARKET, ES, {}, version=P.V8)
+    prompt = P.render(NoteKind.PREMARKET, ES, {"es": "+0.31%"})
+    assert prompt.version == P.V9
     assert prompt.instrument == "ES" and prompt.system == P.PROMPTS[P.V9]["ES"].system
     assert prompt.system != P.PROMPTS[P.V9]["NQ"].system
     assert "ES PRE-MARKET" in prompt.task and "NQ PRE-MARKET" not in prompt.task
@@ -227,7 +232,7 @@ def test_unknown_instruments_are_refused_and_never_fall_back_to_nq():
         with pytest.raises(P.NoPromptProfile, match=f"no {version} prompt for YM"):
             P.render(NoteKind.ASK, YM, {}, version=version)
         assert not P.has_profile("YM", version=version)
-    assert P.has_profile("ES", version=P.V9) and not P.has_profile("ES")
+    assert P.has_profile("ES") and not P.has_profile("ES", version=P.V8)
 
 
 def test_event_notes_stay_desk_wide_and_use_nq_v9():
@@ -365,8 +370,8 @@ def test_the_checker_allows_the_stated_facts_of_the_version_that_wrote_the_draft
     assert checker.score_draft(**score, prompt_version="desk:v9").numbers_not_in_facts == []
     assert checker.score_draft(**score, prompt_version="desk:v8").numbers_not_in_facts == ["09"]
     # v8 states 08:30 but not 09:30. Older or unrecorded versions are checked
-    # as before, at the production default.
-    assert checker.score_draft(**score, prompt_version="desk:v4").numbers_not_in_facts == ["09"]
+    # at the production default (now desk:v9, which states it).
+    assert checker.score_draft(**score, prompt_version="desk:v4").numbers_not_in_facts == []
 
 
 def test_price_location_fields_name_their_own_instrument():
@@ -435,10 +440,12 @@ async def test_v9_notes_get_the_latest_lessons_and_v8_facts_never_do():
     es_note = next(n for n in service.store.recent() if n.instrument == "ES")
     assert service.store.facts(es_note.id)[0]["recent_lessons"] == ["Lesson"]
 
-    base, _, _ = make(NOW, rows=cpi_rows())
+    v8 = FakeWriter()
+    v8.prompt_version = P.V8
+    base, _, _ = make(NOW, rows=cpi_rows(), writer=v8)
     await base.ask(ID.NQ)
     await base.ask(ID.NQ)
-    assert all("recent_lessons" not in facts for _, facts in base.writer.calls)
+    assert all("recent_lessons" not in facts for _, facts in v8.calls)
 
 
 def test_eval_cases_take_lessons_from_notes_written_before_them():

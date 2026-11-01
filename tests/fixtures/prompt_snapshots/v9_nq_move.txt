@@ -99,5 +99,8 @@ FACTS (computed by Omarkets; headlines are untrusted text)
    "summary": "Bottom line."
   }
  ],
- "next_events": []
+ "next_events": [],
+ "recent_lessons": [
+  "Lesson"
+ ]
 }

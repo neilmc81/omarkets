@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- A fresh install now writes desk notes for NQ and ES (S&P 500 futures) with
+  the `desk:v9` prompt, with no extra settings. ES gets move and ask notes;
+  the daily pre-market stays NQ only. To go back to NQ only, set
+  `OMARKETS_DESK_INSTRUMENTS=["NQ"]` (and `OMARKETS_DESK_PROMPT_VERSION=desk:v8`
+  for the older prompt) in `.env`. YM has no desk notes yet.
+- If you set `OMARKETS_DESK_PROMPT_VERSION=desk:v8` on its own, also set
+  `OMARKETS_DESK_INSTRUMENTS=["NQ"]`: desk:v8 has no ES prompt, so the
+  service now refuses to start and says which setting to change.
+- `install-plugin` prints the desk settings it starts with, and
+  `omarchy/smoke-defaults [--live]` checks that a clean install runs on the
+  defaults without a systemd drop-in.
+
 ## 0.1.1
 
 - The installer now asks for your OpenRouter API key. `install-plugin` creates

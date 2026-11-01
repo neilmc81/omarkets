@@ -60,10 +60,12 @@ def test_desk_routing_reports_defaults_and_overrides():
 
 def test_desk_instruments_show_as_the_json_to_set_them_with():
     _, rows = _rows({}, None)
-    assert rows["desk_instruments"].value == '["NQ"]'
-    assert rows["desk_instruments"].source == "default"
-    _, rows = _rows({"OMARKETS_DESK_INSTRUMENTS": '["NQ", "ES"]'}, None)
     assert rows["desk_instruments"].value == '["NQ", "ES"]'
+    assert rows["desk_instruments"].source == "default"
+    assert rows["desk_prompt_version"].value == "desk:v9"
+    assert rows["desk_prompt_version"].source == "default"
+    _, rows = _rows({"OMARKETS_DESK_INSTRUMENTS": '["NQ"]'}, None)
+    assert rows["desk_instruments"].value == '["NQ"]'
 
 
 def test_note_costs_group_by_model_and_prompt_version(tmp_path):

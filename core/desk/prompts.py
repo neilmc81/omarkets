@@ -26,9 +26,9 @@ from core.domain.instruments import AssetClass
 
 V8 = "desk:v8"
 V9 = "desk:v9"
-#: The version production writes by default (``desk_prompt_version`` overrides).
-#: desk:v9 goes live only after its paid acceptance test and Neil's read.
-PROMPT_VERSION = V8
+#: The version production writes by default (``desk_prompt_version`` overrides;
+#: desk:v8 stays selectable for NQ-only desks and replays).
+PROMPT_VERSION = V9
 
 # --------------------------------------------------------------------------- desk:v8
 

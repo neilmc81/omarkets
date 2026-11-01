@@ -1,4 +1,5 @@
-"""Phase 1 gate: the exact NQ prompt (system text + rendered task and facts) is unchanged.
+"""Phase 1 gate: the exact NQ desk:v8 prompt (system text + rendered task and
+facts) is unchanged. desk:v9's snapshots are in ``test_prompt_v9.py``.
 
 Regenerate deliberately with ``UPDATE_PROMPT_SNAPSHOTS=1`` and review the diff.
 """
@@ -12,8 +13,8 @@ import pytest
 
 from core.desk.identity import NQ
 from core.desk.models import NoteKind
-from core.desk.prompts import render
-from tests.desk.test_service import RELEASE, cpi_rows, make
+from core.desk.prompts import V8, render
+from tests.desk.test_service import RELEASE, FakeWriter, cpi_rows, make
 
 SNAPSHOTS = Path(__file__).parents[1] / "fixtures" / "prompt_snapshots"
 
@@ -26,19 +27,27 @@ def check(name: str, text: str) -> None:
     assert text == path.read_text(), f"prompt changed: {name}"
 
 
-async def facts_for(kind: NoteKind) -> dict:
-    """The facts the service hands the writer for one NQ note of ``kind``."""
+class VersionedWriter(FakeWriter):
+    def __init__(self, version: str):
+        super().__init__()
+        self.prompt_version = version
+
+
+async def facts_for(kind: NoteKind, version: str = V8) -> dict:
+    """The facts the service hands a ``version`` writer for one NQ note of ``kind``."""
+    writer = VersionedWriter(version)
     if kind in (NoteKind.PREMARKET, NoteKind.RELEASE):
-        service, _, _ = make(RELEASE + timedelta(minutes=35), rows=cpi_rows())
+        service, _, _ = make(RELEASE + timedelta(minutes=35), rows=cpi_rows(), writer=writer)
         await service.tick()
     elif kind is NoteKind.MOVE:
         now = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
         nq = [SimpleNamespace(timestamp=now - timedelta(minutes=80) + timedelta(minutes=i),
                               value=30000.0 * (1 - 0.0002 * i)) for i in range(80)]
-        service, _, _ = make(now, series={"NQ": nq}, rows=cpi_rows())
+        service, _, _ = make(now, series={"NQ": nq}, rows=cpi_rows(), writer=writer)
         await service.tick()
     else:
-        service, _, _ = make(datetime(2026, 10, 20, 15, 0, tzinfo=UTC), rows=cpi_rows())
+        service, _, _ = make(datetime(2026, 10, 20, 15, 0, tzinfo=UTC), rows=cpi_rows(),
+                             writer=writer)
         await service.ask()
     return next(f for k, f in service.writer.calls if k is kind)
 
@@ -48,7 +57,7 @@ async def facts_for(kind: NoteKind) -> dict:
 async def test_nq_prompt_snapshot(kind):
     facts = await facts_for(kind)
     # Release notes are desk-wide; they still use NQ's v8 text.
-    prompt = render(kind, None if kind is NoteKind.RELEASE else NQ, facts)
+    prompt = render(kind, None if kind is NoteKind.RELEASE else NQ, facts, version=V8)
     check(f"nq_{kind.value}.txt", f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")
 
 
@@ -59,7 +68,7 @@ async def test_nq_prompt_snapshot_with_market_state():
     from tests.desk.test_complete_inputs import inst
 
     now = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
-    service, _, _ = make(now, rows=cpi_rows())
+    service, _, _ = make(now, rows=cpi_rows(), writer=VersionedWriter(V8))
     service.sources.market_state().instruments.update({i.symbol: i for i in (
         inst("NQ", 30120.5, change_pct=0.62),
         inst("ES", 6810.25, change_pct=0.31),
@@ -76,5 +85,5 @@ async def test_nq_prompt_snapshot_with_market_state():
     )})
     await service.ask()
     facts = next(f for k, f in service.writer.calls if k is NoteKind.ASK)
-    prompt = render(NoteKind.ASK, NQ, facts)
+    prompt = render(NoteKind.ASK, NQ, facts, version=V8)
     check("nq_ask_market_state.txt", f"SYSTEM\n{prompt.system}\n\nUSER\n{prompt.user}\n")

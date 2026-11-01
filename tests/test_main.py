@@ -123,10 +123,19 @@ def _desk_settings(tmp_path, **kwargs):
                     **kwargs)
 
 
-def test_default_desk_writes_for_nq_only_on_desk_v8(tmp_path):
+def test_default_desk_writes_for_nq_and_es_on_desk_v9(tmp_path):
     from core.main import build_app
 
     app = build_app(_desk_settings(tmp_path))
+    assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES"]
+    assert app.state.desk.prompt_version == "desk:v9"
+
+
+def test_nq_only_on_desk_v8_can_still_be_selected(tmp_path):
+    from core.main import build_app
+
+    app = build_app(_desk_settings(tmp_path, desk_instruments=["NQ"],
+                                   desk_prompt_version="desk:v8"))
     assert [i.symbol for i in app.state.desk.instruments] == ["NQ"]
     assert app.state.desk.prompt_version == "desk:v8"
 
@@ -134,7 +143,7 @@ def test_default_desk_writes_for_nq_only_on_desk_v8(tmp_path):
 def test_enabling_es_under_desk_v8_is_refused_with_a_fix(tmp_path):
     from core.main import DeskConfigError, build_app
 
-    settings = _desk_settings(tmp_path, desk_instruments=["NQ", "ES"])
+    settings = _desk_settings(tmp_path, desk_prompt_version="desk:v8")
     with pytest.raises(DeskConfigError) as refused:
         build_app(settings)
     message = str(refused.value)
@@ -148,7 +157,7 @@ def test_enabling_es_under_desk_v8_is_refused_with_a_fix(tmp_path):
 def test_refusal_stops_the_server_with_the_message(tmp_path, monkeypatch):
     import core.main as main
 
-    settings = _desk_settings(tmp_path, desk_instruments=["NQ", "ES"])
+    settings = _desk_settings(tmp_path, desk_prompt_version="desk:v8")
     monkeypatch.setattr(main, "Settings", lambda: settings)
     monkeypatch.setattr(main.uvicorn, "Config", lambda *a, **k: pytest.fail("server built"))
     with pytest.raises(SystemExit, match="omarkets: desk_instruments includes ES"):
@@ -163,8 +172,18 @@ def test_es_is_wired_through_under_desk_v9(tmp_path):
     assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "ES"]
 
 
+def test_an_instrument_without_a_v9_prompt_is_refused(tmp_path):
+    from core.main import DeskConfigError, build_app
+
+    with pytest.raises(DeskConfigError, match="includes YM, but desk:v9 has no prompt") as refused:
+        build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "ES", "YM"]))
+    assert "remove YM from OMARKETS_DESK_INSTRUMENTS" in str(refused.value)
+    assert not (tmp_path / "desk.sqlite3").exists()
+
+
 def test_a_disabled_desk_is_not_checked(tmp_path):
     from core.main import build_app
 
-    app = build_app(_desk_settings(tmp_path, desk_enabled=False, desk_instruments=["NQ", "ES"]))
+    app = build_app(_desk_settings(tmp_path, desk_enabled=False,
+                                   desk_prompt_version="desk:v8"))
     assert app.state.desk is None

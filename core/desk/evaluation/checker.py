@@ -389,7 +389,7 @@ def score_draft(*, case_id: str, kind: str, model: str, created_at: str,
     target = instrument_for(kind, instrument)
     version = prompt_version if prompt_version in PROMPTS else PROMPT_VERSION
     if target is not None and not has_profile(target.symbol, version=version):
-        # An instrument the default can't write for (ES at desk:v8): the
+        # An instrument this version can't write for (ES at desk:v8): the
         # newest version that has its profile.
         version = next((v for v in reversed(PROMPTS) if has_profile(target.symbol, version=v)),
                        version)

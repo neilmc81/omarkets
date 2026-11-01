@@ -264,10 +264,10 @@ class Settings(BaseSettings):
     desk_output_rate: float = Field(default=15.0, gt=0, allow_inf_nan=False)
     desk_db_path: Path | None = None
     #: Prompt version new notes are written with (``core/desk/prompts.py``).
-    #: desk:v9 goes live only after its paid acceptance test and Neil's read.
-    desk_prompt_version: Literal["desk:v8", "desk:v9"] = "desk:v8"
-    #: Instruments that get their own notes, e.g.
-    #: ``OMARKETS_DESK_INSTRUMENTS='["NQ", "ES"]'``. NQ gets pre-market, move and
+    #: desk:v8 (NQ's text only) can still be selected for an NQ-only desk.
+    desk_prompt_version: Literal["desk:v8", "desk:v9"] = "desk:v9"
+    #: Instruments that get their own notes (default NQ and ES), e.g.
+    #: ``OMARKETS_DESK_INSTRUMENTS='["NQ"]'``. NQ gets pre-market, move and
     #: ask notes; every other instrument move and ask only. NQ is always on.
     #: Each needs a prompt profile at ``desk_prompt_version`` (ES: desk:v9), or
     #: the service refuses to start (``core.main.check_desk_instruments``).

@@ -70,6 +70,25 @@ backup() {
     cp -a -- "$file" "$file.bak-$stamp"
 }
 
+# One line on the desk settings this checkout starts with: the code defaults
+# plus .env (systemd drop-ins are not seen here; `omarketsctl config` shows
+# the running service). Read-only; silent when the venv is missing.
+desk_summary() {
+    local py=$repo/.venv/bin/python
+    [[ -x $py ]] || return 0
+    (cd -- "$repo" && env -i PATH="$PATH" HOME="$HOME" \
+        OMK_ENV_FILE="${OMARKETS_ENV_FILE:-$repo/.env}" "$py" - 2>/dev/null <<'PY'
+import os
+
+from core.config.settings import Settings
+
+s = Settings(_env_file=os.environ["OMK_ENV_FILE"])
+print(f"Desk notes: {', '.join(s.desk_instruments)} on {s.desk_prompt_version} "
+      "(code defaults and .env; no drop-in needed)")
+PY
+    ) || true
+}
+
 # Run a changing command, or only print it under --dry-run.
 run() {
     if (( dry_run )); then
@@ -160,6 +179,7 @@ if (( dry_run )); then
     printf 'Would create .env from .env.example if missing and ask for the OpenRouter API key if none is set.\n'
     printf 'Would link %s, install omarkets.service for %s and enable it.\n' \
         "$config_home/omarchy/plugins/omarkets" "$repo"
+    desk_summary
     exit 0
 fi
 
@@ -320,4 +340,6 @@ fi
 command -v omarchy-shell >/dev/null 2>&1 && omarchy-shell -q shell rescanPlugins || true
 
 printf 'Omarkets native integration installed.\n'
+desk_summary
+printf 'Check the running service with: %s/.venv/bin/omarketsctl config\n' "$repo"
 printf 'If the bar does not update, run: omarchy restart shell\n'

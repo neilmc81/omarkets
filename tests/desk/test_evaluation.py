@@ -2,7 +2,8 @@
 
 Gates: a worse or emptier draft fails ``compare``; mocked runs prove the run's
 call count and dollar allowance hold across restarts, alongside the shared
-weekly ledger. No test makes a network call.
+weekly ledger. No test makes a network call. The cases and writers here are
+desk:v8 (pinned, since production now defaults to desk:v9).
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from core.desk.evaluation.runner import (
 )
 from core.desk.identity import NQ
 from core.desk.models import NoteDraft, NoteKind
-from core.desk.prompts import SYSTEM, facts_text, render
+from core.desk.prompts import SYSTEM, V8, facts_text, render
 from core.desk.writer import DeskWriter, invented_numbers
 from core.services.ai_budget import AICostGuard
 from tests.desk import golden as G
@@ -344,7 +345,8 @@ class Provider:
 def runner_for(tmp_path, provider: Provider, *, weekly: float = 2.5,
                rates=RATES) -> tuple[EvalRunner, AICostGuard, RunLedger]:
     guard = AICostGuard(tmp_path / "budget.sqlite3", weekly_limit_usd=weekly, timezone="UTC")
-    writer = DeskWriter(api_key="k", model=MODEL, model_rates=rates, cost_guard=guard,
+    writer = DeskWriter(api_key="k", model=MODEL, prompt_version=V8, model_rates=rates,
+                        cost_guard=guard,
                         client=httpx.AsyncClient(transport=httpx.MockTransport(provider)))
     ledger = RunLedger(tmp_path / "runs.sqlite3")
     return EvalRunner(writer=writer, guard=guard, ledger=ledger, rates=rates), guard, ledger
@@ -352,13 +354,13 @@ def runner_for(tmp_path, provider: Provider, *, weekly: float = 2.5,
 
 def bound(cases: C.CaseSet) -> float:
     """The run ledger's ceiling for one call."""
-    writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
+    writer = DeskWriter(api_key="k", model=MODEL, prompt_version=V8, model_rates=RATES)
     return writer.hard_max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL, instrument=NQ)
 
 
 def estimate(cases: C.CaseSet) -> float:
     """What the shared cost guard reserves for one call."""
-    writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
+    writer = DeskWriter(api_key="k", model=MODEL, prompt_version=V8, model_rates=RATES)
     return writer.max_cost(NoteKind.ASK, cases.cases[0].facts, model=MODEL, instrument=NQ)
 
 
@@ -482,7 +484,7 @@ def test_run_without_paid_makes_no_calls(tmp_path, monkeypatch, capsys):
     cases = frozen(tmp_path, [complete_case("ask:0")])
     settings = Settings(_env_file=None, openrouter_api_key="k", ai_weekly_budget_usd=2.5,
                         ai_budget_db_path=tmp_path / "budget.sqlite3", data_dir=tmp_path,
-                        desk_model=MODEL, desk_model_rates=RATES)
+                        desk_model=MODEL, desk_model_rates=RATES, desk_prompt_version=V8)
     monkeypatch.setattr(cli, "_eval_settings", lambda: (settings, tmp_path))
 
     async def forbidden(*args, **kwargs):
@@ -525,19 +527,20 @@ def test_only_real_names_skip_the_number_check():
 def test_the_run_bound_is_a_ceiling_the_provider_cannot_pass(tmp_path):
     cases = frozen(tmp_path, [complete_case("ask:0")])
     case = cases.cases[0]
-    writer = DeskWriter(api_key="k", model=MODEL, model_rates=RATES)
+    writer = DeskWriter(api_key="k", model=MODEL, prompt_version=V8, model_rates=RATES)
     ceiling = writer.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL, instrument=NQ)
     # The worst a call can bill: one token per prompt byte, every output token used.
-    sent = render(NoteKind.ASK, NQ, case.facts)
+    sent = render(NoteKind.ASK, NQ, case.facts, version=V8)
     prompt_bytes = len((sent.system + sent.user).encode())
     rate_in, rate_out = RATES[MODEL]
     assert (prompt_bytes * rate_in + 4000 * rate_out) / 1e6 < ceiling
     # Routing params that change the token limit make the cost unboundable.
-    loose = DeskWriter(api_key="k", model=MODEL, model_rates=RATES,
+    loose = DeskWriter(api_key="k", model=MODEL, prompt_version=V8, model_rates=RATES,
                        model_params={MODEL: {"max_tokens": 100_000}})
     assert loose.hard_max_cost(NoteKind.ASK, case.facts, model=MODEL, instrument=NQ) is None
     guard = AICostGuard(tmp_path / "budget.sqlite3", weekly_limit_usd=2.5, timezone="UTC")
-    runner = EvalRunner(writer=DeskWriter(api_key="k", model=MODEL, model_rates=RATES,
+    runner = EvalRunner(writer=DeskWriter(api_key="k", model=MODEL, prompt_version=V8,
+                                          model_rates=RATES,
                                           model_params={MODEL: {"max_tokens": 100_000}},
                                           cost_guard=guard),
                         guard=guard, ledger=RunLedger(tmp_path / "runs.sqlite3"), rates=RATES)
@@ -564,7 +567,7 @@ async def test_a_stale_or_second_runner_never_loses_a_paid_draft(tmp_path):
 def test_facts_the_prompt_states_may_be_quoted_but_its_limits_may_not():
     from core.desk.prompts import STATED_FACTS, TASKS
 
-    sources = render(NoteKind.MOVE, NQ, FACTS).number_sources
+    sources = render(NoteKind.MOVE, NQ, FACTS, version=V8).number_sources
     # Every stated fact really is in the prompt the writer sees.
     prompt = SYSTEM + " ".join(TASKS.values())
     for phrase in ("10 minutes", "18:00 ET", "08:30 ET", "30 minutes before the US open"):
@@ -635,7 +638,7 @@ def test_paid_run_refuses_when_the_ledger_was_lost(tmp_path, monkeypatch, capsys
     cases = frozen(tmp_path, [complete_case("ask:0")])
     settings = Settings(_env_file=None, openrouter_api_key="k", ai_weekly_budget_usd=2.5,
                         ai_budget_db_path=tmp_path / "budget.sqlite3", data_dir=tmp_path,
-                        desk_model=MODEL, desk_model_rates=RATES)
+                        desk_model=MODEL, desk_model_rates=RATES, desk_prompt_version=V8)
     monkeypatch.setattr(cli, "_eval_settings", lambda: (settings, tmp_path))
 
     async def forbidden(*args, **kwargs):
