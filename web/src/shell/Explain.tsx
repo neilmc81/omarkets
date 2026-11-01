@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 
 // In-app navigation for links inside cards (`?note=...`, `?view=learn`). The
 // shell provides it; without it the links fall back to a normal page load.
@@ -26,7 +26,6 @@ export function NoteLink({ noteId, children = "Read the note →" }: { noteId: s
   return <a className="note-link" href={noteSearch(noteId)} onClick={follow(noteSearch(noteId))}>{children}</a>;
 }
 
-const CLOSE_DELAY_MS = 150;
 const EDGE = 8;
 const GAP = 6;
 
@@ -39,6 +38,34 @@ export function placeCard(trigger: DOMRect, card: { width: number; height: numbe
   const below = trigger.bottom + GAP;
   const top = below + card.height <= viewport.height - EDGE ? below : Math.max(EDGE, trigger.top - card.height - GAP);
   return { left, top };
+}
+
+// Only one explain card is open at a time, anywhere in the app: opening one
+// closes the last. An open card also closes on Esc or a press outside `root`.
+let openCard: { close: () => void } | null = null;
+
+export function useCardDismiss(open: boolean, close: () => void, root: RefObject<HTMLElement | null>) {
+  const latestClose = useRef(close);
+  useEffect(() => { latestClose.current = close; });
+  useEffect(() => {
+    if (!open) return;
+    const self = { close: () => latestClose.current() };
+    openCard?.close();
+    openCard = self;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") self.close();
+    };
+    const onPress = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node | null)) self.close();
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPress, true);
+    return () => {
+      if (openCard === self) openCard = null;
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPress, true);
+    };
+  }, [open, root]);
 }
 
 export type ExplainProps = {
@@ -54,33 +81,15 @@ export type ExplainProps = {
 
 export function Explain({ title, lines, noteId, learnLink, block = false, className = "", children }: ExplainProps) {
   const id = useId();
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [pinned, setPinned] = useState(false);
+  const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<Position | null>(null);
+  const rootRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
-  const open = hovered || focused || pinned;
   const actions = Boolean(noteId || learnLink);
 
-  const close = useCallback(() => {
-    clearTimeout(closeTimer.current);
-    setHovered(false);
-    setFocused(false);
-    setPinned(false);
-  }, []);
-
-  useEffect(() => () => clearTimeout(closeTimer.current), []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, close]);
+  const close = useCallback(() => setOpen(false), []);
+  useCardDismiss(open, close, rootRef);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -101,30 +110,20 @@ export function Explain({ title, lines, noteId, learnLink, block = false, classN
     };
   }, [open]);
 
-  const enter = () => {
-    clearTimeout(closeTimer.current);
-    setHovered(true);
-  };
-  const leave = () => {
-    clearTimeout(closeTimer.current);
-    closeTimer.current = setTimeout(() => setHovered(false), CLOSE_DELAY_MS);
-  };
-  // Click (or Enter) pins the card open; a second click closes it.
-  const toggle = () => {
-    if (pinned) close();
-    else setPinned(true);
-  };
+  // Only a click (or Enter/Space) opens the card; a second one closes it.
+  // Hover and keyboard focus never open it on their own.
+  const toggle = () => setOpen((was) => !was);
   const follow = useFollow(close);
 
   const Wrapper = block ? "div" : "span";
   const Trigger = block ? "div" : "span";
-  return <Wrapper className={`explain ${block ? "explain-block" : "explain-inline"}`} onMouseEnter={enter} onMouseLeave={leave}
+  return <Wrapper ref={(node: HTMLElement | null) => { rootRef.current = node; }}
+    className={`explain ${block ? "explain-block" : "explain-inline"}`}
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close();
     }}>
     <Trigger ref={(node: HTMLElement | null) => { triggerRef.current = node; }} className={`explain-trigger ${className}`}
       role="button" tabIndex={0} aria-expanded={open} aria-describedby={open ? id : undefined}
-      onFocus={() => setFocused(true)}
       onClick={toggle}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -136,6 +135,7 @@ export function Explain({ title, lines, noteId, learnLink, block = false, classN
       {block && <span className="explain-cue" aria-hidden="true">ⓘ</span>}
     </Trigger>
     {open && <div ref={cardRef} id={id} className="explain-card" role={actions ? "dialog" : "tooltip"} aria-label={title}
+      tabIndex={-1}
       style={position ? { left: position.left, top: position.top } : { visibility: "hidden", left: 0, top: 0 }}>
       <b className="explain-title">{title}</b>
       {lines.map((line, index) => <p key={index}>{line}</p>)}

@@ -166,8 +166,8 @@ function FocusChart({ focus, choices, watchlist, pickerError, focusError, onPick
       {pickerError && <p className="t-error" role="status">Instrument list unavailable ({pickerError})</p>}
       <ChartState bars={shown} />
       {overlayErrors.length > 0 && <p className="t-error" role="status">Overlay unavailable · {overlayErrors.join(" · ")}</p>}
-      {/* Keyed by instrument: a switch starts a fresh chart, so no hover card,
-          pinned card or crosshair from the previous instrument survives. */}
+      {/* Keyed by instrument: a switch starts a fresh chart, so no explain card,
+          readout or crosshair from the previous instrument survives. */}
       <SessionChart key={symbol} bars={shown.data} levels={lines} pins={pinList} overlays={overlays} height={560} onStatus={setStatus}
         precision={focus.price_precision}
         label={`${symbol} candles, ${RANGE_LABEL[range]}, ${interval} bars, times in New York.`} />

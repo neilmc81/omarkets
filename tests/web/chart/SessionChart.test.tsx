@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { candleData, overlayData, overnightRanges, pinBarTime, SessionChart } from "../../../web/src/chart/SessionChart";
 import { bars, esBars, levels, pins } from "../chartFixtures";
@@ -10,7 +10,7 @@ const lw = vi.hoisted(() => ({
   lines: [] as Array<{ setData: ReturnType<typeof vi.fn>; applyOptions: ReturnType<typeof vi.fn>; options: Record<string, unknown> }>,
   markers: { setMarkers: vi.fn() },
   move: null as Handler | null,
-  click: null as (() => void) | null,
+  click: null as Handler | null,
   chart: { applyOptions: vi.fn(), remove: vi.fn(), removeSeries: vi.fn(), unsubscribeCrosshairMove: vi.fn(), unsubscribeClick: vi.fn(), fitContent: vi.fn() },
 }));
 
@@ -32,7 +32,7 @@ vi.mock("lightweight-charts", () => ({
         return line;
       },
       subscribeCrosshairMove: (handler: Handler) => { lw.move = handler; },
-      subscribeClick: (handler: () => void) => { lw.click = handler; },
+      subscribeClick: (handler: Handler) => { lw.click = handler; },
       timeScale: () => ({ fitContent: lw.chart.fitContent, options: () => ({ barSpacing: 6 }), timeToCoordinate: () => 10 }),
     };
   },
@@ -102,30 +102,53 @@ describe("SessionChart", () => {
     expect(scale.tickMarkFormatter(seconds("2026-01-15T13:30:00Z"), 3)).toBe("08:30"); // EST
   });
 
-  it("shows a pin's card with its note link on hover, and keeps it open on click", () => {
+  it("opens no card while the crosshair moves, only the readout and a pointer cue", () => {
     const status = vi.fn();
-    render(<SessionChart bars={bars} pins={pins.pins} height={300} label="NQ chart" onStatus={status} />);
+    const { container } = render(<SessionChart bars={bars} levels={levels.levels} pins={pins.pins} height={300} label="NQ chart" onStatus={status} />);
     act(() => lw.move!({ time: seconds("2026-10-22T12:30:00Z"), point: { x: 50, y: 20 } }));
-    const card = screen.getByRole("tooltip");
-    expect(card).toHaveTextContent("Jobless claims");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(status).toHaveBeenLastCalledWith(expect.stringContaining("O 29,118.00 H 29,123.00 L 29,116.00 C 29,120.00 · delayed"));
+    expect(container.querySelector(".session-chart")).toHaveClass("is-aiming");
+    act(() => lw.move!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 42 } }));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    act(() => lw.move!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 200 } }));
+    expect(container.querySelector(".session-chart")).not.toHaveClass("is-aiming");
+  });
+
+  it("opens a pin's card with its note link on click, and closes it on a second click or Esc", () => {
+    render(<SessionChart bars={bars} pins={pins.pins} height={300} label="NQ chart" />);
+    const onPin = { time: seconds("2026-10-22T12:30:00Z"), point: { x: 50, y: 20 } };
+    act(() => lw.click!(onPin));
+    const card = screen.getByRole("dialog", { name: "Thu 08:30 ET · Jobless claims" });
     expect(card).toHaveTextContent("Lower than forecast");
     expect(card).toHaveTextContent("NQ -0.06% in 15 min");
     expect(screen.getByRole("link", { name: "Read the note →" })).toHaveAttribute("href", "?note=release%3A20261022T1230%3AINITIAL_CLAIMS");
-    expect(status).toHaveBeenLastCalledWith(expect.stringContaining("O 29,118.00 H 29,123.00 L 29,116.00 C 29,120.00 · delayed"));
-    act(() => lw.click!());
-    expect(screen.getByRole("dialog")).toHaveTextContent("Jobless claims");
     act(() => lw.move!({}));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    act(() => lw.click!(onPin));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => lw.click!(onPin));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("explains a level line when the crosshair is on it", () => {
-    render(<SessionChart bars={bars} levels={levels.levels} height={300} label="NQ chart" />);
-    act(() => lw.move!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 42 } }));
+  it("explains a level line when it is clicked, and closes on a click on empty chart or outside", () => {
+    render(<div>
+      <SessionChart bars={bars} levels={levels.levels} height={300} label="NQ chart" />
+      <button>elsewhere</button>
+    </div>);
+    act(() => lw.click!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 42 } }));
     const card = screen.getByRole("tooltip");
     expect(card).toHaveTextContent("Overnight high · 29,220.00");
     expect(card).toHaveTextContent("Overnight high: what it usually means.");
     expect(card).toHaveTextContent("So far: the window is still running.");
-    act(() => lw.move!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 200 } }));
+    act(() => lw.click!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 200 } }));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    act(() => lw.click!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 42 } }));
+    fireEvent.pointerDown(screen.getByRole("tooltip"));
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "elsewhere" }));
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 

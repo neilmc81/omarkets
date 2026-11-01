@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
-// The explainer library: fixed plain-English hover texts written once in the
+// The explainer library: fixed plain-English explain-card texts written once in the
 // core (core/desk/explainers.py, GET /api/v1/explainers). No AI, no market
 // logic here: the web app looks entries up by key and shows them.
 
@@ -30,7 +30,7 @@ export async function fetchExplainers(signal?: AbortSignal): Promise<ExplainerLi
   return new Map(entries.map((entry) => [entry.key, entry]));
 }
 
-/** The hover-card lines for an entry: what it is, why it matters, rising and falling. */
+/** The explain-card lines for an entry: what it is, why it matters, rising and falling. */
 export function explainerLines(entry: Explainer): string[] {
   return [
     entry.what,

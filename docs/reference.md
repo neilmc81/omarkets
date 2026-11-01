@@ -155,7 +155,7 @@ The NQ chart (`web/src/chart/SessionChart.tsx`, TradingView Lightweight Charts
 v5) draws OHLC bars, the session calendar, key levels, release pins and % overlays
 exactly as the core serves them (`/api/v1/bars`, `/session`, `/levels`,
 `/chart/pins`; see "Chart API" below). Gap bars are drawn as whitespace, never as
-zero candles. Times on the axis and in hover cards are New York time; cards also
+zero candles. Times on the axis and in explain cards are New York time; cards also
 give "your time". The chart polls (1D every minute, 5D every two minutes, 1M every
 five); it is not a tick-by-tick stream. The old raw 1,000-observation line
 (`HistoryChart`) and the old workstation pages are gone (UI redesign Phase 6);
@@ -836,12 +836,12 @@ list the next time the Chart page opens.
 Each row shows last, change and % since the previous close and a feed badge
 (Live, Delayed, Stale, Closed, No data) read from the quotes the core already
 keeps (`GET /api/v1/instruments`, polled every 15 seconds; no new API or store).
-Hovering the instrument shows its explainer entry plus the quote's time and
+Clicking the instrument shows its explainer entry plus the quote's time and
 source.
 
 ### Explainer library
 
-Every fixed hover text lives in `core/desk/explainers.py` (no AI, written once;
+Every fixed explain-card text lives in `core/desk/explainers.py` (no AI, written once;
 rules of thumb, never advice). An entry's `key` is `<kind>:<name>`, where `kind`
 is `instrument` (strip symbols, e.g. `instrument:NQ`), `indicator` (calendar
 event codes, e.g. `indicator:CPI`), `level` (key-level keys), `segment` (session
@@ -857,8 +857,15 @@ come from the library: `Quote.explainer` and `RatesView.explainer` (what + why),
 `UpcomingItem.explainer`, `WatchCard.explainer` and pin `explainer` (the
 indicator's what + why), `WatchCard.readings` (the reading entries),
 `KeyLevel.explainer` (everything in one paragraph) and the new session
-`segments[].explainer`. Hover cards for quote tiles and key levels show the full
+`segments[].explainer`. Explain cards for quote tiles and key levels show the full
 entry once the library has loaded, and the short field before then.
+
+Explain cards (`<Explain>` in `web/src/shell/Explain.tsx`, and the pin and level
+cards on the chart) open only on click, Enter or Space; hovering or tabbing onto
+a dotted-underlined value or ⓘ tile does not open one. A second click, Esc or a
+click outside closes the card, and opening one closes any other. Cards are
+compact (about 270px wide, at most 220px or 40% of the window tall) and long
+text scrolls inside them under a fixed title.
 `docs/explainers-review.md` lists every entry for review; regenerate it with
 `.venv/bin/python -m core.desk.explainers > docs/explainers-review.md` (a test
 fails when it is out of date).

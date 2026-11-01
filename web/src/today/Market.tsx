@@ -80,7 +80,7 @@ export function SessionTimeline({ calendar, pins, now }: { calendar: SessionCale
 
 // ---------------------------------------------------------------- quote tiles
 
-/** A tile's hover lines; the library entry (when loaded) replaces the short explainer. */
+/** A tile's card lines; the library entry (when loaded) replaces the short explainer. */
 export function quoteLines(q: Quote, asOf: (iso: string) => string, entry?: Explainer): string[] {
   return [
     ...(entry ? explainerLines(entry) : q.explainer ? [q.explainer] : []),
@@ -156,7 +156,7 @@ export function KeyLevelsCard({ levels, error, instrument = NQ_FALLBACK }: { lev
       <dt><Explain title={level.label} lines={levelLines(level, library?.get(`level:${level.key}`))}>{level.label}{level.partial ? " (so far)" : ""}</Explain></dt>
       <dd className={level.value === null ? "t-muted" : ""}>{level.value_text}</dd>
     </div>)}</dl>
-    {levels && <p className="t-muted">{levels.contract ?? instrument.symbol}{levels.delayed ? " · from delayed quotes" : ""} · hover a level for what it means</p>}
+    {levels && <p className="t-muted">{levels.contract ?? instrument.symbol}{levels.delayed ? " · from delayed quotes" : ""} · click a level for what it means</p>}
   </section>;
 }
 

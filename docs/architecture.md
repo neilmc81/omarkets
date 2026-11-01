@@ -356,8 +356,8 @@ each reading a core view model and doing no market calculation:
 | Playbook | `web/src/playbook/` | `/api/v1/desk/playbook` |
 | Learn | `web/src/learn/` | `/api/v1/desk/learn` |
 
-Hover text comes from the explainer library (`/api/v1/explainers`), desk notes
-and playbook counts; no AI runs on hover. The pages poll; the browser no longer
+Explain-card text (cards open on click) comes from the explainer library
+(`/api/v1/explainers`), desk notes and playbook counts; no AI runs when a card opens. The pages poll; the browser no longer
 opens the market-state WebSocket (the core still serves it for other clients).
 The older `/api/v1/macro/*`, `/calendar*`, `/events*` and `/state` endpoints
 remain for the CLI, the Omarchy layer and tests.

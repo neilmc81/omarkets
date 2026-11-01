@@ -72,7 +72,7 @@ export function MacroPage() {
   return <main className="t-page mac-page">
     <header className="page-head">
       <h1>The economy at a glance</h1>
-      <p className="t-muted">Latest official figures. Hover a number for what it means for NQ; ⓘ for sources. Green and red mean usually good or bad for NQ, not up or down.</p>
+      <p className="t-muted">Latest official figures. Click a number for what it means for NQ; ⓘ for sources. Green and red mean usually good or bad for NQ, not up or down.</p>
     </header>
     {board.error && <p className="t-error" role="status">Macro unavailable · {board.error}{board.data ? " (showing the last good copy)" : ""}</p>}
     {board.loading && !board.data && <p className="t-muted" role="status">Loading…</p>}

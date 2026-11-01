@@ -111,20 +111,20 @@ describe("Calendar page", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/calendar?week=next&all=true&tz=Asia%2FTokyo", expect.anything()));
   });
 
-  it("explains a release from the library and the surprise on hover", async () => {
+  it("explains a release from the library and the surprise on click", async () => {
     serve();
     render(<CalendarPage timeZone="Asia/Tokyo" />);
     const event = await screen.findByRole("button", { name: "Unemployment Claims" });
-    await waitFor(() => {
-      fireEvent.mouseEnter(event.parentElement!);
-      expect(screen.getByRole("dialog", { name: "Unemployment Claims" })).toHaveTextContent("New claims for unemployment benefits last week.");
-    });
+    fireEvent.mouseEnter(event.parentElement!);
+    expect(screen.queryByRole("dialog", { name: "Unemployment Claims" })).toBeNull();
+    fireEvent.click(event);
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Unemployment Claims" })).toHaveTextContent("New claims for unemployment benefits last week."));
     const card = screen.getByRole("dialog", { name: "Unemployment Claims" });
     expect(card).toHaveTextContent("Below forecast: Fewer layoffs; a firm job market.");
     expect(within(card).getByRole("link", { name: "Read the note →" })).toBeInTheDocument();
-    fireEvent.mouseLeave(event.parentElement!);
     const chip = screen.getByText(/−11K/);
-    fireEvent.focus(chip.closest("[role=button]")!);
+    fireEvent.click(chip.closest("[role=button]")!);
+    expect(screen.queryByRole("dialog", { name: "Unemployment Claims" })).toBeNull();
     const tip = screen.getByRole("tooltip", { name: "Surprise · Unemployment Claims" });
     expect(tip).toHaveTextContent("Stronger jobs data than forecast (better for the economy).");
     expect(tip).toHaveTextContent("larger than 7 of the last 8");

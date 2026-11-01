@@ -35,7 +35,7 @@ export function pinLines(pin: Pin): string[] {
   ];
 }
 
-/** A level's hover lines; the library entry (when loaded) replaces the short explainer. */
+/** A level's card lines; the library entry (when loaded) replaces the short explainer. */
 export function levelLines(level: KeyLevel, entry?: Explainer): string[] {
   return [
     ...(level.value === null ? [`Unavailable: ${level.unavailable_reason ?? "not measured"}.`] : []),

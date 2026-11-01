@@ -271,6 +271,8 @@ describe("shared shell", () => {
     render(<Root />);
     const tile = (await screen.findByText("29,700.00")).closest("[role=button]")!;
     fireEvent.mouseEnter(tile);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.click(tile);
     const card = screen.getByRole("tooltip", { name: "Nasdaq 100 futures" });
     expect(card).toHaveTextContent("Last: 29,700.00");
     expect(card).toHaveTextContent("Change since yesterday's close: -0.40%");

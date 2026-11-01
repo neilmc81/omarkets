@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   CandlestickSeries,
   ColorType,
@@ -18,7 +18,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { NoteLink } from "../shell/Explain";
+import { NoteLink, useCardDismiss } from "../shell/Explain";
 import { chartPalette, THEME_EVENT, type ChartPalette } from "../theme/omarchy";
 import type { Bar, Bars, ChartSession, KeyLevel, Pin } from "./api";
 import { useExplainers } from "../explainers/library";
@@ -124,7 +124,11 @@ class OvernightShade implements ISeriesPrimitive<Time> {
   }
 }
 
-type Hover = { kind: "pin"; pin: Pin; x: number; y: number } | { kind: "level"; level: KeyLevel; x: number; y: number };
+type Tip = { kind: "pin"; pin: Pin; x: number; y: number } | { kind: "level"; level: KeyLevel; x: number; y: number };
+
+const sameTarget = (a: Tip, b: Tip) =>
+  a.kind === "pin" ? b.kind === "pin" && a.pin.at === b.pin.at && a.pin.title === b.pin.title
+    : b.kind === "level" && a.level.key === b.level.key;
 
 export function SessionChart({ bars, levels = [], pins = [], overlays = [], height, label, onStatus, precision }: {
   bars: Bars | null;
@@ -133,7 +137,7 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   overlays?: Overlay[];
   height: number;
   label: string;
-  /** Called with the hovered bar's one-line readout (ET time and OHLC). */
+  /** Called with the bar under the pointer's one-line readout (ET time and OHLC). */
   onStatus?: (text: string | null) => void;
   /** Decimals the core says the instrument quotes; the chart's default (2) when unset. */
   precision?: number;
@@ -149,14 +153,18 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   const fittedKey = useRef<string | null>(null);
   const interacted = useRef(false);
   const [palette, setPalette] = useState<ChartPalette>(() => chartPalette());
-  const [hover, setHover] = useState<Hover | null>(null);
-  const [pinned, setPinned] = useState(false);
-  const hoverRef = useRef<Hover | null>(null);
-  useEffect(() => { hoverRef.current = hover; }, [hover]);
+  const root = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The open card (click-only, like <Explain>) and whether the pointer is on
+  // something that would open one (for the cursor cue).
+  const [tip, setTip] = useState<Tip | null>(null);
+  const [aiming, setAiming] = useState(false);
+  const close = useCallback(() => setTip(null), []);
+  useCardDismiss(tip !== null, close, root);
 
   // Latest data for the crosshair handler without re-subscribing.
-  const latest = useRef({ bars, levels, pins, onStatus, pinned, precision });
-  useEffect(() => { latest.current = { bars, levels, pins, onStatus, pinned, precision }; });
+  const latest = useRef({ bars, levels, pins, onStatus, precision });
+  useEffect(() => { latest.current = { bars, levels, pins, onStatus, precision }; });
 
   useEffect(() => {
     const element = container.current;
@@ -192,41 +200,43 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
     fittedKey.current = null;
     interacted.current = false;
 
+    // The pin or level line under the pointer, if any.
+    const targetAt = (param: MouseEventParams<Time>): Tip | null => {
+      const { bars: data, levels: lines, pins: marks } = latest.current;
+      if (param.time === undefined || !param.point || !data) return null;
+      const time = param.time as number;
+      const { x, y } = param.point;
+      const times = data.bars.map((b) => seconds(b.time));
+      const pin = marks.find((p) => pinBarTime(p, times, STEP[data.interval]) === time);
+      if (pin && y < 48) return { kind: "pin", pin, x, y };
+      const level = lines.find((l) => {
+        if (l.value === null) return false;
+        const at = candles.priceToCoordinate(l.value);
+        return at !== null && Math.abs(at - y) <= 6;
+      });
+      if (level) return { kind: "level", level, x, y };
+      return pin ? { kind: "pin", pin, x, y } : null;
+    };
+
+    // Moving the pointer only updates the readout and the cursor; it never opens a card.
     const onMove = (param: MouseEventParams<Time>) => {
-      const { bars: data, levels: lines, pins: marks, onStatus: status, pinned: sticky, precision: digits } = latest.current;
-      if (sticky) return;
+      const { bars: data, onStatus: status, precision: digits } = latest.current;
+      setAiming(targetAt(param) !== null);
       if (param.time === undefined || !param.point || !data) {
-        setHover(null);
         status?.(null);
         return;
       }
       const time = param.time as number;
-      const step = STEP[data.interval];
       const bar = data.bars.find((b) => seconds(b.time) === time);
       status?.(bar && bar.count ? `${etDayClock(time)} ET · O ${fmt(bar.open, digits)} H ${fmt(bar.high, digits)} L ${fmt(bar.low, digits)} C ${fmt(bar.close, digits)}${bar.delayed ? " · delayed" : ""}`
         : `${etDayClock(time)} ET · no quotes in this bar`);
-      const times = data.bars.map((b) => seconds(b.time));
-      const pin = marks.find((p) => pinBarTime(p, times, step) === time);
-      if (pin && param.point.y < 48) {
-        setHover({ kind: "pin", pin, x: param.point.x, y: param.point.y });
-        return;
-      }
-      const level = lines.find((l) => {
-        if (l.value === null) return false;
-        const y = candles.priceToCoordinate(l.value);
-        return y !== null && Math.abs(y - param.point!.y) <= 6;
-      });
-      if (level) setHover({ kind: "level", level, x: param.point.x, y: param.point.y });
-      else if (pin) setHover({ kind: "pin", pin, x: param.point.x, y: param.point.y });
-      else setHover(null);
     };
     chart.subscribeCrosshairMove(onMove);
-    // A click keeps the card open (so its note link can be used); another closes it.
-    const onClick = () => {
-      if (latest.current.pinned) {
-        setPinned(false);
-        setHover(null);
-      } else if (hoverRef.current) setPinned(true);
+    // A click on a pin or level opens its card; a second click on it, or a
+    // click on empty chart, closes it.
+    const onClick = (param: MouseEventParams<Time>) => {
+      const next = targetAt(param);
+      setTip((open) => next && !(open && sameTarget(open, next)) ? next : null);
     };
     chart.subscribeClick(onClick);
     const markInteracted = () => { interacted.current = true; };
@@ -253,14 +263,18 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
     };
   }, []);
 
-  useEffect(() => {
-    if (!pinned) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setPinned(false); setHover(null); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pinned]);
+  // Keep the card inside the chart: right of and below the click when it
+  // fits, flipped left or above otherwise.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    const box = root.current;
+    if (!tip || !card || !box) return;
+    const { width, height: tall } = card.getBoundingClientRect();
+    const right = tip.x + 12 + width <= box.clientWidth - 4;
+    const below = tip.y + 12 + tall <= box.clientHeight - 4;
+    card.style.left = `${Math.max(4, right ? tip.x + 12 : tip.x - 12 - width)}px`;
+    card.style.top = `${Math.max(4, below ? tip.y + 12 : tip.y - 12 - tall)}px`;
+  }, [tip]);
 
   // Theme colours.
   useEffect(() => {
@@ -354,21 +368,22 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
     chart.applyOptions({ leftPriceScale: { visible: overlays.length > 0 } });
   }, [overlays, palette]);
 
-  const card = hover && <div className={`explain-card chart-card ${pinned ? "is-pinned" : ""}`} role={pinned ? "dialog" : "tooltip"}
-    style={{ left: Math.max(4, hover.x + 12), top: Math.max(4, hover.y + 12) }}>
-    {hover.kind === "pin" ? <>
-      <b className="explain-title">{pinTitle(hover.pin)}</b>
-      {pinLines(hover.pin).map((line) => <p key={line}>{line}</p>)}
-      {hover.pin.note_id && <p className="explain-links"><NoteLink noteId={hover.pin.note_id} /></p>}
+  const card = tip && <div ref={cardRef} className="explain-card chart-card" tabIndex={-1}
+    role={tip.kind === "pin" && tip.pin.note_id ? "dialog" : "tooltip"}
+    aria-label={tip.kind === "pin" ? pinTitle(tip.pin) : `${tip.level.label} · ${tip.level.value_text}`}
+    style={{ left: Math.max(4, tip.x + 12), top: Math.max(4, tip.y + 12) }}>
+    {tip.kind === "pin" ? <>
+      <b className="explain-title">{pinTitle(tip.pin)}</b>
+      {pinLines(tip.pin).map((line) => <p key={line}>{line}</p>)}
+      {tip.pin.note_id && <p className="explain-links"><NoteLink noteId={tip.pin.note_id} /></p>}
     </> : <>
-      <b className="explain-title">{hover.level.label} · {hover.level.value_text}</b>
-      {levelLines(hover.level, library?.get(`level:${hover.level.key}`)).map((line) => <p key={line}>{line}</p>)}
+      <b className="explain-title">{tip.level.label} · {tip.level.value_text}</b>
+      {levelLines(tip.level, library?.get(`level:${tip.level.key}`)).map((line) => <p key={line}>{line}</p>)}
     </>}
-    {!pinned && hover.kind === "pin" && hover.pin.note_id && <p className="t-muted">Click to keep this open.</p>}
   </div>;
 
   const empty = bars && !bars.bars.some((b) => b.count);
-  return <div className="session-chart" style={{ height }}>
+  return <div ref={root} className={`session-chart${aiming ? " is-aiming" : ""}`} style={{ height }}>
     <div ref={container} className="session-chart-canvas" role="img" aria-label={label} />
     {card}
     {empty && <p className="session-chart-empty" role="status">No stored quotes for this range yet.</p>}
