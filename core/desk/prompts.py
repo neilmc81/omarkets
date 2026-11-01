@@ -623,20 +623,25 @@ SPECS: Mapping[str, InstrumentSpec] = {
     "WTI": InstrumentSpec(
         symbol="WTI", name="Crude oil", asset=AssetClass.COMMODITY,
         what=("WTI is the NYMEX West Texas Intermediate crude oil futures contract, priced "
-              "in US dollars per barrel. Oil is a raw material priced by supply and "
-              "demand, not by company profits. Oil often rises when supply looks tighter "
-              "(OPEC+, the group of big oil-producing countries, cutting output, lower US "
-              "production, or a disruption), when demand looks stronger (faster economic "
-              "growth, especially in China), when the US dollar weakens (oil is priced in "
-              "dollars, so a weaker dollar makes it cheaper for buyers paying in other "
-              "currencies), or when investors are more willing to take risk; it often "
-              "falls on the opposite. Weekly US "
-              "oil inventory reports (from the API and the EIA) can move it when "
-              "stockpiles change by more or less than expected; mention them only when "
-              "they are in the supplied facts. These are tendencies, not rules: when the "
-              "supplied facts show oil moving against them, say so plainly. Here "
-              "\"supportive\" means pushing oil's price up and \"negative\" means pushing "
-              "it down; neither is advice."),
+              "in US dollars per barrel. Oil is a raw material priced by supply and demand, "
+              "not by company profits. Oil often rises when supply looks tighter (OPEC+, the "
+              "group of big oil-producing countries, cutting output, lower US production, or "
+              "an outage such as a hurricane), when geopolitics threatens supply (a war or "
+              "conflict in an oil-producing region such as the Middle East, sanctions on a "
+              "big oil producer, or a threat to a shipping chokepoint such as the Strait of "
+              "Hormuz, the narrow sea lane much of the world's oil passes through), when "
+              "demand looks stronger (faster economic growth, especially in China), when the "
+              "US dollar weakens (oil is priced in dollars, so a weaker dollar makes it "
+              "cheaper for buyers paying in other currencies), or when investors are more "
+              "willing to take risk; it often falls on the opposite, including when such "
+              "tensions ease. Geopolitical risk can move oil on headlines alone, before any "
+              "oil is actually lost; mention it only when the supplied headlines or facts "
+              "show it, and never invent or assume a conflict. Weekly US oil inventory "
+              "reports (from the API and the EIA) can move it when stockpiles change by more "
+              "or less than expected; mention them only when they are in the supplied facts. "
+              "These are tendencies, not rules: when the supplied facts show oil moving "
+              "against them, say so plainly. Here \"supportive\" means pushing oil's price up "
+              "and \"negative\" means pushing it down; neither is advice."),
         rates_link="",
         gauge_rule=("no fear gauge: no oil volatility index is supplied, so never use "
                     "the VIX or VXN, which are stock-market gauges, as oil's."),
@@ -656,7 +661,7 @@ SPECS: Mapping[str, InstrumentSpec] = {
         participation=False,
         kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
         yields_matter=False,
-        drivers="supply, demand, the US dollar, economic data and world news",
+        drivers="supply, demand, geopolitics, the US dollar, economic data and world news",
         forecast_rule=(
             "\"Above\"/\"below\" forecast is not automatically good or bad for oil. "
             "Explain what it says about the economy (and so fuel demand) and the dollar, "
@@ -666,8 +671,9 @@ SPECS: Mapping[str, InstrumentSpec] = {
             "directions, so say which way it actually moved."),
         ask_drivers=("what the dollar is doing (the US dollar in markets_today, if the "
                      "facts show it), any headlines on supply (OPEC+, US output, "
-                     "inventories) or demand (say if oil is moving against what they "
-                     "would usually suggest)"),
+                     "inventories), geopolitics (wars, sanctions, shipping routes) or "
+                     "demand (say if oil is moving against what they would usually "
+                     "suggest)"),
     ),
 }
 

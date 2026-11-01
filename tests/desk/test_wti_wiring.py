@@ -172,7 +172,24 @@ def test_wti_tasks_never_demand_yields_commentary(kind):
 def test_wti_ask_asks_for_oil_s_own_drivers():
     task = P.PROMPTS[P.V9]["WTI"].tasks[NoteKind.ASK]
     assert "the US dollar in markets_today, if the facts show it" in task
-    assert "supply (OPEC+, US output, inventories) or demand" in task
+    assert ("supply (OPEC+, US output, inventories), geopolitics (wars, sanctions, "
+            "shipping routes) or demand") in task
+
+
+def test_wti_names_geopolitics_as_a_driver_only_from_the_facts():
+    system = P.PROMPTS[P.V9]["WTI"].system
+    intro, about = system.split("\n\n")[0], system.split("\n\n")[1]
+    assert "supply, demand, geopolitics, the US dollar" in intro
+    # A first-class tendency, not a vague "disruption".
+    assert "when geopolitics threatens supply" in about
+    assert "a war or conflict in an oil-producing region such as the Middle East" in about
+    assert "sanctions on a big oil producer" in about
+    assert "the Strait of Hormuz" in about
+    assert "when such tensions ease" in about
+    # Only from the supplied facts, and never invented.
+    assert ("mention it only when the supplied headlines or facts show it, and never "
+            "invent or assume a conflict") in about
+    assert "tendencies, not rules" in about
 
 
 def test_wti_system_reads_like_an_oil_desk_not_an_equity_one():
@@ -180,7 +197,7 @@ def test_wti_system_reads_like_an_oil_desk_not_an_equity_one():
     intro = system.split("\n\n")[0]
     # What moves oil, not what moves a stock index.
     assert "company earnings" not in intro and "bond yields" not in intro
-    assert "supply, demand, the US dollar" in intro
+    assert "the US dollar, economic data and world news move Crude oil (WTI)" in intro
     # No rate-cut framing of data surprises.
     assert "helpful for rate cuts" not in system
     assert "a sign of weaker demand for oil" in system

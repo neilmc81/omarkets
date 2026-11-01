@@ -9,13 +9,16 @@
   no oil pre-market; only NQ gets the daily briefing (cost policy). Oil notes
   say they are about oil / WTI, and their tone reads "… for WTI": supportive
   means pushing oil's price up, negative pushing it down. The prompt explains
-  what usually moves oil (supply such as OPEC+ and US production, demand such
-  as growth and China, the US dollar, appetite for risk, and the weekly
-  inventory reports when the facts carry them), says these are tendencies
-  rather than rules, and gives no trading advice. Bond yields are not treated
-  as a main driver of oil, so oil notes don't need a rates section and are
-  never asked to comment on yields; a data surprise is read through fuel
-  demand and the dollar, not rate cuts. Oil notes
+  what usually moves oil (supply such as OPEC+ and US production;
+  geopolitics such as wars in producer regions, sanctions and threats to
+  shipping routes like the Strait of Hormuz, only when the headlines show it,
+  never an invented conflict; demand such as growth and China; the US
+  dollar; appetite for risk; and the weekly inventory reports when the facts
+  carry them), says these are tendencies rather than rules, and gives no
+  trading advice. Bond yields are not treated as a main driver of oil, so oil
+  notes don't need a rates section and are never asked to comment on yields;
+  a data surprise is read through fuel demand and the dollar, not rate cuts.
+  Oil notes
   get no NQ vs ES comparison, megacap count or fear gauge (the feeds have no
   oil gauge; the VIX is never used as one). NQ, ES, YM and gold notes are
   unchanged. That means a few more notes and a little more AI spend each week.

@@ -68,7 +68,10 @@ so a restart cannot produce a duplicate note or notification.
   gold pre-market cannot be rendered at all. WTI's profile (NYMEX crude oil,
   US dollars per barrel) sits on the same commodity defaults and the same
   delayed CNBC oil feed the Today strip uses. It says what usually moves oil:
-  supply (OPEC+, US production, disruptions), demand (growth, China), the
+  supply (OPEC+, US production, outages), geopolitics (wars or conflict in
+  producer regions such as the Middle East, sanctions, threats to shipping
+  chokepoints such as the Strait of Hormuz; only when the supplied headlines
+  or facts show it, never an invented conflict), demand (growth, China), the
   dollar and appetite for risk, plus the weekly API/EIA inventory reports only
   when they are in the facts, as tendencies rather than rules. Tone is
   pushing oil's price up (supportive) or down (negative), never advice. Like
@@ -77,10 +80,10 @@ so a restart cannot produce a duplicate note or notification.
   (`InstrumentSpec.yields_matter` is false), so its prompt says to mention
   them only when the facts tie them to the note and `rates_read` is optional.
   Its own `drivers`, `forecast_rule` and `ask_drivers` replace the stock-market
-  wording the others share: the reader is learning how supply, demand and the
-  dollar move oil, a data surprise is read through fuel demand and the dollar
+  wording the others share: the reader is learning how supply, demand,
+  geopolitics and the dollar move oil, a data surprise is read through fuel demand and the dollar
   (not rate cuts), and the ask task asks for the dollar (when the facts show
-  it) and supply or demand headlines, never yields.
+  it) and supply, geopolitics or demand headlines, never yields.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
   matter (every equity index future, and gold). Each note task has a length target, recorded by
   `eval check` and never retried. v9 notes get `recent_lessons` in their facts
