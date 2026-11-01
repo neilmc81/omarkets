@@ -97,10 +97,15 @@ def test_ym_prompt_says_borrowed_facts_are_about_other_markets():
     assert P.PROMPTS[P.V9]["YM"].rates_read_required
 
 
-def test_ym_profile_has_no_premarket_wording_in_use_and_no_event_tasks():
-    # The profile has every per-instrument task (like ES); the service never
-    # schedules YM's pre-market, and event notes stay on NQ's profile.
+def test_ym_profile_defines_every_instrument_task_but_premarket_is_never_scheduled():
+    # Like ES, the profile carries pre-market task text; the service only
+    # schedules YM's move and ask notes.
     assert set(P.PROMPTS[P.V9]["YM"].tasks) == ID.INSTRUMENT_KINDS
+    assert NoteKind.PREMARKET in P.PROMPTS[P.V9]["YM"].tasks
+    assert ID.instrument_kinds(YM) == {NoteKind.MOVE, NoteKind.ASK}
+
+
+def test_event_notes_render_with_nq_s_profile_not_ym_s():
     assert P.render(NoteKind.FED, None, {}).system == P.PROMPTS[P.V9]["NQ"].system
 
 

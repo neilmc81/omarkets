@@ -52,17 +52,17 @@ class V9Writer(FakeWriter):
         return WriteResult(draft(), "fake", 0.01)
 
 
-def nq_and_es(now, **kwargs):
-    """A desk that writes for NQ and ES with a v9 writer, as tests inject."""
+def nq_and_es(now, instruments=("NQ", "ES"), **kwargs):
+    """A desk that writes for NQ and ES (or ``instruments``) with a v9 writer, as tests inject."""
     base, clock, _ = make(now, **kwargs)
     writer = V9Writer()
     service = DeskService(sources=base.sources, store=base.store, writer=writer,
-                          clock=lambda: clock["now"], instruments=("NQ", "ES"))
+                          clock=lambda: clock["now"], instruments=instruments)
     return service, writer
 
 
-def es_facts(writer: V9Writer, kind: NoteKind) -> dict:
-    return next(f for k, s, f in writer.sent if k is kind and s == "ES")
+def es_facts(writer: V9Writer, kind: NoteKind, symbol: str = "ES") -> dict:
+    return next(f for k, s, f in writer.sent if k is kind and s == symbol)
 
 
 # --------------------------------------------------------------------------- versions
@@ -206,6 +206,23 @@ async def test_v9_es_snapshots():
     await service.ask(ES)
     facts = es_facts(writer, NoteKind.ASK)
     check("v9_es_ask.txt", text(P.render(NoteKind.ASK, ES, facts, version=P.V9)))
+
+
+async def test_v9_ym_snapshots():
+    # YM gets move and ask only (no pre-market, like ES's cost policy).
+    desk = ("NQ", "ES", "YM")
+    ym = [SimpleNamespace(timestamp=NOW - timedelta(minutes=80) + timedelta(minutes=i),
+                          value=47000.0 * (1 - 0.0002 * i)) for i in range(80)]
+    service, writer = nq_and_es(NOW, desk, series={"YM": ym}, rows=cpi_rows())
+    await service.tick()
+    facts = es_facts(writer, NoteKind.MOVE, "YM")
+    assert facts["the_move"]["market"] == "Dow futures"
+    check("v9_ym_move.txt", text(P.render(NoteKind.MOVE, YM, facts, version=P.V9)))
+
+    service, writer = nq_and_es(NOW, desk, rows=cpi_rows())
+    await service.ask(YM)
+    facts = es_facts(writer, NoteKind.ASK, "YM")
+    check("v9_ym_ask.txt", text(P.render(NoteKind.ASK, YM, facts, version=P.V9)))
 
 
 async def test_the_v8_snapshots_are_untouched_when_v8_is_selected():
