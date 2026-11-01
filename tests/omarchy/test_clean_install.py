@@ -1,5 +1,5 @@
-"""Phase 2 release cut: a clean install runs on the code defaults (desk:v9, NQ
-and ES) with no systemd drop-in, and the installer says so."""
+"""Phase 2 release cut: a clean install runs on the code defaults (desk:v9, NQ,
+ES and YM) with no systemd drop-in, and the installer says so."""
 
 import os
 import subprocess
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SUMMARY = "Desk notes: NQ, ES on desk:v9"
+SUMMARY = "Desk notes: NQ, ES, YM on desk:v9"
 
 
 def sandbox(tmp_path: Path) -> dict[str, str]:
@@ -70,12 +70,14 @@ def dry_run_with(tmp_path: Path, env_file: str) -> subprocess.CompletedProcess:
 
 
 @pytest.mark.parametrize(("env_file", "reason"), [
-    # ES is a code default, so a leftover v8 pin alone is now unstartable.
-    ("OMARKETS_DESK_PROMPT_VERSION=desk:v8\n", "desk:v8 has no prompt for it"),
+    # ES and YM are code defaults, so a leftover v8 pin alone is unstartable.
+    ("OMARKETS_DESK_PROMPT_VERSION=desk:v8\n", "desk:v8 has no prompt for them"),
     ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ","ES"]\n',
      "desk:v8 has no prompt for it"),
-    ('OMARKETS_DESK_INSTRUMENTS=["NQ","ES","YM"]\n', "desk:v9 has no prompt for it"),
-    ('OMARKETS_DESK_INSTRUMENTS=["NQ","YM"]\n', "remove YM"),
+    ('OMARKETS_DESK_PROMPT_VERSION=desk:v8\nOMARKETS_DESK_INSTRUMENTS=["NQ","YM"]\n',
+     "remove YM"),
+    ('OMARKETS_DESK_INSTRUMENTS=["NQ","ES","YM","BTC"]\n', "desk:v9 has no prompt for it"),
+    ('OMARKETS_DESK_INSTRUMENTS=["NQ","BTC"]\n', "remove BTC"),
     ('OMARKETS_DESK_INSTRUMENTS=["ES"]\n', "NQ is the desk's own instrument"),
 ])
 def test_the_summary_reports_a_config_the_service_would_refuse(tmp_path, env_file, reason):
@@ -91,6 +93,8 @@ def test_the_summary_reports_a_config_the_service_would_refuse(tmp_path, env_fil
      "Desk notes: NQ on desk:v8 (code defaults and .env; systemd drop-ins not checked)"),
     ('OMARKETS_DESK_INSTRUMENTS=["NQ"]\n',
      "Desk notes: NQ on desk:v9 (code defaults and .env; systemd drop-ins not checked)"),
+    ('OMARKETS_DESK_INSTRUMENTS=["NQ","ES"]\n',
+     "Desk notes: NQ, ES on desk:v9 (code defaults and .env; systemd drop-ins not checked)"),
     ("OMARKETS_DESK_ENABLED=false\n", "Desk notes: off"),
 ])
 def test_the_summary_names_a_startable_override(tmp_path, env_file, line):

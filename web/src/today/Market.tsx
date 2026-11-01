@@ -145,7 +145,7 @@ export function KeyLevelsCard({ levels, error, instrument = NQ_FALLBACK }: { lev
   const library = useExplainers();
   if (!instrument.levels) return <section className="t-panel key-levels" aria-label="Key levels">
     <h2>Key levels</h2>
-    <p className="t-muted">None for {instrument.label}: key levels are worked out for NQ and ES.</p>
+    <p className="t-muted">None for {instrument.label}: key levels are worked out for NQ, ES and YM.</p>
   </section>;
   const rows = levels?.levels.filter((l) => TODAY_LEVELS.includes(l.key)) ?? [];
   return <section className="t-panel key-levels" aria-label="Key levels">

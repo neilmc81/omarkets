@@ -211,12 +211,15 @@ def test_an_instrument_without_a_prompt_profile_cannot_be_configured():
     with pytest.raises(ValueError, match="no desk:v8 prompt for ES"):
         DeskService(sources=service.sources, store=service.store, writer=v8,
                     instruments=("NQ", "ES"))
-    # At the default (desk:v9) ES has one, YM still has none.
+    with pytest.raises(ValueError, match="no desk:v8 prompt for YM"):
+        DeskService(sources=service.sources, store=service.store, writer=v8,
+                    instruments=("NQ", "YM"))
+    # At the default (desk:v9) ES and YM have one; BTC (chart only) has none.
     DeskService(sources=service.sources, store=service.store, writer=service.writer,
-                instruments=("NQ", "ES"))
-    with pytest.raises(ValueError, match=f"no {V9} prompt for YM"):
+                instruments=("NQ", "ES", "YM"))
+    with pytest.raises(ValueError, match=f"no {V9} prompt for BTC"):
         DeskService(sources=service.sources, store=service.store, writer=service.writer,
-                    instruments=("NQ", "ES", "YM"))
+                    instruments=("NQ", "ES", "YM", "BTC"))
 
 
 async def test_kind_and_instrument_must_agree():

@@ -284,9 +284,9 @@ def test_new_install_uses_omarkets_database(clean_env, tmp_path):
 # --- desk_instruments (Phase 2 slice 1) ---
 
 
-def test_desk_defaults_are_nq_and_es_on_desk_v9(clean_env):
+def test_desk_defaults_are_nq_es_and_ym_on_desk_v9(clean_env):
     settings = Settings(_env_file=None)
-    assert settings.desk_instruments == ["NQ", "ES"]
+    assert settings.desk_instruments == ["NQ", "ES", "YM"]
     assert settings.desk_prompt_version == "desk:v9"
 
 
@@ -301,7 +301,7 @@ def test_desk_can_be_set_back_to_nq_only_on_desk_v8(clean_env):
 def test_the_shipped_env_example_leaves_the_desk_defaults(clean_env):
     example = Path(__file__).parents[2] / ".env.example"
     settings = Settings(_env_file=example)
-    assert settings.desk_instruments == ["NQ", "ES"]
+    assert settings.desk_instruments == ["NQ", "ES", "YM"]
     assert settings.desk_prompt_version == "desk:v9"
 
 

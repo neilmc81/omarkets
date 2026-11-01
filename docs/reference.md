@@ -770,7 +770,7 @@ draws. Times are UTC; unavailable values are `null` with a reason, never zero.
 - **Chart focus and watchlist** (`core/api/workspace.py`, stored in
   `workspace.sqlite3`, a file of its own): the Chart page shows the saved focus
   and switches bars, labels, price precision and errors together. Levels are
-  fetched only where `levels` is true (NQ, ES) and release pins only where
+  fetched only where `levels` is true (NQ, ES, YM) and release pins only where
   `release_pins` is true (NQ: each pin measures NQ's first 15 minutes). The
   picker lists the watchlist first, then the other instruments. A stored
   value that no longer validates reads as the default.
