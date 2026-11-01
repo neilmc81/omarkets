@@ -159,7 +159,12 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   // something that would open one (for the cursor cue).
   const [tip, setTip] = useState<Tip | null>(null);
   const [aiming, setAiming] = useState(false);
-  const close = useCallback(() => setTip(null), []);
+  // The chart canvas has no keyboard target to hand focus back to, so focus
+  // inside a closing card returns to the chart frame instead of the page.
+  const close = useCallback(() => {
+    if (cardRef.current?.contains(document.activeElement)) root.current?.focus({ preventScroll: true });
+    setTip(null);
+  }, []);
   useCardDismiss(tip !== null, close, root);
 
   // Latest data for the crosshair handler without re-subscribing.
@@ -264,17 +269,25 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   }, []);
 
   // Keep the card inside the chart: right of and below the click when it
-  // fits, flipped left or above otherwise.
+  // fits, flipped left or above otherwise. Placed again whenever the card
+  // changes size (the explainer library arriving swaps in longer text).
   useLayoutEffect(() => {
     const card = cardRef.current;
     const box = root.current;
     if (!tip || !card || !box) return;
-    const { width, height: tall } = card.getBoundingClientRect();
-    const right = tip.x + 12 + width <= box.clientWidth - 4;
-    const below = tip.y + 12 + tall <= box.clientHeight - 4;
-    card.style.left = `${Math.max(4, right ? tip.x + 12 : tip.x - 12 - width)}px`;
-    card.style.top = `${Math.max(4, below ? tip.y + 12 : tip.y - 12 - tall)}px`;
-  }, [tip]);
+    const place = () => {
+      const { width, height: tall } = card.getBoundingClientRect();
+      const right = tip.x + 12 + width <= box.clientWidth - 4;
+      const below = tip.y + 12 + tall <= box.clientHeight - 4;
+      card.style.left = `${Math.max(4, right ? tip.x + 12 : tip.x - 12 - width)}px`;
+      card.style.top = `${Math.max(4, below ? tip.y + 12 : tip.y - 12 - tall)}px`;
+    };
+    place();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(place);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [tip, library]);
 
   // Theme colours.
   useEffect(() => {
@@ -368,7 +381,7 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
     chart.applyOptions({ leftPriceScale: { visible: overlays.length > 0 } });
   }, [overlays, palette]);
 
-  const card = tip && <div ref={cardRef} className="explain-card chart-card" tabIndex={-1}
+  const card = tip && <div ref={cardRef} className="explain-card chart-card" tabIndex={0}
     role={tip.kind === "pin" && tip.pin.note_id ? "dialog" : "tooltip"}
     aria-label={tip.kind === "pin" ? pinTitle(tip.pin) : `${tip.level.label} · ${tip.level.value_text}`}
     style={{ left: Math.max(4, tip.x + 12), top: Math.max(4, tip.y + 12) }}>
@@ -383,7 +396,7 @@ export function SessionChart({ bars, levels = [], pins = [], overlays = [], heig
   </div>;
 
   const empty = bars && !bars.bars.some((b) => b.count);
-  return <div ref={root} className={`session-chart${aiming ? " is-aiming" : ""}`} style={{ height }}>
+  return <div ref={root} className={`session-chart${aiming ? " is-aiming" : ""}`} style={{ height }} tabIndex={-1}>
     <div ref={container} className="session-chart-canvas" role="img" aria-label={label} />
     {card}
     {empty && <p className="session-chart-empty" role="status">No stored quotes for this range yet.</p>}

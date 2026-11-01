@@ -865,7 +865,11 @@ cards on the chart) open only on click, Enter or Space; hovering or tabbing onto
 a dotted-underlined value or ⓘ tile does not open one. A second click, Esc or a
 click outside closes the card, and opening one closes any other. Cards are
 compact (about 270px wide, at most 220px or 40% of the window tall) and long
-text scrolls inside them under a fixed title.
+text scrolls inside them under a fixed title, with any "Read the note →" or
+"Learn more →" links pinned to the bottom. An open card is in the Tab order
+right after its trigger; opening one with Enter or Space moves focus into it so
+the arrow keys scroll it, and Esc hands focus back to the trigger (to the chart
+frame for chart cards). A click leaves focus where it was.
 `docs/explainers-review.md` lists every entry for review; regenerate it with
 `.venv/bin/python -m core.desk.explainers > docs/explainers-review.md` (a test
 fails when it is out of date).

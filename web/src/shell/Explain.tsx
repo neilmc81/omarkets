@@ -87,8 +87,16 @@ export function Explain({ title, lines, noteId, learnLink, block = false, classN
   const triggerRef = useRef<HTMLElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const actions = Boolean(noteId || learnLink);
+  // Opened with Enter/Space: focus moves into the card once it is placed, so
+  // the keyboard can scroll a long card and reach its links.
+  const keyboardOpen = useRef(false);
 
-  const close = useCallback(() => setOpen(false), []);
+  // Esc, a second toggle or one card replacing another: if focus was inside
+  // the card it goes back to the trigger instead of falling to the page.
+  const close = useCallback(() => {
+    if (cardRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
+    setOpen(false);
+  }, []);
   useCardDismiss(open, close, rootRef);
 
   useLayoutEffect(() => {
@@ -110,9 +118,15 @@ export function Explain({ title, lines, noteId, learnLink, block = false, classN
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !position || !keyboardOpen.current) return;
+    keyboardOpen.current = false;
+    cardRef.current?.focus({ preventScroll: true });
+  }, [open, position]);
+
   // Only a click (or Enter/Space) opens the card; a second one closes it.
   // Hover and keyboard focus never open it on their own.
-  const toggle = () => setOpen((was) => !was);
+  const toggle = () => (open ? close() : setOpen(true));
   const follow = useFollow(close);
 
   const Wrapper = block ? "div" : "span";
@@ -120,14 +134,19 @@ export function Explain({ title, lines, noteId, learnLink, block = false, classN
   return <Wrapper ref={(node: HTMLElement | null) => { rootRef.current = node; }}
     className={`explain ${block ? "explain-block" : "explain-inline"}`}
     onBlur={(event) => {
-      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close();
+      // Focus already left for something else: let it stay there.
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
     }}>
     <Trigger ref={(node: HTMLElement | null) => { triggerRef.current = node; }} className={`explain-trigger ${className}`}
       role="button" tabIndex={0} aria-expanded={open} aria-describedby={open ? id : undefined}
-      onClick={toggle}
+      onClick={() => {
+        keyboardOpen.current = false;
+        toggle();
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
+          keyboardOpen.current = !open;
           toggle();
         }
       }}>
@@ -135,7 +154,7 @@ export function Explain({ title, lines, noteId, learnLink, block = false, classN
       {block && <span className="explain-cue" aria-hidden="true">ⓘ</span>}
     </Trigger>
     {open && <div ref={cardRef} id={id} className="explain-card" role={actions ? "dialog" : "tooltip"} aria-label={title}
-      tabIndex={-1}
+      tabIndex={0}
       style={position ? { left: position.left, top: position.top } : { visibility: "hidden", left: 0, top: 0 }}>
       <b className="explain-title">{title}</b>
       {lines.map((line, index) => <p key={index}>{line}</p>)}

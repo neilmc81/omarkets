@@ -693,6 +693,12 @@
   outline: none;
 }
 
+/* Reached by keyboard (Enter on the trigger, or Tab): show where focus is. */
+.explain-card:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: -2px;
+}
+
 /* The title stays put while the card scrolls; it covers the top padding too. */
 .explain-title {
   position: sticky;
@@ -713,6 +719,17 @@
   display: flex;
   gap: 14px;
   margin-top: 6px !important;
+}
+
+/* The links stay pinned to the bottom of a scrolling card, covering the
+   bottom padding like the sticky title does at the top. */
+.explain-card .explain-links {
+  position: sticky;
+  bottom: -8px;
+  z-index: 1;
+  margin-bottom: -8px;
+  padding: 4px 0 8px;
+  background: var(--surface-2);
 }
 
 .explain-links a {
@@ -1071,6 +1088,16 @@
 
 .session-chart {
   position: relative;
+}
+
+/* Focus lands on the chart frame when a focused chart card closes. */
+.session-chart:focus {
+  outline: none;
+}
+
+.session-chart:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: 2px;
 }
 
 .session-chart-canvas {

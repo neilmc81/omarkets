@@ -152,6 +152,18 @@ describe("SessionChart", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("lets the keyboard into an open card, and Esc keeps focus on the chart", () => {
+    render(<SessionChart bars={bars} levels={levels.levels} height={300} label="NQ chart" />);
+    act(() => lw.click!({ time: seconds("2026-10-22T12:40:00Z"), point: { x: 80, y: 42 } }));
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveAttribute("tabindex", "0");
+    act(() => card.focus());
+    expect(card).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(document.querySelector(".session-chart")).toHaveFocus();
+  });
+
   it("says a hovered gap has no quotes", () => {
     const status = vi.fn();
     render(<SessionChart bars={bars} height={300} label="NQ chart" onStatus={status} />);
