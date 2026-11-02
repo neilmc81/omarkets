@@ -124,6 +124,7 @@ ShellRoot {
       ensure(Qt.colorEqual(walk(popup, "omarkets-legend-neutral").children[0].color, popup.neutralColor), "legend grey is the neutral grey")
       ensure(texts(walk(popup, "omarkets-effect-legend")).some(function(t) { return t.indexOf("little effect") >= 0 }), "legend names grey")
       ensure(walk(popup, "omarkets-legend-tip").text.indexOf("not an error") > 0, "legend tooltip says grey is not broken")
+      ensure(walk(popup, "omarkets-legend-tip").text.split("\n").every(function(l) { return l.length <= 50 }), "legend tooltip lines stay short")
       // Delayed vs live lives on the Today page: no delayed wording in the popup.
       ensure(texts(popup).every(function(t) { return t.indexOf("delayed") < 0 }), "no delayed wording")
       fake.crossMarket = shell.richRows().map(function(q) { if (q.symbol === "ES") q.feed_status = "live"; return q })

@@ -840,8 +840,12 @@ Panel {
           PanelToolTip {
             objectName: "omarkets-legend-tip"
             visible: legendHover.containsMouse
-            text: "Tile colour is the move's effect on NQ, not whether the price rose or fell. "
-              + "Green helps NQ, red weighs on it, grey means little or no effect (not an error). "
+            // Short lines: the tooltip text does not wrap, so one long sentence
+            // would run far past the panel edge.
+            text: "Tile colour is the move's effect on NQ,\n"
+              + "not whether the price rose or fell.\n"
+              + "Green helps NQ, red weighs on it.\n"
+              + "Grey means little or no effect (not an error).\n"
               + "An outline with no fill means no rating."
           }
         }

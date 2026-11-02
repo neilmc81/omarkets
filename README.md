@@ -35,8 +35,9 @@ out of the box.
 - **Your theme**: the app and bar widget use your current Omarchy theme
   colours and switch instantly when you change themes.
 
-Every quote is labelled **live** or **delayed**. When the market is shut, the
-UI says **Markets closed** and shows the last value from the latest session.
+On the Today page, every quote is labelled **live** or **delayed**. When the
+market is shut, the UI says **Markets closed** and shows the last value from
+the latest session.
 
 ## Requirements
 
