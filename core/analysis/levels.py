@@ -1,7 +1,7 @@
 """Key price levels for a desk instrument: the futures (NQ on Today and the
 Chart page), the DXY index, the Treasury yields and VIX, on the same 18:00-17:00
-ET session calendar (VIX has quotes only in Cboe's 03:15-16:15 ET hours, so its
-overnight range starts at 03:15 ET).
+ET session calendar (VIX has quotes only in Cboe's 03:15-16:15 ET hours, to
+13:15 ET on an early-close day, so its overnight range starts at 03:15 ET).
 
 Deterministic, from stored observations and the session engine:
 

@@ -61,7 +61,13 @@ from core.desk.store import DeskStore
 from core.desk.writer import DeskWriter
 from core.domain.chart import ChartPin
 from core.domain.market_calendar import is_trading_day
-from core.domain.sessions import SessionPhase, active_session, next_session_open, session_phase
+from core.domain.sessions import (
+    SessionPhase,
+    active_session,
+    next_session_open,
+    session_phase,
+    volatility_index_window,
+)
 from core.providers.earnings_nasdaq import EarningsDate, NasdaqEarningsCalendar
 from core.providers.treasury_auctions import Auction, TreasuryAuctions
 
@@ -76,6 +82,9 @@ FEED_DELAY = timedelta(minutes=10)  # free NQ/ES feed is about ten minutes behin
 RELEASE_DELAY = RELEASE_WINDOW + FEED_DELAY + timedelta(minutes=1)
 #: Pre-market runs at 09:00 ET: after the 08:30 data, 30 minutes before the cash open.
 PREMARKET_LEAD = timedelta(minutes=30)
+#: How long after Cboe's close a volatility-index move note may still be
+#: written, and how old its latest quote may be: VIX's feed declares no delay.
+VOL_INDEX_CLOSE_GRACE = timedelta(minutes=10)
 RELEASE_WAIT_MAX = timedelta(minutes=45)  # write without a missing actual after this
 PRESS_CONFERENCE_WINDOW = timedelta(minutes=60)
 #: A "what to watch" card stays at most this long after its release if no note comes.
@@ -143,6 +152,16 @@ class DeskSources:
     ohlc: Callable[..., Sequence[Any]] | None = None
     #: The economic service's macro series, for the macro trends in notes.
     macro_series: Callable[[], Sequence[Any]] | None = None
+
+
+def _volatility_index_within_grace(now: datetime) -> bool:
+    """Whether Cboe is computing VIX/VXN at ``now`` or closed at most
+    ``VOL_INDEX_CLOSE_GRACE`` ago (inclusive), on a regular or early-close day."""
+    day = now.astimezone(NEW_YORK).date()
+    if not is_trading_day(day):
+        return False
+    opens, closes = volatility_index_window(day)
+    return opens <= now <= closes + VOL_INDEX_CLOSE_GRACE
 
 
 class DeskService:
@@ -645,7 +664,14 @@ class DeskService:
         return jobs
 
     async def _large_move(self, now: datetime, inst: Instrument = NQ) -> Move | None:
-        if session_phase(now) not in {SessionPhase.RTH, SessionPhase.OVERNIGHT}:
+        # A volatility index trades in Cboe's hours, not the futures': its note
+        # says "in the last hour", so it is written only while Cboe calculates
+        # it (or just after its close) and only from a quote that recent.
+        vol = volatility_index(inst.symbol)
+        if vol:
+            if not _volatility_index_within_grace(now):
+                return None
+        elif session_phase(now) not in {SessionPhase.RTH, SessionPhase.OVERNIGHT}:
             return None
         # Quotes are delayed; measure the last hour of observed quote time.
         moves = await asyncio.to_thread(
@@ -654,7 +680,9 @@ class DeskService:
             min_window=timedelta(minutes=30),
         )
         threshold, _ = await asyncio.to_thread(self._move_trigger, now, inst)
-        if moves and abs(moves[0].change) >= threshold:
+        if not moves or (vol and now - moves[0].end_at > VOL_INDEX_CLOSE_GRACE):
+            return None
+        if abs(moves[0].change) >= threshold:
             return moves[0]
         return None
 

@@ -21,10 +21,11 @@ Deterministic, from stored hourly OHLC buckets and the session engine:
   (``MoveSize.trigger_vol_pct``): an ordinary VIX hour moves several times more,
   in percent, than an ordinary NQ hour.
 
-A volatility index is computed only in Cboe's hours (03:15-16:15 ET), so its
-sessions are measured over those hours, not the futures' 23, and it gets no
-realised volatility: the volatility of a volatility index is not what its level
-means, and the yearly rate assumes the futures' hours.
+A volatility index is computed only in Cboe's hours (03:15-16:15 ET, to 13:15
+ET on an early-close day), so its sessions are measured over those hours, not
+the futures' 23, and it gets no realised volatility: the volatility of a
+volatility index is not what its level means, and the yearly rate assumes the
+futures' hours.
 """
 
 from __future__ import annotations
@@ -66,8 +67,9 @@ TRIGGER_MAX_BP = 10.0
 TRIGGER_FALLBACK_BP = 6.0
 #: A volatility index's one-hour trigger in percent: the same share of its
 #: typical daily range, kept between these, and a fixed one without enough
-#: history. A normal VIX day is about 5-10% of its level high to low, and an
-#: ordinary hour moves it a percent or two.
+#: history. A normal VIX day is about 5-10% of its level high to low; in the
+#: live history (Sep 18-Oct 30, 2026) its median one-hour move was about 0.6%
+#: and its 95th percentile about 4%.
 TRIGGER_MIN_VOL_PCT = 4.0
 TRIGGER_MAX_VOL_PCT = 10.0
 TRIGGER_FALLBACK_VOL_PCT = 5.0

@@ -17,6 +17,7 @@ from core.domain.sessions import (
     session_range,
     session_segments,
     volatility_index_open,
+    volatility_index_window,
 )
 
 NY = ZoneInfo("America/New_York")
@@ -260,3 +261,11 @@ def test_volatility_index_hours():
     assert not volatility_index_open(datetime(2026, 10, 22, 7, 14, tzinfo=UTC))
     assert not volatility_index_open(datetime(2026, 10, 22, 20, 15, tzinfo=UTC))  # 16:15
     assert not volatility_index_open(datetime(2026, 11, 26, 15, 0, tzinfo=UTC))  # holiday
+
+
+def test_volatility_index_hours_end_at_13_15_et_on_an_early_close():
+    # SPX options, and so VIX, stop at 13:15 ET on an early-close day.
+    assert volatility_index_open(datetime(2026, 11, 27, 18, 14, tzinfo=UTC))  # 13:14 ET
+    assert not volatility_index_open(datetime(2026, 11, 27, 18, 15, tzinfo=UTC))
+    assert volatility_index_window(date(2026, 11, 27)) == (
+        datetime(2026, 11, 27, 8, 15, tzinfo=UTC), datetime(2026, 11, 27, 18, 15, tzinfo=UTC))
