@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **DeepSeek desk calls reserve a wider safety margin.** Before each desk
+  note the AI cost guard sets aside the most the call could cost. For
+  DeepSeek models that is now 2× the estimate (was 1.2×), because one live
+  DeepSeek note cost more than was set aside ($0.004512 against $0.003914),
+  and the guard then pauses all AI until someone checks it. Opus and every
+  other model keep the 1.2× margin. Rates, the weekly budget and the
+  evaluation ceiling are unchanged; a DeepSeek note still costs the same,
+  only a little more budget is held while it runs and is released when it
+  settles.
+
 - **The US Dollar Index (DXY) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]` on
   `desk:v9`. DXY works like gold: its own move notes (with its own 3-hour

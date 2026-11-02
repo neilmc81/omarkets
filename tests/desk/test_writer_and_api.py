@@ -181,7 +181,7 @@ from core.config.settings import (  # noqa: E402
     Settings,
 )
 from core.desk.models import NoteDraft  # noqa: E402
-from core.desk.writer import invented_numbers  # noqa: E402
+from core.desk.writer import invented_numbers, reserve_pad  # noqa: E402
 
 
 def desk_settings(**env):
@@ -308,6 +308,40 @@ async def test_each_model_is_priced_at_its_own_rates():
     assert opus.cost_usd == pytest.approx((3000 * 5 + 2000 * 25) / 1e6)
     # The worst-case reservation follows the model too.
     assert guard.reserved[0] < 0.01 < guard.reserved[1]
+
+
+def test_deepseek_reserves_twice_the_estimate_and_others_keep_20_percent():
+    assert reserve_pad(DEEPSEEK) == 2.0
+    assert reserve_pad("deepseek/some-other-deepseek") == 2.0
+    assert reserve_pad(OPUS) == 1.2
+    assert reserve_pad("anthropic/claude-sonnet-5.5") == 1.2
+    assert reserve_pad("x/cheap") == 1.2
+
+
+@pytest.mark.parametrize(("model", "kind", "instrument", "rates", "pad"), [
+    (DEEPSEEK, NoteKind.MOVE, NQ, (0.15, 0.60), 2.0),
+    (OPUS, NoteKind.REVIEW, None, (5.0, 25.0), 1.2),
+])
+async def test_reservation_is_the_estimate_times_the_model_pad(model, kind, instrument,
+                                                               rates, pad):
+    guard = FakeGuard()
+    writer = split_writer(lambda r: completion(json.dumps(GOOD), cost=0.0001), guard)
+    prompt = writer.prompt(kind, FACTS, instrument=instrument)
+    tokens_in = (len(prompt.system) + len(prompt.user)) / 3 + 200
+    estimate = (tokens_in * rates[0] + 4000 * rates[1]) / 1e6
+    bound = writer.max_cost(kind, FACTS, model=model, instrument=instrument)
+    assert bound == pytest.approx(estimate * pad)
+    await writer.write(kind, FACTS, instrument=instrument)
+    assert guard.reserved[0] == pytest.approx(bound)
+
+
+def test_unlisted_model_keeps_the_20_percent_margin():
+    writer = writer_with(lambda r: completion(json.dumps(GOOD)))
+    prompt = writer.prompt(NoteKind.RELEASE, FACTS, instrument=None)
+    tokens_in = (len(prompt.system) + len(prompt.user)) / 3 + 200
+    bound = writer.max_cost(NoteKind.RELEASE, FACTS, model="anthropic/claude-sonnet-5.5",
+                            instrument=None)
+    assert bound == pytest.approx((tokens_in * 3.0 + 4000 * 15.0) / 1e6 * 1.2)
 
 
 def test_invented_numbers_allows_facts_and_their_roundings():
