@@ -7,6 +7,7 @@ import pytest
 from core.providers.economic_ism_newswire import (
     ISMNewswireProvider,
     discover_release,
+    expected_release,
     parse_release,
 )
 
@@ -64,8 +65,9 @@ async def test_provider_returns_two_source_release_actuals_without_invented_sche
         batch = await ISMNewswireProvider(
             client, clock=lambda: datetime(2026, 9, 1, 15, tzinfo=UTC)
         ).fetch()
-    assert batch.status == "degraded"
-    assert "Services" in batch.issues[0]
+    # Services is not due until Sep 3, so its absence is not an issue.
+    assert batch.status == "healthy"
+    assert batch.issues == []
     assert [(item.event_code, item.actual) for item in batch.events] == [
         ("ISM_MFG", 54.6),
         ("ISM_MFG_PRICES", 71.1),
@@ -82,9 +84,49 @@ async def test_unlisted_current_report_does_not_reuse_old_actual():
         batch = await ISMNewswireProvider(
             client, clock=lambda: datetime(2026, 10, 1, 13, tzinfo=UTC)
         ).fetch()
-    assert batch.status == "degraded"
+    # 09:00 ET on Oct 1: neither September report is out yet.
+    assert batch.status == "healthy"
     assert batch.events == []
-    assert "2026-09" in batch.issues[0]
+    assert batch.issues == []
+
+
+def test_expected_release_is_first_and_third_business_day_at_ten_et():
+    # Oct 2026 reports: Mon Nov 2 (Manufacturing) and Wed Nov 4 (Services).
+    assert expected_release(10, 2026, "manufacturing") == datetime(2026, 11, 2, 15, tzinfo=UTC)
+    assert expected_release(10, 2026, "services") == datetime(2026, 11, 4, 15, tzinfo=UTC)
+    # Labor Day (Sep 7) does not count; New Year's Day is skipped too.
+    assert expected_release(8, 2026, "manufacturing") == datetime(2026, 9, 1, 14, tzinfo=UTC)
+    assert expected_release(12, 2026, "manufacturing") == datetime(2027, 1, 4, 15, tzinfo=UTC)
+
+
+EMPTY_LISTING = (
+    b"<html><h1>News from Institute for Supply Management</h1></html>"
+)
+
+
+@pytest.mark.parametrize(
+    ("now", "issues"),
+    [
+        # Nov 2 07:16 ET: the live case. Both October reports are still to come.
+        (datetime(2026, 11, 2, 12, 16, 10, tzinfo=UTC), []),
+        # 10:30 ET: Manufacturing is due but inside the listing grace.
+        (datetime(2026, 11, 2, 15, 30, tzinfo=UTC), []),
+        # 11:30 ET: Manufacturing is overdue; Services is not due until Nov 4.
+        (datetime(2026, 11, 2, 16, 30, tzinfo=UTC), ["Manufacturing"]),
+        # Nov 5: both overdue.
+        (datetime(2026, 11, 5, 15, tzinfo=UTC), ["Manufacturing", "Services"]),
+    ],
+)
+async def test_not_yet_listed_is_pending_until_the_release_is_overdue(now, issues):
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=EMPTY_LISTING))
+    ) as client:
+        batch = await ISMNewswireProvider(client, clock=lambda: now).fetch()
+    assert batch.events == []
+    assert batch.status == ("degraded" if issues else "healthy")
+    assert len(batch.issues) == len(issues)
+    for family, issue in zip(issues, batch.issues, strict=True):
+        assert issue.startswith(f"ISM {family} 2026-10 report not listed after its expected")
 
 
 SERVICES_HREF = (

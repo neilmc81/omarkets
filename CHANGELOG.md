@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The header button is now "Desk Note (E)"** (was "Explain the market
+  now (E)"). Same note, same E shortcut.
+- **An ISM report that is not out yet no longer shows as a health issue.**
+  Before its release (Manufacturing on the first business day of the month,
+  Services on the third, both 10:00 ET) a missing report is just pending. It
+  counts as an issue only if it is still not listed an hour after that time.
+  Fetch or parse failures are still issues straight away.
+
 - **VIX (the CBOE Volatility Index) now gets desk notes by default.** The
   default `desk_instruments` is
   `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y", "VIX"]` on

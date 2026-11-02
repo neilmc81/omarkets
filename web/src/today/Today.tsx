@@ -351,7 +351,7 @@ export function Today({ desk, error, openId, onOpen, focus }: {
         {desk && <WatchCards cards={desk.watch} now={now} />}
         {desk && notes.length === 0 && <section className="t-panel t-empty">
           <h2>No notes yet</h2>
-          <p>Omarkets writes a pre-market note at 09:00 ET (after the 08:30 data), a note about 25 minutes after every economic release (15 minutes of market reaction plus the 10-minute feed delay), after Fed decisions and big-tech earnings, when NQ makes a big move, and a week-in-review after Friday's close. Press "Explain the market now" any time.</p>
+          <p>Omarkets writes a pre-market note at 09:00 ET (after the 08:30 data), a note about 25 minutes after every economic release (15 minutes of market reaction plus the 10-minute feed delay), after Fed decisions and big-tech earnings, when NQ makes a big move, and a week-in-review after Friday's close. Press "Desk Note" any time.</p>
         </section>}
         {missing && linkError && <div className="t-error" role="alert">{linkError}</div>}
         {notes.length > 0 && <NotesPanel notes={notes} openNote={openNote} onOpen={onOpen} now={now} seenBefore={seenBefore}

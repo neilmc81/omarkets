@@ -89,7 +89,7 @@ describe("shared shell", () => {
     expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Today", "Chart", "Calendar", "Macro", "News", "Playbook", "Learn", "Watchlists"]);
     expect(screen.getByRole("link", { name: "Omarkets home" })).toBeInTheDocument();
     expect(await screen.findByText("All feeds OK")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Explain the market now (E)" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Desk Note (E)" })).toBeEnabled();
     expect(screen.queryByText("← Back to Today")).toBeNull();
   });
 
@@ -199,7 +199,7 @@ describe("shared shell", () => {
     const fetcher = serve(desk, "ES");
     render(<Root />);
     await screen.findByRole("link", { name: /Focus: S&P 500/ });
-    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Desk Note (E)" }));
     await waitFor(() => expect(asks(fetcher)).toEqual(["/api/v1/desk/ask"]));
     expect(fetcher.asked).toEqual(["ES"]);
   });
@@ -212,7 +212,7 @@ describe("shared shell", () => {
     await act(() => queueFocusSave(focusOf("ES").instrument));
     // The save has landed but the strip still shows NQ.
     expect(screen.getByRole("link", { name: /Focus: Nasdaq/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Desk Note (E)" }));
     await waitFor(() => expect(fetcher.asked).toEqual(["ES"]));
     expect(asks(fetcher)).toEqual(["/api/v1/desk/ask"]);
     await act(async () => refetch.open());
@@ -225,7 +225,7 @@ describe("shared shell", () => {
     await screen.findByRole("link", { name: /Focus: Nasdaq/ });
     let saving: Promise<unknown> = Promise.resolve();
     act(() => { saving = queueFocusSave(focusOf("ES").instrument); });
-    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Desk Note (E)" }));
     await act(async () => { await Promise.resolve(); });
     expect(asks(fetcher)).toEqual([]);
     await act(async () => { save.open(); await saving; });
@@ -236,7 +236,7 @@ describe("shared shell", () => {
     const fetcher = serve(desk, "BTC");
     render(<Root />);
     await screen.findByRole("link", { name: /Focus: Bitcoin/ });
-    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Desk Note (E)" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The desk does not write for BTC");
     expect(asks(fetcher)).toEqual(["/api/v1/desk/ask"]);
     expect(fetcher.asked).toEqual(["BTC"]);
