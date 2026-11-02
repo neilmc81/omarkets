@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.analysis import move_size as MS
+from core.analysis.levels import key_levels
 from core.analysis.move_size import MoveSize
 from core.api import desk as desk_api
 from core.config.settings import Settings
@@ -287,8 +288,21 @@ def test_vix_s_location_rule_speaks_of_cboe_hours_not_futures():
                               'index levels ("vix_is")')
     assert "futures" not in fifteen
     assert "(since Cboe began calculating it at 03:15 ET" in fifteen
-    assert "the prior day's high and low (the previous trading day, 03:15 ET to 16:15 ET)" \
-        in fifteen
+    assert ("the prior day's high and low (the previous trading day; Cboe calculated it "
+            "only from 03:15 ET to 16:15 ET, though the \"measured\" window is the full "
+            "session from 18:00 ET to 17:00 ET)") in fifteen
+
+
+def test_vix_s_prior_day_wording_matches_the_window_its_levels_are_measured_over():
+    # Rule 15 tells the writer to trust each level's "measured" dates, so the
+    # prompt must name the window key_levels really uses for VIX's prior day.
+    rows = [r for day in past_days(5) for r in cash_rows(day)]
+    levels = {lv.key: lv for lv in key_levels("VIX", vix_quote(), ohlc_of(rows), now=NOW).levels}
+    day = levels["prior_day_high"]
+    assert day.value is not None
+    start, end = day.window_start.astimezone(NEW_YORK), day.window_end.astimezone(NEW_YORK)
+    assert (start.strftime("%H:%M"), end.strftime("%H:%M")) == ("18:00", "17:00")
+    assert "from 18:00 ET to 17:00 ET" in rule(15)
 
 
 @pytest.mark.parametrize("kind", [NoteKind.MOVE, NoteKind.ASK])
@@ -597,6 +611,62 @@ async def test_vix_and_the_yield_moves_are_limited_separately():
     service, _, _ = desk(MOVE_AT, series)
     ids = sorted(n.id for n in await service.tick())
     assert ids == ["move:US10Y:20261020T10", "move:VIX:20261020T10"]
+
+
+#: Cboe's close on Tuesday Oct 20, 2026: 16:15 ET.
+CBOE_CLOSE = datetime(2026, 10, 20, 20, 15, tzinfo=UTC)
+#: Friday Nov 27, 2026 closes early: Cboe stops calculating VIX at 13:15 ET.
+EARLY_CLOSE = datetime(2026, 11, 27, 18, 15, tzinfo=UTC)
+
+
+def vix_until(close, after):
+    """NQ flat and VIX up about 9% in its last hour before ``close``, with no VIX
+    quote after it (as at Cboe's close); the desk looks ``after`` the close."""
+    now = close + after
+    return now, {"NQ": flat(30000.0, now), "VIX": spiking(step=0.002, now=close)}
+
+
+async def vix_notes(service):
+    # The Friday of an early close also gets its week in review.
+    return [n for n in await service.tick() if n.instrument == "VIX"]
+
+
+async def test_no_vix_move_note_after_cboe_s_close():
+    # DeepSeek's repro: at 16:55 ET a 15:40-16:15 move was titled "VIX up 6.43%
+    # in the last hour", 40 minutes after VIX stopped being calculated.
+    now, series = vix_until(CBOE_CLOSE, timedelta(minutes=40))
+    service, _, _ = desk(now, series)
+    assert await service.tick() == []
+    assert service.writer.calls == []
+
+
+async def test_a_vix_move_up_to_cboe_s_close_is_still_written_just_after_it():
+    now, series = vix_until(CBOE_CLOSE, timedelta(minutes=5))
+    service, _, _ = desk(now, series)
+    [note] = await service.tick()
+    assert note.instrument == "VIX" and note.title.endswith("in the last hour")
+
+
+async def test_no_vix_move_note_from_a_stale_quote_inside_cboe_hours():
+    # VIX's feed stopped 25 minutes ago: its "last hour" would be long over.
+    service, _, _ = desk(MOVE_AT, {"NQ": flat(30000.0),
+                                   "VIX": spiking(step=0.002, now=MOVE_AT - timedelta(minutes=25))})
+    assert await service.tick() == []
+
+
+async def test_no_vix_move_note_after_an_early_close():
+    now, series = vix_until(EARLY_CLOSE, timedelta(minutes=25))
+    service, _, _ = desk(now, series)
+    assert await vix_notes(service) == []
+
+
+async def test_a_vix_move_up_to_an_early_close_is_still_written_just_after_it():
+    # Cboe's early close is the futures' too (13:15 ET), so the futures being
+    # closed must not stop VIX's own grace period.
+    now, series = vix_until(EARLY_CLOSE, timedelta(minutes=5))
+    service, _, _ = desk(now, series)
+    [note] = await vix_notes(service)
+    assert note.title.endswith("in the last hour")
 
 
 async def test_a_vix_move_is_not_written_when_vix_is_not_enabled():

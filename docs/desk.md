@@ -170,7 +170,10 @@ so a restart cannot produce a duplicate note or notification.
   (negative: calmer markets); neither is advice, and a higher VIX is never
   called good. Rule 15 calls its levels index levels and says the overnight
   range starts at Cboe's 03:15 ET open though the window is measured from
-  18:00 ET; the prior day is the previous trading day, 03:15–16:15 ET. Move
+  18:00 ET; likewise the prior day is the previous trading day, which Cboe
+  calculated only 03:15–16:15 ET, though its levels' "measured" window is the
+  full 18:00–17:00 ET session (`key_levels` reads the session; VIX has no
+  quotes outside Cboe's hours, so the values are the same). Move
   and ask tasks only; the ask task asks for stocks and the scheduled events
   traders may be buying protection for.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
@@ -476,7 +479,12 @@ typical daily range in percent, kept between 4% and 10%, or
 `OMARKETS_DESK_MOVE_THRESHOLD_VOL_PCT` (default 5%) without enough history. In
 the live history (Sep 18–Oct 30, 2026) VIX's median day was about 6% high to
 low and its one-hour moves had a median of 0.6% and a 95th percentile of 4.1%,
-so NQ's 0.6–1.5% bounds would fire on ordinary VIX hours.
+so NQ's 0.6–1.5% bounds would fire on ordinary VIX hours. VIX's move notes
+also follow Cboe's hours, not the futures' (`_large_move`): one is considered
+only while `volatility_index_open` (03:15–16:15 ET, to 13:15 ET on an
+early-close day) or within `VOL_INDEX_CLOSE_GRACE` (10 minutes) of the close,
+and only when the move's last quote is at most that old, so a move that ended
+at the close is never titled "in the last hour" 40 minutes later.
 `normal_move(..., trigger=...)` takes the trigger in whichever unit the
 instrument's moves are measured in, so the keyword names neither.
 

@@ -371,7 +371,13 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
         rates_rule=None,
         overnight_since=("Cboe began calculating it at 03:15 ET, though the \"measured\" "
                          "window starts at 18:00 ET"),
-        prior_day="the previous trading day, 03:15 ET to 16:15 ET",
+        # Like the overnight range, the prior day's levels are read over the
+        # 18:00-17:00 ET session (``core.analysis.levels``); VIX has quotes only
+        # in Cboe's hours, so the values are the same, and the facts' "measured"
+        # window must match what the prompt says.
+        prior_day=("the previous trading day; Cboe calculated it only from 03:15 ET to "
+                   "16:15 ET, though the \"measured\" window is the full session from "
+                   "18:00 ET to 17:00 ET"),
         levels_of="index",
         move_size=("the typical daily range (high to low, in index points and as a "
                    "percentage of its level) and the current or last session's range "

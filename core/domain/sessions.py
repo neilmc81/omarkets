@@ -20,8 +20,9 @@ Definitions (all times ``America/New_York``, converted to UTC):
   *pre-market* 08:00 ET to the cash open (it holds the 08:30 ET data releases),
   *US cash* (RTH) and *after the cash close* until the Globex close.
 * **Volatility-index hours** — VIX and VXN are Cboe cash indexes computed
-  03:15–16:15 ET on trading days; outside those hours their last value is a
-  close, not a stale feed (:func:`volatility_index_open`).
+  03:15–16:15 ET on trading days (to 13:15 ET on an early-close day, when SPX
+  options close then); outside those hours their last value is a close, not a
+  stale feed (:func:`volatility_index_open`).
 
 Rules:
 
@@ -227,16 +228,25 @@ def session_segments(trade_date: date) -> list[SessionSegment]:
     return segments
 
 
-def volatility_index_open(moment: datetime) -> bool:
-    """Whether Cboe is computing VIX/VXN now (03:15–16:15 ET on trading days)."""
-    day, local = local_parts(moment)
+def _volatility_index_hours(day: date) -> tuple[time, time]:
+    """Cboe's VIX/VXN hours on ``day``: 03:15–16:15 ET, or to 13:15 ET (when SPX
+    options close) on an early-close day."""
     opens, closes = VOLATILITY_INDEX_HOURS
+    return opens, EARLY_CLOSE_GLOBEX_TIME if is_early_close(day) else closes
+
+
+def volatility_index_open(moment: datetime) -> bool:
+    """Whether Cboe is computing VIX/VXN now (03:15–16:15 ET on trading days,
+    to 13:15 ET on an early-close day)."""
+    day, local = local_parts(moment)
+    opens, closes = _volatility_index_hours(day)
     return is_trading_day(day) and opens <= local < closes
 
 
 def volatility_index_window(trade_date: date) -> tuple[datetime, datetime]:
-    """When Cboe computes VIX/VXN on ``trade_date``, in UTC (03:15-16:15 ET)."""
-    opens, closes = VOLATILITY_INDEX_HOURS
+    """When Cboe computes VIX/VXN on ``trade_date``, in UTC (03:15-16:15 ET, to
+    13:15 ET on an early-close day)."""
+    opens, closes = _volatility_index_hours(trade_date)
     return _et_utc(trade_date, opens), _et_utc(trade_date, closes)
 
 

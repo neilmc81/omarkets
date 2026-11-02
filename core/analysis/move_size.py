@@ -66,8 +66,9 @@ TRIGGER_MAX_BP = 10.0
 TRIGGER_FALLBACK_BP = 6.0
 #: A volatility index's one-hour trigger in percent: the same share of its
 #: typical daily range, kept between these, and a fixed one without enough
-#: history. A normal VIX day is about 5-10% of its level high to low, and an
-#: ordinary hour moves it a percent or two.
+#: history. A normal VIX day is about 5-10% of its level high to low; in the
+#: live history (Sep 18-Oct 30, 2026) its median one-hour move was about 0.6%
+#: and its 95th percentile about 4%.
 TRIGGER_MIN_VOL_PCT = 4.0
 TRIGGER_MAX_VOL_PCT = 10.0
 TRIGGER_FALLBACK_VOL_PCT = 5.0
