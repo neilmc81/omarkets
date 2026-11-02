@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 
-from core.providers.economic_conference_board import parse_listing
+from core.providers.economic_conference_board import ConferenceBoardProvider, parse_listing
 
 NOW = datetime(2026, 10, 29, 13, 0, tzinfo=UTC)
 
@@ -73,3 +74,21 @@ def test_card_stamped_later_today_is_skipped_but_far_future_fails():
     assert event.period == "2026-09"
     with pytest.raises(ValueError):
         parse_listing(OCTOBER.encode(), datetime(2026, 10, 20, tzinfo=UTC))
+
+
+async def test_only_card_pending_keeps_the_provider_healthy():
+    early = datetime(2026, 10, 27, 13, 59, tzinfo=UTC)  # 09:59 ET, card says 10:00
+    pending = card(
+        "Oct 27, 2026, 10:00",
+        "US Consumer Confidence Increased in October",
+        "Headline not yet in the expected form.",
+    )
+    for page, status in ((pending, "healthy"), ("<html></html>", "degraded")):
+        transport = httpx.MockTransport(lambda request, page=page: httpx.Response(200, text=page))
+        async with httpx.AsyncClient(transport=transport) as client:
+            batch = await ConferenceBoardProvider(client, clock=lambda: early).fetch()
+        assert batch.status == status and batch.events == []
+        if status == "healthy":
+            assert batch.issues == []
+        else:
+            assert batch.issues == ["No consumer confidence release on the listing page"]

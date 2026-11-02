@@ -138,6 +138,10 @@ async def test_monthly_missing_before_expected_release_is_pending_then_overdue()
     # Wed Nov 4, 08:00 ET: October's report is due 08:15 ET; 35 days since Sep 30.
     early = await _collect(datetime(2026, 11, 4, 13, tzinfo=UTC), pages)
     assert _family_issues(early, "monthly") == []
+    # Only the (stale-fixture) weekly is flagged; nothing else.
+    assert early.issues == _family_issues(early, "weekly") == [
+        "ADP weekly report not found after its expected release (Tue Oct 27, 08:15 ET)"
+    ]
     # Still pending inside the grace hour.
     grace = await _collect(datetime(2026, 11, 4, 14, 14, tzinfo=UTC), pages)
     assert _family_issues(grace, "monthly") == []
@@ -162,6 +166,34 @@ async def test_future_dated_release_page_is_pending_not_rejected():
     # Tue Oct 6 08:14 ET: the weekly page is listed a minute before 08:15 ET.
     batch = await _collect(datetime(2026, 10, 6, 12, 14, tzinfo=UTC), {WURL: WEEKLY, MURL: MONTHLY})
     assert not any(WURL in issue for issue in batch.issues)
+    assert batch.issues == [
+        "ADP weekly report not found after its expected release (Tue Sep 22, 08:15 ET)"
+    ]
     assert [event.frequency for event in batch.events] == ["monthly"]
     with pytest.raises(ReleasePending):
         parse_release(WEEKLY, WURL, datetime(2026, 10, 6, 12, 14, tzinfo=UTC))
+
+
+def test_monthly_moves_to_thursday_after_an_early_week_holiday():
+    assert monthly_release_day(2024, 8) == date(2024, 9, 5)  # Labor Day Mon Sep 2
+    assert monthly_release_day(2025, 8) == date(2025, 9, 4)  # Labor Day Mon Sep 1
+    assert monthly_release_day(2023, 12) == date(2024, 1, 4)  # New Year's Day Mon Jan 1
+    assert monthly_release_day(2027, 5) == date(2027, 6, 3)  # Memorial Day Mon May 31
+    # Weekly in that week is still skipped; the week after is a normal Tuesday.
+    assert weekly_release_day(date(2025, 9, 1)) is None
+    assert weekly_release_day(date(2025, 9, 8)) == date(2025, 9, 9)
+
+
+def test_weekly_skipped_around_new_year_when_jobs_report_moves_back():
+    # December's reference week ends Sat Dec 12, 2026; the weekly that would
+    # cover it (Tue Dec 29) is not published, though the monthly is Jan 6.
+    assert weekly_release_day(date(2026, 12, 28)) is None
+    assert weekly_release_day(date(2026, 12, 21)) == date(2026, 12, 22)
+    assert weekly_release_day(date(2027, 1, 4)) is None  # monthly Wed Jan 6
+    assert weekly_release_day(date(2027, 1, 11)) == date(2027, 1, 12)
+    # Dec 2027 has no New Year shift, so the Dec 28 weekly stays.
+    assert weekly_release_day(date(2027, 12, 27)) == date(2027, 12, 28)
+    # Tue Jan 5, 2027 10:00 ET: last due weekly is Dec 22, not Dec 29.
+    assert latest_due_release("weekly", datetime(2027, 1, 5, 15, tzinfo=UTC)) == datetime(
+        2026, 12, 22, 13, 15, tzinfo=UTC
+    )

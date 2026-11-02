@@ -511,9 +511,12 @@ provider health and retain unavailable actuals; no estimates or database injecti
 are used. Polling is every 15 minutes, at most every minute near a known ADP slot.
 No new ADP report before its expected release is pending, not a fault. Monthly
 is due on the Wednesday of BLS jobs-report week (the third Friday after the week
-holding the 12th, a week later when that lands on Jan 1-3); weekly is due
+holding the 12th, a week later when that lands on Jan 1-3), or the next trading
+day when Monday to Wednesday of that week has a market holiday; weekly is due
 Tuesdays (the next trading day after a Monday or Tuesday market holiday), with
-no weekly in the monthly report's week. Both are due at 08:15 Eastern. A family
+no weekly in the monthly report's week, nor in the week holding the Tuesday 17
+days after the reference week ends (Dec 29, 2026, when New Year moves the jobs
+report back a week). Both are due at 08:15 Eastern. A family
 counts as missing only when no release from the latest due slot's week is found
 an hour after that slot. A page dated a moment in the future is skipped as
 pending, not rejected.
@@ -522,10 +525,12 @@ pending, not rejected.
 pages carry their own release time. When that time is up to a day after the
 local clock (posted a moment early, or a lagging clock), the release is pending:
 the check stays healthy with no new event (Conference Board skips just that
-card). A date further ahead is still invalid and fails the check. The BLS API
-often fails right at the bell; a failed BLS check on a weekday from 2 minutes
+card; a listing whose only card is pending is healthy, not missing). A date
+further ahead is still invalid and fails the check. The BLS API
+often fails or returns incomplete series right at the bell; a failed or
+issue-bearing BLS check on a weekday from 2 minutes
 before until 15 minutes after 08:30 or 10:00 Eastern is retried up to four
-times, a minute apart, before it is recorded as unavailable.
+times, a minute apart, before the last result (unavailable or degraded) stands.
 News ingestion converts summary HTML and entities to readable plain text while
 retaining the raw source payload and source URL; it never injects provider HTML.
 

@@ -655,3 +655,45 @@ async def test_bls_bell_retry_stops_once_the_window_closes():
         batch = await BLSEconomicProvider(client, clock=lambda: now[0], sleep=sleep).fetch()
     assert batch.status == "unavailable"
     assert (len(calls), sleeps) == (3, [60, 60])  # 08:43:30, 08:44:30, then 08:45:30 stops
+
+
+def _bls_missing_series_payload():
+    payload = bls_payload()
+    payload["Results"]["series"] = payload["Results"]["series"][1:]
+    return payload
+
+
+async def _bls_with_issue_batches(now, issue_batches):
+    calls, sleeps = [], []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) <= issue_batches:
+            return httpx.Response(200, json=_bls_missing_series_payload())
+        return httpx.Response(200, json=bls_payload())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        batch = await BLSEconomicProvider(client, clock=lambda: now, sleep=sleep).fetch()
+    return batch, len(calls), sleeps
+
+
+async def test_bls_batch_with_issues_at_the_bell_is_retried():
+    batch, calls, sleeps = await _bls_with_issue_batches(BELL, issue_batches=2)
+    assert batch.status == "healthy" and batch.issues == []
+    assert (calls, sleeps) == (3, [60, 60])
+
+
+async def test_bls_batch_with_issues_after_bell_retries_is_degraded():
+    batch, calls, sleeps = await _bls_with_issue_batches(BELL, issue_batches=99)
+    assert batch.status == "degraded"
+    assert batch.issues == ["CUSR0000SA0: series missing"]
+    assert (calls, sleeps) == (5, [60] * 4)
+
+
+async def test_bls_batch_with_issues_away_from_a_release_is_not_retried():
+    batch, calls, sleeps = await _bls_with_issue_batches(NOW, issue_batches=99)
+    assert batch.status == "degraded"
+    assert (calls, sleeps) == (1, [])
