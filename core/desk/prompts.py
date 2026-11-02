@@ -212,6 +212,13 @@ class AssetDefaults:
     #: Futures by default; an index such as DXY has no futures session.
     overnight_since: str = "futures reopened"
     prior_day: str = "the previous full futures session"
+    #: Rule 16: what ``normal_move_size`` holds before the fear gauge. A yield's
+    #: ranges are in basis points and it gets no realised volatility (a yearly
+    #: percentage of a yield level would mislead).
+    move_size: str = ("the typical daily range (high to low), the current or last "
+                      "session's range compared with it (labelled with its date), "
+                      "realised volatility (how much {symbol} has actually moved, as a "
+                      "yearly rate) and")
 
 
 @dataclass(frozen=True)
@@ -245,7 +252,7 @@ class InstrumentSpec:
     participation: bool = True
     #: The per-instrument note kinds its profile has tasks for. Every instrument
     #: but NQ is written move and ask only (``identity.instrument_kinds``); GOLD's,
-    #: WTI's and DXY's profiles have no pre-market text at all.
+    #: WTI's, DXY's and the yields' profiles have no pre-market text at all.
     kinds: frozenset[NoteKind] = INSTRUMENT_KINDS
     #: Whether its asset class's yields rule applies. False (WTI: oil is priced
     #: on supply, demand and the dollar) gives the "not a main driver" rule and
@@ -262,6 +269,9 @@ class InstrumentSpec:
         "read as helpful for rate cuts.")
     #: The ask task's line on the markets and news that drive it.
     ask_drivers: str = "what yields and the dollar are doing, any important headlines"
+    #: The ``rates_read`` field where yields matter, if not the shared one (a
+    #: Treasury yield reads the other yield and the curve, not "yields" as an input).
+    rates_field: str | None = None
 
 
 #: How yields bear on an instrument outside the stock market, around its own
@@ -309,6 +319,32 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
         rates_rule=_RATES_RULE,
         overnight_since="the session reopened at 18:00 ET",
         prior_day="the previous full session, 18:00 ET to 17:00 ET",
+    ),
+    # The CNBC yield quotes the Today strip shows: no declared delay, the desk's
+    # 18:00-17:00 ET session calendar, and the change from the previous close in
+    # basis points. The instrument is a yield, so the rates rule is about itself
+    # and the curve, never "yields matter for" it as an outside input.
+    AssetClass.TREASURY_YIELD: AssetDefaults(
+        about=("The yield is a market interest rate set by trading in Treasury bonds almost "
+               "around the clock; Omarkets follows it from 18:00 ET to 17:00 ET the next "
+               "day, Sunday to Friday, the same hours as the futures. Its feed declares no "
+               "delay (see \"expected_delay\"). It is not a futures contract, so no "
+               "exchange sets a settle for it: its change today is measured in basis points "
+               "from the previous session's close, and its \"Prior settle\" level means "
+               "that close. The US stock market opens at 09:30 ET and closes at 16:00 ET. "
+               "Most US economic data is released at 08:30 ET."),
+        rates_rule=(
+            "{symbol} is itself a Treasury yield, so yields are not an outside input here: "
+            "\"bond_market\" lists it with the other Treasury yield and the curve (the "
+            "10-year minus the 2-year), each with its change today and over the past week. "
+            "{rates_link} A rising curve number means the curve steepened and a falling "
+            "one that it flattened; say so only from the curve's supplied change. Never "
+            "work out a spread yourself. Explain what the two yields and the curve did, "
+            "but do not claim one yield moved the other unless the facts support it."),
+        overnight_since="the session reopened at 18:00 ET",
+        prior_day="the previous full session, 18:00 ET to 17:00 ET",
+        move_size=("the typical daily range (high to low, in basis points), the current or "
+                   "last session's range compared with it (labelled with its date) and"),
     ),
 }
 
@@ -386,11 +422,8 @@ level has the dates it was "measured" over: say "yesterday" or "last week" only 
 the dates match, otherwise name the day. Mention the one or two levels that matter, \
 as plain facts (for example "{symbol} is above yesterday's high"). Never call a \
 level support, resistance or a breakout, and never predict whether it will hold.
-16. "normal_move_size" says how big {symbol}'s moves normally are: the typical daily \
-range (high to low), the current or last session's range compared with it (labelled \
-with its date), realised volatility (how much {symbol} has actually moved, as a \
-yearly rate) and {gauge_rule} Use it to say whether a move is big or ordinary for \
-{symbol} right now.
+16. "normal_move_size" says how big {symbol}'s moves normally are: {move_size} \
+{gauge_rule} Use it to say whether a move is big or ordinary for {symbol} right now.
 17. "macro_trends" is the recent direction of key economic data (inflation, jobs, \
 growth, the Fed's rate): the latest reading, whether it has been rising, falling or \
 steady, and how the last release compared with forecasts. {macro_rule} Use it for \
@@ -515,19 +548,74 @@ def _v9(spec: InstrumentSpec) -> Profile:
     system = _V9_SYSTEM.format(
         **fields, what=spec.what, about=defaults.about, rates_rule=rates_rule,
         overnight_since=defaults.overnight_since, prior_day=defaults.prior_day,
+        move_size=defaults.move_size.format(**fields),
         drivers=spec.drivers, forecast_rule=spec.forecast_rule.format(**fields),
         gauge_rule=spec.gauge_rule.format(**fields),
         benchmark_rule=spec.benchmark_rule.format(**fields) + (
             _COMPARABLE_RULE if spec.participation else ""),
         megacap_rule=spec.megacap_rule.format(**fields),
         macro_rule=spec.macro_rule.format(**fields),
-        rates_field=(_RATES_FIELD if yields else _NO_RATES_FIELD).format(**fields))
+        rates_field=((spec.rates_field or _RATES_FIELD) if yields
+                     else _NO_RATES_FIELD).format(**fields))
     templates = {**{kind: text for kind, text in _V9_INSTRUMENT_TASKS.items()
                     if kind in spec.kinds},
                  **(_V9_EVENT_TASKS if spec.events else {})}
     return Profile(system, {kind: text.format(**fields) for kind, text in templates.items()},
                    f"{defaults.about} {BASIS_POINT}",
                    rates_read_required=yields is not None)
+
+
+#: What the two Treasury yields share in desk:v9 (each is its own profile).
+_YIELD_TONE = (
+    "These are tendencies, not rules: when the supplied facts show the {years} yield moving "
+    "against them, say so plainly. Here \"supportive\" means pushing the {years} yield up "
+    "(rates higher) and \"negative\" means pushing it down; neither is advice, and higher "
+    "yields are not good or bad in themselves.")
+_YIELD_GAUGE = ("no fear gauge: no Treasury volatility index (such as the MOVE index) is "
+                "supplied, so never use the VIX or VXN, which are stock-market gauges, as a "
+                "yield's.")
+_YIELD_BENCHMARK = (
+    "Yield notes get no \"nq_vs_es\". NQ (Nasdaq 100 futures), ES (S&P 500 futures) and the "
+    "US dollar in \"markets_today\" are other markets: use stocks only as context on "
+    "investors' appetite for risk (stocks and yields falling together can be a flight to "
+    "the safety of Treasuries) and the dollar as context on the Fed and US rates, and say "
+    "they are other markets, not the yield.")
+_YIELD_BENCHMARK_TASK = ("how stocks are doing (NQ and ES in markets_today) as context on "
+                         "appetite for risk")
+_YIELD_MEGACAP = ("Yield notes get no \"megacap_participation\": individual stocks are not a "
+                  "driver of Treasury yields, so leave them out unless a supplied headline "
+                  "ties one to yields.")
+_YIELD_FORECAST = (
+    "\"Above\"/\"below\" forecast is not automatically good or bad. Explain what it means "
+    "for the economy and the Fed's rate path, and therefore for {symbol}. For example, "
+    "hotter inflation than expected can push back expected Fed rate cuts, which often lifts "
+    "yields, usually the 2-year most; more jobless claims than expected is weaker news for "
+    "the economy and can bring cuts closer, which often pulls yields down. A rush into the "
+    "safety of Treasuries can pull yields down even on hot data, so say which way {symbol} "
+    "actually moved.")
+_YIELD_RATES_FIELD = ("- rates_read: max 70 words on how {{symbol}} moved alongside the "
+                      "{other} yield and what the supplied curve did (10-year minus 2-year).")
+_YIELD_ASK = ("what the {other} yield and the curve are doing (bond_market), the US dollar "
+              "(markets_today) as context, any headlines on the Fed, inflation, growth, "
+              "Treasury auctions or supply, or world news (say if the {years} yield is "
+              "moving against what they would usually suggest)")
+
+
+def _yield_spec(symbol: str, years: str, other: str, *, what: str, rates_link: str,
+                drivers: str, macro: str) -> InstrumentSpec:
+    """A Treasury yield's desk:v9 spec: its own wording plus what both yields share."""
+    return InstrumentSpec(
+        symbol=symbol, name=f"the US {years} Treasury yield", asset=AssetClass.TREASURY_YIELD,
+        what=f"{what} {_YIELD_TONE.format(years=years)}",
+        rates_link=rates_link, gauge_rule=_YIELD_GAUGE, benchmark_rule=_YIELD_BENCHMARK,
+        benchmark_task=_YIELD_BENCHMARK_TASK, megacap_rule=_YIELD_MEGACAP,
+        macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100), not yields; if "
+                    f"you use it, say it is about NQ. {macro}"),
+        participation=False,
+        kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
+        drivers=drivers, forecast_rule=_YIELD_FORECAST,
+        ask_drivers=_YIELD_ASK.format(other=other, years=years),
+        rates_field=_YIELD_RATES_FIELD.format(other=other))
 
 
 #: Reviewed desk:v9 instrument profiles. An instrument gets one only after its
@@ -760,6 +848,64 @@ SPECS: Mapping[str, InstrumentSpec] = {
                      "US growth or geopolitics (say if the dollar is moving against what "
                      "they would usually suggest)"),
     ),
+    "US2Y": _yield_spec(
+        "US2Y", "2-year", "10-year",
+        what=("US2Y is the yield on the 2-year US Treasury note: the yearly interest rate the "
+              "US government pays to borrow for two years, as set by trading in its bonds. It "
+              "is a constant-maturity yield (always measured for a two-year term), not a "
+              "futures price. In the facts it is called \"2-year yield\". Yields move the "
+              "opposite way to bond prices: when investors pay more for Treasuries, the yield "
+              "falls. Its level is a percentage and its moves are measured in basis points. "
+              "The 2-year is the Treasury yield most tied to the Federal Reserve: it often "
+              "rises when markets expect the Fed to keep its rate higher for longer "
+              "(\"hawkish\") or to cut later or by less, for example after hotter inflation "
+              "or stronger jobs data, and often falls when they expect cuts sooner or deeper "
+              "(\"dovish\"). Weaker growth, and worry that sends investors into the safety of "
+              "Treasuries (a \"flight to quality\"), also tend to pull it down. Supply "
+              "counts too: heavy Treasury supply (big auctions, larger deficits) can push "
+              "yields up, but supply usually matters more for longer maturities such as the "
+              "10-year."),
+        rates_link=("The 2-year sits closest to the Fed's rate, so it moves most on what "
+                    "markets expect the Fed to do over the next two years; the 10-year "
+                    "carries more of the long-run growth, inflation and term-premium story. "
+                    "When the 2-year rises more than the 10-year, the curve flattens; when it "
+                    "rises less or falls more, the curve steepens."),
+        drivers=("the Federal Reserve, inflation and jobs data, economic growth, appetite "
+                 "for risk and world news"),
+        macro=("For the 2-year, inflation, jobs and growth data matter mainly through what "
+               "they mean for the Fed's rate path."),
+    ),
+    "US10Y": _yield_spec(
+        "US10Y", "10-year", "2-year",
+        what=("US10Y is the yield on the 10-year US Treasury note: the yearly interest rate "
+              "the US government pays to borrow for ten years, as set by trading in its "
+              "bonds. It is a constant-maturity yield (always measured for a ten-year term), "
+              "not a futures price. In the facts it is called \"10-year yield\". Yields "
+              "move the opposite way to bond prices: when investors pay more for Treasuries, "
+              "the yield falls. Its level is a percentage and its moves are measured in "
+              "basis points. The 10-year is the benchmark long-term US interest rate "
+              "(mortgage rates and many company borrowing costs follow it). It reflects what "
+              "markets expect from the Fed over many years, but it is less tied to the Fed's "
+              "next few meetings than the 2-year: it also carries the outlook for long-run "
+              "growth and inflation, and a term premium, the extra yield investors want for "
+              "lending for ten years instead of rolling over short loans, which tends to "
+              "rise with worries about deficits, heavy Treasury supply (big auctions) or "
+              "inflation staying high. It often rises on stronger growth, hotter inflation, "
+              "signs the Fed will keep rates higher for longer (\"hawkish\"), heavy supply or "
+              "weak demand at Treasury auctions, and when investors move from bonds into "
+              "riskier assets; it often falls on weaker growth, cooler inflation, signs of "
+              "sooner Fed cuts (\"dovish\"), and when worry sends investors into the safety "
+              "of Treasuries (a \"flight to quality\")."),
+        rates_link=("The 10-year carries more of the long-run growth, inflation and "
+                    "term-premium story; the 2-year moves most on what markets expect the "
+                    "Fed to do over the next two years. When the 10-year rises more than the "
+                    "2-year, the curve steepens; when it rises less or falls more, the curve "
+                    "flattens."),
+        drivers=("the Federal Reserve, inflation, economic growth, Treasury supply, appetite "
+                 "for risk and world news"),
+        macro=("For the 10-year, inflation, jobs and growth data matter through the Fed's "
+               "rate path and through what they say about long-run growth and inflation."),
+    ),
 }
 
 #: Prompt profiles by version, then instrument symbol. desk:v8 is NQ's text
@@ -776,7 +922,7 @@ PROFILES: Mapping[str, Profile] = PROMPTS[PROMPT_VERSION]
 
 class NoPromptProfile(LookupError):
     """No prompt profile for this instrument at this version, or none for this
-    note kind (GOLD, WTI and DXY have no pre-market): refuse the note."""
+    note kind (GOLD, WTI, DXY, US2Y and US10Y have no pre-market): refuse the note."""
 
     def __init__(self, symbol: str, version: str = PROMPT_VERSION,
                  kind: NoteKind | None = None) -> None:

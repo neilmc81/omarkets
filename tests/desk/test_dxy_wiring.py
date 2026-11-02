@@ -1,7 +1,8 @@
 """Strip desk coverage after GOLD (and WTI) is DXY: the US Dollar Index is wired
 through the desk like GOLD.
 
-DXY is in the production default on desk:v9. DXY gets move and ask notes with
+DXY is in the production default on desk:v9, before the yields. DXY gets move
+and ask notes with
 its own 3-hour move limit, never a pre-market (its profile has no pre-market
 text at all), and its notes are written from its own prompt and say they are
 about the dollar index, never NQ. DXY is already on the Today strip, so its
@@ -37,7 +38,7 @@ from tests.desk.test_service import FakeWriter, cpi_rows, make
 
 DXY = ID.Instrument.of("DXY")
 #: Desk instruments without DXY: the defaults on main before it.
-BEFORE = tuple(s for s in ID.PRODUCTION_INSTRUMENTS if s != "DXY")
+BEFORE = ("NQ", "ES", "YM", "GOLD", "WTI")
 ALL = (*BEFORE, "DXY")
 #: The profiles that must not change: every v9 profile on main before DXY.
 OTHERS = ("NQ", "ES", "YM", "GOLD", "WTI")
@@ -77,12 +78,12 @@ def wti_quote(value=71.2, **kwargs):
 # --------------------------------------------------------------------------- defaults
 
 
-def test_dxy_is_last_in_the_default_desk_on_desk_v9():
-    assert ID.PRODUCTION_INSTRUMENTS == ALL
+def test_dxy_follows_wti_in_the_default_desk_on_desk_v9():
+    assert ID.PRODUCTION_INSTRUMENTS[:6] == ALL
     assert ID.PRODUCTION_INSTRUMENTS[:5] == ("NQ", "ES", "YM", "GOLD", "WTI")
-    assert ID.PRODUCTION_INSTRUMENTS[-1] == "DXY"
+    assert ID.PRODUCTION_INSTRUMENTS[5] == "DXY"
     settings = Settings(_env_file=None)
-    assert settings.desk_instruments == list(ALL)
+    assert settings.desk_instruments[:6] == list(ALL)
     assert settings.desk_prompt_version == "desk:v9"
     assert all(P.has_profile(s, version=P.V9) for s in settings.desk_instruments)
 
@@ -123,8 +124,8 @@ def test_dxy_is_the_existing_cnbc_index_feed_on_fx_index_defaults():
 
 
 def test_fx_index_defaults_leave_the_other_asset_classes_alone():
-    assert set(P.ASSET_DEFAULTS) == {AssetClass.EQUITY_INDEX_FUTURE, AssetClass.COMMODITY,
-                                     AssetClass.FX_INDEX}
+    assert {AssetClass.EQUITY_INDEX_FUTURE, AssetClass.COMMODITY,
+            AssetClass.FX_INDEX} <= set(P.ASSET_DEFAULTS)
     assert P.ASSET_DEFAULTS[AssetClass.FX_INDEX].rates_rule is not None
 
 

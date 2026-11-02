@@ -714,12 +714,14 @@ def price_location(levels: Any, price: float | None,
     while the window is running or the latest quote (``quote_at``, delayed)
     has not reached its end. Fields are named for the instrument
     (``nq_price``/``nq_is`` for NQ, ``es_price``/``es_is`` for ES). Prices and
-    gaps have two decimals, or the quote's own for DXY (:func:`_points_decimals`).
+    gaps have two decimals, or the quote's own for DXY (:func:`_points_decimals`);
+    a yield's levels are in percent and its gaps in basis points.
     """
     if price is None or not isfinite(price):
         return None
     sym = levels.symbol.lower()
     decimals = _points_decimals(levels.symbol, 2)
+    yields = levels.symbol in YIELD_SYMBOLS
     by_key = {level.key: level for level in levels.levels}
     rows: list[dict[str, Any]] = []
     overnight_so_far = False
@@ -727,10 +729,13 @@ def price_location(levels: Any, price: float | None,
         level = by_key.get(key)
         if level is None or level.value is None:
             continue
-        gap = round(price - level.value, decimals)
+        gap = round((price - level.value) * 100, 1) if yields else round(price - level.value,
+                                                                          decimals)
         side = "above" if gap > 0 else "below" if gap < 0 else "at"
-        row = {"level": level.label, "value": level.value_text,
-               f"{sym}_is": side if gap == 0 else f"{abs(gap):,.{decimals}f} points {side}"}
+        size = f"{abs(gap):.1f}bp" if yields else f"{abs(gap):,.{decimals}f} points"
+        row = {"level": level.label,
+               "value": _value_text(levels.symbol, level.value) if yields else level.value_text,
+               f"{sym}_is": side if gap == 0 else f"{size} {side}"}
         if level.window_start is not None and level.window_end is not None:
             row["measured"] = f"{_when(level.window_start)} to {_when(level.window_end)}"
         rows.append(row)
@@ -769,8 +774,11 @@ def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
     NQ's are VXN and VIX (:data:`VOL_INDEXES`). Unmeasurable parts are left
     out, and a finished session's range only when its quotes were complete.
     Ranges are in whole points, or ``symbol``'s quote precision for DXY
-    (:func:`_points_decimals`).
+    (:func:`_points_decimals`). A Treasury yield's are in basis points
+    (:func:`_yield_normal_move`).
     """
+    if symbol in YIELD_SYMBOLS:
+        return _yield_normal_move(size, trigger_bp=trigger_pct, trigger_scaled=trigger_scaled)
     out: dict[str, Any] = {}
     decimals = _points_decimals(symbol, 0)
     if size is not None and size.typical_range is not None:
@@ -802,8 +810,36 @@ def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
     if not out:
         return None
     out["large_move_trigger"] = (f"{trigger_pct:.2f}% in one hour, "
-                                 + ("scaled to the typical daily range" if trigger_scaled
-                                    else "fixed (not enough history to scale it)"))
+                                 + _trigger_basis(trigger_scaled))
+    return out
+
+
+def _trigger_basis(scaled: bool) -> str:
+    return ("scaled to the typical daily range" if scaled
+            else "fixed (not enough history to scale it)")
+
+
+def _yield_normal_move(size: Any, *, trigger_bp: float,
+                       trigger_scaled: bool) -> dict[str, Any] | None:
+    """:func:`normal_move` for a Treasury yield: ranges in basis points (a yield's
+    range is in percentage points), today's share of a typical day from those
+    ranges, the trigger in basis points, and no realised volatility or fear gauge
+    (a yearly percentage of a yield's level would mislead; no rates gauge is fed)."""
+    out: dict[str, Any] = {}
+    typical = size.typical_range if size is not None else None
+    if typical is not None:
+        out["typical_daily_range"] = f"{typical * 100:.1f}bp"
+        out["typical_measured_over"] = f"median of the last {size.sessions} complete sessions"
+    if size is not None and size.today_range is not None and (
+            size.today_partial or size.today_complete):
+        today = f"{size.trade_date:%a %b %d} session: {size.today_range * 100:.1f}bp"
+        if typical:
+            today += f", {size.today_range / typical * 100:.0f}% of a typical day"
+        out["session_range_so_far" if size.today_partial else "session_range"] = today
+    if not out:
+        return None
+    out["large_move_trigger"] = f"{trigger_bp:.1f}bp in one hour, " + _trigger_basis(
+        trigger_scaled)
     return out
 
 
