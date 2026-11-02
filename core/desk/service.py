@@ -730,7 +730,8 @@ class DeskService:
             self._move_size(now, inst),
             state.instruments.get(gauge) if gauge else None,
             state.instruments.get(benchmark) if benchmark else None,
-            trigger_pct=trigger, trigger_scaled=scaled, gauge=gauge or "", benchmark=benchmark)
+            trigger_pct=trigger, trigger_scaled=scaled, gauge=gauge or "", benchmark=benchmark,
+            symbol=inst.symbol)
         return {**self._location(now, inst),
                 **({"normal_move_size": normal} if normal else {}),
                 **F.participation(state, inst.symbol)}

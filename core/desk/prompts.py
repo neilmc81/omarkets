@@ -208,6 +208,10 @@ class AssetDefaults:
     #: instrument's own sentence), or ``None`` where yields don't matter: then
     #: ``rates_read`` is optional and the prompt says to leave it out.
     rates_rule: str | None
+    #: Rule 15: when the overnight range starts and what the prior day is.
+    #: Futures by default; an index such as DXY has no futures session.
+    overnight_since: str = "futures reopened"
+    prior_day: str = "the previous full futures session"
 
 
 @dataclass(frozen=True)
@@ -303,6 +307,8 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
                "The US stock market opens at 09:30 ET and closes at 16:00 ET. Most US "
                "economic data is released at 08:30 ET."),
         rates_rule=_RATES_RULE,
+        overnight_since="the session reopened at 18:00 ET",
+        prior_day="the previous full session, 18:00 ET to 17:00 ET",
     ),
 }
 
@@ -373,9 +379,9 @@ stands now, after revision) and "revision" (how far it moved, when known). Menti
 revision in plain words when it changes the picture. If neither field is present, \
 do not mention revisions.
 15. "{location}" says where {symbol} is against fixed price levels ("{sym}_is"): \
-the prior settle, the overnight high and low (since futures reopened; \
+the prior settle, the overnight high and low (since {overnight_since}; \
 "overnight_so_far" means that range is not complete yet), the prior day's high and \
-low (the previous full futures session) and the prior week's high and low. Each \
+low ({prior_day}) and the prior week's high and low. Each \
 level has the dates it was "measured" over: say "yesterday" or "last week" only when \
 the dates match, otherwise name the day. Mention the one or two levels that matter, \
 as plain facts (for example "{symbol} is above yesterday's high"). Never call a \
@@ -508,6 +514,7 @@ def _v9(spec: InstrumentSpec) -> Profile:
                   "the facts tie them to this note.".format(**fields))
     system = _V9_SYSTEM.format(
         **fields, what=spec.what, about=defaults.about, rates_rule=rates_rule,
+        overnight_since=defaults.overnight_since, prior_day=defaults.prior_day,
         drivers=spec.drivers, forecast_rule=spec.forecast_rule.format(**fields),
         gauge_rule=spec.gauge_rule.format(**fields),
         benchmark_rule=spec.benchmark_rule.format(**fields) + (

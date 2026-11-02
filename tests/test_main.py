@@ -237,6 +237,8 @@ def test_wti_is_wired_through_under_desk_v9(tmp_path):
 
     app = build_app(_desk_settings(tmp_path, desk_instruments=["NQ", "WTI"]))
     assert [i.symbol for i in app.state.desk.instruments] == ["NQ", "WTI"]
+
+
 def test_enabling_dxy_under_desk_v8_is_refused_with_a_fix(tmp_path):
     from core.main import DeskConfigError, build_app
 

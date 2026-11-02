@@ -1,13 +1,16 @@
-"""Key price levels for a futures symbol (NQ on Today and the Chart page).
+"""Key price levels for a desk instrument: the futures (NQ on Today and the
+Chart page) and the DXY index, on the same 18:00-17:00 ET session calendar.
 
 Deterministic, from stored observations and the session engine:
 
-* **Overnight high / low** — the highest and lowest price from the Globex open
-  (18:00 ET the evening before) to the cash open (09:30 ET), or "so far" before
-  09:30 ET.
+* **Overnight high / low** — the highest and lowest price from the session open
+  (18:00 ET the evening before; the Globex open for the futures) to the cash
+  open (09:30 ET), or "so far" before 09:30 ET.
 * **Prior settle** — the previous session's settlement as reported by the quote
   source (the instrument's ``previous_close``); today's change is measured from it.
-* **Prior day high / low** — the previous full Globex session (18:00–17:00 ET).
+  An index has no settle, so for DXY this is the previous session's close.
+* **Prior day high / low** — the previous full session (18:00–17:00 ET; Globex
+  for the futures).
 * **Prior week high / low** — every session of the previous Monday–Friday week.
 * **Gap vs settle** — before the cash open, the latest price minus the prior
   settle; from 09:30 ET, the first price at or after the cash open minus it.

@@ -99,7 +99,14 @@ so a restart cannot produce a duplicate note or notification.
   (supportive) or down (negative), never advice; like gold it gets no
   `nq_vs_es`, megacap count or fear gauge, and move and ask tasks only. Like
   WTI it has its own `drivers`, `forecast_rule` and `ask_drivers`: a data
-  surprise is read through the US economy and the Fed's rate path.
+  surprise is read through the US economy and the Fed's rate path. The
+  FX-index defaults also set rule 15's wording (`overnight_since`,
+  `prior_day`: the session reopening at 18:00 ET and the previous full
+  18:00–17:00 ET session, not "futures"), and DXY is the one instrument in
+  `facts.QUOTE_PRECISION_SYMBOLS`: its `dxy_price`, `dxy_is` gaps and
+  `normal_move_size` ranges use its 3-decimal quote precision, since its daily
+  range is usually under one point. Every other instrument keeps two-decimal
+  gaps and whole-point ranges.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
   matter (every equity index future, gold and DXY). Each note task has a length target, recorded by
   `eval check` and never retried. v9 notes get `recent_lessons` in their facts

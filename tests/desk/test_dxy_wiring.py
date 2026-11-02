@@ -327,6 +327,76 @@ async def test_enabling_dxy_leaves_nq_es_ym_gold_and_wti_facts_byte_for_byte():
     assert with_dxy == await ask_facts(BEFORE)
 
 
+# --------------------------------------------------------------------------- precision
+
+
+def dxy_size():
+    """A normal DXY day: the whole session moves well under one index point."""
+    from tests.desk.test_normal_move import size
+    return size(typical_range=0.42, typical_range_pct=0.4207, today_range=0.62,
+                today_range_pct=0.6211)
+
+
+def test_dxy_s_sub_one_point_ranges_keep_their_decimals():
+    facts = F.normal_move(dxy_size(), None, None, trigger_pct=0.3, trigger_scaled=True,
+                          gauge="", benchmark=None, symbol="DXY")
+    assert facts["typical_daily_range"] == "0.420 points (0.42%)"
+    assert facts["session_range_so_far"].endswith(
+        "session: 0.620 points (0.62%), 148% of a typical day")
+
+
+def test_a_dxy_note_states_its_range_at_quote_precision_and_nq_s_is_unchanged():
+    from tests.desk.test_normal_move import size
+    service, _, _ = desk(MOVE_AT)
+    service.sources.market_state().instruments.update(DXY=dxy_quote(at=MOVE_AT))
+    service._move_size = lambda now, inst=ID.NQ: dxy_size() if inst == DXY else size()
+    dollar = service._nq_context(MOVE_AT, DXY)["normal_move_size"]
+    assert dollar["typical_daily_range"] == "0.420 points (0.42%)"
+    nq = service._nq_context(MOVE_AT)["normal_move_size"]
+    assert nq["typical_daily_range"] == "451 points (1.46%)"
+
+
+def level(key, value, text):
+    return SimpleNamespace(key=key, value=value, label=key, value_text=text,
+                           window_start=None, window_end=None, partial=False)
+
+
+def test_dxy_s_price_location_uses_its_three_decimal_quotes():
+    levels = SimpleNamespace(symbol="DXY", levels=[
+        level("prior_settle", 99.512, "99.512"), level("prior_day_high", 99.844, "99.844")])
+    location = F.price_location(levels, 99.514)
+    assert location["dxy_price"] == "99.514"
+    assert [row["dxy_is"] for row in location["levels"]] == [
+        "0.002 points above", "0.330 points below"]
+
+
+def test_other_instruments_keep_their_two_decimal_location_text():
+    levels = SimpleNamespace(symbol="WTI", levels=[level("prior_settle", 71.0, "71.00")])
+    location = F.price_location(levels, 71.2)
+    assert location["wti_price"] == "$71.20"
+    assert location["levels"][0]["wti_is"] == "0.20 points above"
+
+
+def location_rule(symbol: str) -> str:
+    system = P.PROMPTS[P.V9][symbol].system
+    return next(line for line in system.splitlines() if line.startswith("15. "))
+
+
+def test_dxy_s_location_rule_speaks_of_its_own_session_not_futures():
+    rule = location_rule("DXY")
+    assert "futures" not in rule
+    assert "the overnight high and low (since the session reopened at 18:00 ET;" in rule
+    assert "the prior day's high and low (the previous full session, 18:00 ET to " \
+        "17:00 ET)" in rule
+
+
+@pytest.mark.parametrize("symbol", OTHERS)
+def test_the_futures_keep_their_futures_location_rule(symbol):
+    rule = location_rule(symbol)
+    assert "(since futures reopened;" in rule
+    assert "(the previous full futures session)" in rule
+
+
 # --------------------------------------------------------------------------- moves
 
 

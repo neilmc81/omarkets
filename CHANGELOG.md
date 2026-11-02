@@ -18,6 +18,11 @@
   feeds carry US yields only, so notes never claim the gap with other
   countries' rates. Dollar notes get no NQ vs ES comparison, megacap count or
   fear gauge (the feeds have no currency gauge; the VIX is never used as one).
+  A normal dollar day moves less than one index point, so dollar notes give
+  their price, the distance to each level and the day's range to three
+  decimals (for example "0.420 points (0.42%)", not "0 points"), and describe
+  the overnight and prior-day levels by the index's own 18:00–17:00 ET session
+  rather than a futures session.
   NQ, ES, YM, gold and oil notes are unchanged. That means a few more notes
   and a little more AI spend each week, though a one-hour move big enough to
   trigger a dollar note is rare. To leave DXY out, set
