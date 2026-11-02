@@ -202,8 +202,8 @@
   and the sources/diagnostics section is gone from the popup (it stays in the
   web app's status panel). Demo quotes are dimmed, tagged DEMO and never
   coloured as helping or hurting NQ, and the footer warns "DEMO data, not real
-  prices"; delayed quotes are labelled (once in the footer when all are
-  delayed, per row when the feeds are mixed). After updating, run
+  prices". The widget does not label delayed quotes; the Today page shows
+  delayed vs live under the asset strip. After updating, run
   `omarchy-restart-shell` to see it.
 - The bar popup's data now includes a 24-hour sparkline for each row, last
   week's high and low for the focus instrument, and for each quote a short
