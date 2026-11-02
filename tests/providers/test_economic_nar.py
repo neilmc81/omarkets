@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 
-from core.providers.economic_nar import parse_release, release_url
+from core.providers.economic_base import ReleasePending
+from core.providers.economic_nar import NARReleasesProvider, parse_release, release_url
 
 NOW = datetime(2026, 10, 13, 15, tzinfo=UTC)
 URL = 'https://www.nar.realtor/newsroom/existing-home-sales-test'
@@ -99,3 +101,17 @@ def test_subtype_rate_in_national_section_is_rejected():
                              b'decreased year-over-year')
     with pytest.raises(ValueError):
         parse_release(body, URL, NOW)
+
+
+async def test_release_stamped_later_today_is_pending_not_feed_down():
+    early = datetime(2026, 10, 13, 13, 59, tzinfo=UTC)  # release stamped 14:01 UTC
+    with pytest.raises(ReleasePending):
+        parse_release(release(), URL, early)
+    listing = f'<a href="{URL}">Read the full news release</a>'.encode()
+
+    def handler(request):
+        return httpx.Response(200, content=release() if str(request.url) == URL else listing)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        batch = await NARReleasesProvider(client, clock=lambda: early).fetch()
+    assert batch.status == "healthy" and batch.events == [] and batch.issues == []

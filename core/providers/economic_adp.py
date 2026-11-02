@@ -1,16 +1,22 @@
-"""Bounded public ADP issuer releases; no payroll estimates or calendar guesses."""
+"""Bounded public ADP issuer releases; no payroll estimates, only an expected-release check."""
 
 from __future__ import annotations
 
 import calendar
 import hashlib
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from core.domain.economics import EconomicEvent
-from core.providers.economic_base import EconomicBatch, EconomicProviderError
+from core.domain.market_calendar import is_trading_day
+from core.providers.economic_base import (
+    EconomicBatch,
+    EconomicProviderError,
+    ReleasePending,
+    require_published,
+)
 from core.providers.economic_calendars import stable_id
 from core.providers.economic_http import HttpEconomicProvider
 from core.providers.economic_ism_newswire import _HTML
@@ -20,6 +26,13 @@ LISTINGS = (ORIGIN + "/workforce-data-releases?l=9", ORIGIN + "/press-releases?l
 NY = ZoneInfo("America/New_York")
 HEADERS = {"User-Agent": "Omarkets/0.1 (local economic calendar)", "Accept": "text/html"}
 NUMBER = r"-?\d{1,3}(?:,\d{3})*"
+# Listing links older than this are ignored. It must reach back past the
+# longest gap between monthly releases (36 days) with room to spare.
+DISCOVERY_DAYS = 42
+# ADP publishes both reports at 08:15 ET. A report missing before its expected
+# time plus this grace is simply not out yet, not a fault.
+RELEASE_TIME = time(8, 15)
+RELEASE_GRACE = timedelta(hours=1)
 
 
 class _ReleaseHTML(_HTML):
@@ -70,7 +83,7 @@ def discover_releases(body: bytes, now: datetime) -> list[str]:
             continue
         published_day = datetime.fromisoformat(match[1]).date()
         if (
-            now.astimezone(NY).date() - timedelta(days=35)
+            now.astimezone(NY).date() - timedelta(days=DISCOVERY_DAYS)
             <= published_day
             <= now.astimezone(NY).date()
         ):
@@ -184,8 +197,7 @@ def parse_release(body: bytes, url: str, now: datetime) -> EconomicEvent:
         if revisions:
             previous, revised = (float(value.replace(",", "")) for value in revisions[0])
         frequency, unit, name = "monthly", "jobs", "ADP Non-Farm Employment Change"
-    if published > now:
-        raise ValueError("ADP publication is in the future")
+    require_published(published, now, "ADP release")
     identity = f"{day:%Y-%m-%d}:{frequency}"
     return EconomicEvent(
         id=stable_id("adp_releases", identity),
@@ -212,6 +224,105 @@ def parse_release(body: bytes, url: str, now: datetime) -> EconomicEvent:
     )
 
 
+def reference_week_end(year: int, month: int) -> date:
+    """Saturday ending the BLS reference week (Sunday to Saturday) holding the 12th."""
+    twelfth = date(year, month, 12)
+    return twelfth + timedelta(days=(5 - twelfth.weekday()) % 7)
+
+
+def jobs_report_friday(year: int, month: int) -> date:
+    """Friday of the BLS jobs-report week for reference ``month``/``year``.
+
+    BLS rule: the third Friday after the reference week. A New Year date
+    (Jan 1-3) moves a week later, as on Jan 9, 2026 and Jan 8, 2027. (A holiday
+    Friday such as Jul 3, 2026 moves the report to Thursday, but the week is the
+    same.) Matches FRED's Employment Situation slots for Aug-Dec 2026.
+    """
+    day = reference_week_end(year, month) + timedelta(days=20)
+    if day.month == 1 and day.day <= 3:
+        day += timedelta(days=7)
+    return day
+
+
+def monthly_release_day(year: int, month: int) -> date:
+    """ADP monthly report day for reference ``month``: Wednesday of jobs-report week.
+
+    When Monday, Tuesday or Wednesday of that week is a market holiday, ADP
+    publishes on the next trading day instead (Thu Sep 4, 2025 after Labor
+    Day; Thu Jan 4, 2024 after New Year's Day).
+    """
+    monday = jobs_report_friday(year, month) - timedelta(days=4)
+    day = monday + timedelta(days=2)
+    if not all(is_trading_day(monday + timedelta(days=n)) for n in range(3)):
+        day += timedelta(days=1)
+    while not is_trading_day(day):
+        day += timedelta(days=1)
+    return day
+
+
+def _months_back(around: date, count: int) -> list[tuple[int, int]]:
+    months = []
+    for back in range(count - 1, -1, -1):
+        year, month = around.year, around.month - back
+        while month < 1:
+            year, month = year - 1, month + 12
+        months.append((year, month))
+    return months
+
+
+def _monthly_slots(around: date) -> list[date]:
+    return [monthly_release_day(year, month) for year, month in _months_back(around, 4)]
+
+
+def weekly_release_day(week_start: date) -> date | None:
+    """ADP weekly report day in the week starting Monday ``week_start``.
+
+    Tuesdays; after a Monday or Tuesday market holiday it moves to the next
+    trading day (Wed Sep 9, 2026 after Labor Day). ADP skips the weekly whose
+    window holds a monthly reference week, which is the week of the monthly
+    report (none on Tue Sep 29, 2026 before the Sep 30 monthly) except when New
+    Year pushes the jobs report back a week: then the skipped week is the one
+    holding the Tuesday 17 days after the reference week ends (none on Tue Dec
+    29, 2026, though the December monthly is Wed Jan 6, 2027).
+    """
+    week = (week_start, week_start + timedelta(days=7))
+    if any(week[0] <= slot < week[1] for slot in _monthly_slots(week_start)):
+        return None
+    if any(
+        week[0] <= reference_week_end(year, month) + timedelta(days=17) < week[1]
+        for year, month in _months_back(week_start, 2)
+    ):
+        return None
+    day = week_start + timedelta(days=1)
+    if not is_trading_day(week_start) or not is_trading_day(day):
+        day += timedelta(days=1)
+        while not is_trading_day(day):
+            day += timedelta(days=1)
+    return day
+
+
+def _at_release(day: date) -> datetime:
+    return datetime.combine(day, RELEASE_TIME, tzinfo=NY).astimezone(UTC)
+
+
+def latest_due_release(family: str, now: datetime) -> datetime | None:
+    """The most recent expected ADP release for ``family`` that is past its grace."""
+    today = now.astimezone(NY).date()
+    if family == "monthly":
+        candidates = _monthly_slots(today)
+    else:
+        monday = today - timedelta(days=today.weekday())
+        candidates = [
+            day
+            for weeks in range(4)
+            if (day := weekly_release_day(monday - timedelta(weeks=weeks))) is not None
+        ]
+    return max(
+        (_at_release(day) for day in candidates if _at_release(day) + RELEASE_GRACE <= now),
+        default=None,
+    )
+
+
 class ADPReleasesProvider(HttpEconomicProvider):
     provider_name = "adp_releases"
 
@@ -229,11 +340,30 @@ class ADPReleasesProvider(HttpEconomicProvider):
                 events.append(
                     parse_release(await self.request("GET", url, headers=HEADERS), url, now)
                 )
+            except ReleasePending:
+                continue
             except (EconomicProviderError, ValueError, UnicodeError):
                 issues.append("ADP release unsupported, unavailable or rejected: " + url)
         for family in ("weekly", "monthly"):
-            if not any(event.frequency == family for event in events):
-                issues.append(f"No verified ADP {family} actuals in bounded 35-day issuer coverage")
+            # Nothing new before the next expected release is normal. Only a
+            # report still missing after its expected time plus grace is an
+            # issue. A release anywhere in the expected slot's week counts, so
+            # a one-day schedule shift is not flagged.
+            due = latest_due_release(family, now)
+            if due is None:
+                continue
+            due_local = due.astimezone(NY)
+            week_start = due_local.date() - timedelta(days=due_local.weekday())
+            if not any(
+                event.frequency == family
+                and event.released_at is not None
+                and event.released_at.astimezone(NY).date() >= week_start
+                for event in events
+            ):
+                issues.append(
+                    f"ADP {family} report not found after its expected release "
+                    f"({due_local:%a %b %d}, 08:15 ET)"
+                )
         return EconomicBatch(
             provider=self.name,
             checked_at=now,

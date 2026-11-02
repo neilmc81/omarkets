@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from core.domain.economics import EconomicEvent
-from core.providers.economic_base import EconomicBatch
+from core.providers.economic_base import EconomicBatch, ReleasePending, require_published
 from core.providers.economic_calendars import stable_id
 from core.providers.economic_http import HttpEconomicProvider
 
@@ -29,8 +29,9 @@ def parse_release(body: bytes, now: datetime) -> EconomicEvent:
         raise ValueError("G17 official header unavailable")
     date = datetime.strptime(f"{header[2]} {header[3]}, {header[4]}", "%B %d, %Y")
     published = date.replace(hour=9, minute=15, tzinfo=NY)
-    if published.tzname() != header[1] or published > now:
-        raise ValueError("G17 publication time invalid or future")
+    if published.tzname() != header[1]:
+        raise ValueError("G17 publication time invalid")
+    require_published(published, now, "G17 release")
     # The official g17.txt carries only the tables (checked Oct 21, 2026); a
     # narrative headline, when present, must agree with the total-index table.
     headline = re.search(
@@ -105,5 +106,8 @@ class FedG17Provider(HttpEconomicProvider):
     provider_name = "fed_g17"
 
     async def collect(self, now: datetime) -> EconomicBatch:
-        event = parse_release(await self.request("GET", G17_URL), now)
-        return EconomicBatch(provider=self.name, checked_at=now, events=[event], status="healthy")
+        try:
+            events = [parse_release(await self.request("GET", G17_URL), now)]
+        except ReleasePending:
+            events = []
+        return EconomicBatch(provider=self.name, checked_at=now, events=events, status="healthy")

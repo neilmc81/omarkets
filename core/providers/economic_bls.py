@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from core.analysis.economics import numeric, transform_history
 from core.domain.economics import MacroInput
@@ -11,6 +12,16 @@ from core.providers.economic_base import EconomicBatch
 from core.providers.economic_http import HttpEconomicProvider
 
 BLS_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
+_ET = ZoneInfo("America/New_York")
+# BLS publishes at 08:30 ET (CPI, jobs, PPI) and 10:00 ET (JOLTS). Its API
+# often fails or serves incomplete data for a moment right at the bell, so a
+# failed or issue-bearing check from just before a release time until shortly
+# after it is retried a few times before it counts as an issue.
+_RELEASE_TIMES = (time(8, 30), time(10, 0))
+_BELL_BEFORE = timedelta(minutes=2)
+_BELL_AFTER = timedelta(minutes=15)
+_BELL_RETRY_SECONDS = 60
+_BELL_RETRIES = 4
 BLS_INPUT_UNITS = {
     "CUSR0000SA0": "index points",
     "CUUR0000SA0": "index points",
@@ -25,6 +36,18 @@ BLS_INPUT_UNITS = {
     "WPSFD49104": "index points",
     "WPUFD49104": "index points",
 }
+
+
+def near_release(now: datetime) -> bool:
+    """Whether ``now`` is at a BLS release bell on a weekday (ET)."""
+    local = now.astimezone(_ET)
+    if local.weekday() >= 5:
+        return False
+    for release in _RELEASE_TIMES:
+        bell = datetime.combine(local.date(), release, tzinfo=_ET)
+        if bell - _BELL_BEFORE <= local < bell + _BELL_AFTER:
+            return True
+    return False
 
 
 class BLSEconomicProvider(HttpEconomicProvider):
@@ -45,6 +68,29 @@ class BLSEconomicProvider(HttpEconomicProvider):
         return await self.json_request("POST", BLS_URL, json=body)
 
     async def collect(self, now: datetime) -> EconomicBatch:
+        # A failed request or a batch with issues (missing, invalid or not yet
+        # filled series) is retried at the bell; the last result stands.
+        retries = 0
+        while True:
+            try:
+                batch = await self._collect_once(now)
+            except Exception:
+                if not await self._wait_to_retry(retries):
+                    raise
+            else:
+                if not batch.issues or not await self._wait_to_retry(retries):
+                    return batch
+            retries += 1
+            now = self.clock()
+
+    async def _wait_to_retry(self, retries: int) -> bool:
+        """Sleep before another try if still at a release bell (fresh clock)."""
+        if retries >= _BELL_RETRIES or not near_release(self.clock()):
+            return False
+        await self.sleep(_BELL_RETRY_SECONDS)
+        return True
+
+    async def _collect_once(self, now: datetime) -> EconomicBatch:
         payload = await self._post(now, with_key=True)
         if payload.get("status") != "REQUEST_SUCCEEDED":
             messages = " ".join(str(item) for item in payload.get("message", []))

@@ -16,7 +16,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.domain.economics import EconomicEvent
-from core.providers.economic_base import EconomicBatch
+from core.providers.economic_base import EconomicBatch, ReleasePending, require_published
 from core.providers.economic_calendars import stable_id
 from core.providers.economic_http import HttpEconomicProvider
 
@@ -40,18 +40,32 @@ _HEADLINE = re.compile(
 
 
 def parse_listing(body: bytes, now: datetime) -> list[EconomicEvent]:
-    """Every consumer-confidence release card on the listing page."""
-    events = []
+    """Every published consumer-confidence release card on the listing page."""
+    return read_listing(body, now)[0]
+
+
+def read_listing(body: bytes, now: datetime) -> tuple[list[EconomicEvent], int]:
+    """Published release cards, plus how many cards are stamped a moment ahead.
+
+    A pending card (listed shortly before its stated time) is skipped before
+    its headline is read, and counted so the check is not called missing.
+    """
+    events, pending = [], 0
     for link, stamp, title, summary in _CARD.findall(body.decode("utf-8")):
         title, summary = html.unescape(title).strip(), html.unescape(summary)
         if not title.lower().startswith("us consumer confidence"):
+            continue
+        released = datetime.strptime(stamp, "%b %d, %Y, %H:%M").replace(tzinfo=NY)
+        try:
+            require_published(released, now, "consumer confidence release")
+        except ReleasePending:
+            pending += 1
             continue
         match = _HEADLINE.search(summary)
         if match is None:
             raise ValueError("consumer confidence headline not recognised")
         actual, month, previous, prior_month = match.groups()
-        released = datetime.strptime(stamp, "%b %d, %Y, %H:%M").replace(tzinfo=NY)
-        if released > now or month not in MONTHS:
+        if month not in MONTHS:
             raise ValueError("invalid consumer confidence release")
         year = released.year - (1 if MONTHS[month] > released.month else 0)
         period = f"{year:04d}-{MONTHS[month]:02d}"
@@ -85,18 +99,19 @@ def parse_listing(body: bytes, now: datetime) -> list[EconomicEvent]:
                 ],
             )
         )
-    return events
+    return events, pending
 
 
 class ConferenceBoardProvider(HttpEconomicProvider):
     provider_name = PROVIDER
 
     async def collect(self, now: datetime) -> EconomicBatch:
-        events = parse_listing(await self.request("GET", LIST_URL, headers=HEADERS), now)
+        events, pending = read_listing(await self.request("GET", LIST_URL, headers=HEADERS), now)
+        missing = not events and not pending
         return EconomicBatch(
             provider=self.name,
             checked_at=now,
             events=events,
-            issues=[] if events else ["No consumer confidence release on the listing page"],
-            status="healthy" if events else "degraded",
+            issues=["No consumer confidence release on the listing page"] if missing else [],
+            status="degraded" if missing else "healthy",
         )

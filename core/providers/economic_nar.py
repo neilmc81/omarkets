@@ -9,7 +9,7 @@ from urllib.parse import urljoin, urlsplit
 
 from core.domain.economics import EconomicEvent
 from core.providers.economic_adp import _ReleaseHTML
-from core.providers.economic_base import EconomicBatch
+from core.providers.economic_base import EconomicBatch, ReleasePending, require_published
 from core.providers.economic_calendars import stable_id
 from core.providers.economic_http import HttpEconomicProvider
 
@@ -44,8 +44,9 @@ def parse_release(body: bytes, url: str, now: datetime) -> EconomicEvent:
             or parts.query or parts.fragment):
         raise ValueError("invalid NAR issuer URL")
     published = datetime.fromisoformat(page.meta.get("article:published_time", ""))
-    if published.tzinfo is None or published > now:
-        raise ValueError("NAR publication time unavailable or future")
+    if published.tzinfo is None:
+        raise ValueError("NAR publication time unavailable")
+    require_published(published, now, "NAR release")
     text = " ".join(" ".join(page.text).split())
     # Limit extraction to the explicitly national total-sales section. Inventory,
     # regional and property-subtype figures outside it cannot supply an actual.
@@ -108,5 +109,8 @@ class NARReleasesProvider(HttpEconomicProvider):
 
     async def collect(self, now: datetime) -> EconomicBatch:
         url = release_url(await self.request("GET", NAR_URL))
-        event = parse_release(await self.request("GET", url), url, now)
-        return EconomicBatch(provider=self.name, checked_at=now, events=[event], status="healthy")
+        try:
+            events = [parse_release(await self.request("GET", url), url, now)]
+        except ReleasePending:
+            events = []
+        return EconomicBatch(provider=self.name, checked_at=now, events=events, status="healthy")
