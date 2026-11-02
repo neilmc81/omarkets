@@ -30,6 +30,17 @@ logger = logging.getLogger(__name__)
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 TEMPERATURE = 0.3
 
+#: Margin the cost guard reserves over the estimated cost of one call.
+RESERVE_PAD = 1.2
+#: DeepSeek's billed cost has outrun the 1.2x estimate (Nov 2026: reserved
+#: $0.003914, settled $0.004512), which blocks all AI until manual review.
+DEEPSEEK_RESERVE_PAD = 2.0
+
+
+def reserve_pad(model: str) -> float:
+    """The reservation margin for ``model``: wider for the DeepSeek family."""
+    return DEEPSEEK_RESERVE_PAD if model.startswith("deepseek/") else RESERVE_PAD
+
 #: Phrases that would turn an explanation into trading advice.
 _ADVICE = re.compile(
     r"\b(buy(ing)? (the dip|nq|calls|puts|now)|sell(ing)? (nq|calls|puts|now)|"
@@ -235,10 +246,11 @@ class DeskWriter:
         return (tokens_in * rate_in + self._max_output * rate_out) / 1e6
 
     def _bound(self, model: str, prompt: Prompt) -> float:
-        # ~3 characters per token is conservative for English/JSON; +20% margin.
+        # ~3 characters per token is conservative for English/JSON; plus the
+        # model's reservation margin (``reserve_pad``).
         rate_in, rate_out = self._rates_for(model)
         tokens_in = (len(prompt.system) + len(prompt.user)) / 3 + 200
-        return (tokens_in * rate_in + self._max_output * rate_out) / 1e6 * 1.2
+        return (tokens_in * rate_in + self._max_output * rate_out) / 1e6 * reserve_pad(model)
 
     def _prepare(self, kind: NoteKind, facts: dict[str, Any], instrument: Instrument | None,
                  model: str) -> Prompt | WriteResult:
