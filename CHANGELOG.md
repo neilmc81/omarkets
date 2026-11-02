@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The Omarkets widget explains its tile colours.** A one-line legend under
+  the rows reads "Colour = effect on NQ: ▲ helps · ▼ weighs on · – little
+  effect"; hovering it adds that grey means little or no effect on NQ, not a
+  broken tile.
+- **The widget no longer says "delayed".** The per-row tags, the footer note
+  and the bar tooltip's "feed DELAYED" are gone; the Today page under the asset
+  strip already shows delayed vs live. DEMO, stale, closed and unavailable are
+  still shown.
 - **The header button is now "Desk Note (E)"** (was "Explain the market
   now (E)"). Same note, same E shortcut.
 - **An ISM report that is not out yet no longer shows as a health issue.**

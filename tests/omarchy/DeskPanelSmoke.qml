@@ -119,16 +119,17 @@ ShellRoot {
       ensure(walk(popup, "omarkets-pill-VXN").color.a === 0, "no effect from the core: no fill")
       ensure(walk(popup, "omarkets-pill-US2Y").text === "-6.4bp", "yields in bp")
       ensure(walk(popup, "omarkets-footer-status").text.indexOf("all systems OK") > 0, "footer health")
-      // Every quote delayed (the usual case): said once in the footer, not per row.
-      ensure(walk(popup, "omarkets-footer-status").text.indexOf(" · delayed · ") > 0,
-        "footer says delayed: " + walk(popup, "omarkets-footer-status").text)
-      ensure(!walk(popup, "omarkets-tag-US2Y").visible && !walk(popup, "omarkets-hero-tag").visible, "no per-row delayed when all are")
-      // Mixed feeds: the delayed rows say so themselves.
+      // The legend explains the tile colours, grey included.
+      ensure(walk(popup, "omarkets-effect-legend").visible, "effect legend shown")
+      ensure(Qt.colorEqual(walk(popup, "omarkets-legend-neutral").children[0].color, popup.neutralColor), "legend grey is the neutral grey")
+      ensure(texts(walk(popup, "omarkets-effect-legend")).some(function(t) { return t.indexOf("little effect") >= 0 }), "legend names grey")
+      ensure(walk(popup, "omarkets-legend-tip").text.indexOf("not an error") > 0, "legend tooltip says grey is not broken")
+      // Delayed vs live lives on the Today page: no delayed wording in the popup.
+      ensure(texts(popup).every(function(t) { return t.indexOf("delayed") < 0 }), "no delayed wording")
       fake.crossMarket = shell.richRows().map(function(q) { if (q.symbol === "ES") q.feed_status = "live"; return q })
       wait(100)
-      ensure(walk(popup, "omarkets-tag-US2Y").visible && walk(popup, "omarkets-tag-US2Y").text === "delayed", "delayed row tagged")
-      ensure(!walk(popup, "omarkets-tag-ES").visible, "live row has no tag")
-      ensure(walk(popup, "omarkets-footer-status").text.indexOf("some delayed") > 0, "footer says some delayed")
+      ensure(!walk(popup, "omarkets-tag-US2Y").visible && !walk(popup, "omarkets-tag-ES").visible, "no per-row delayed/live tag")
+      ensure(texts(popup).every(function(t) { return t.indexOf("delayed") < 0 }), "no delayed wording with mixed feeds")
       // Demo data never looks real: tagged, dimmed, no effect colour, footer warns.
       fake.crossMarket = shell.richRows().map(function(q) { if (q.symbol === "VIX") q.feed_status = "demo"; return q })
       wait(100)
@@ -137,7 +138,6 @@ ShellRoot {
       ensure(walk(popup, "omarkets-pill-VIX").color.a === 0, "demo row: no nq_effect fill")
       ensure(walk(popup, "omarkets-footer-status").text.indexOf("DEMO data") === 0, "footer leads with demo")
       ensure(Qt.colorEqual(walk(popup, "omarkets-footer-status").color, popup.warnColor), "demo footer is not the quiet OK colour")
-      ensure(walk(popup, "omarkets-footer-status").text.indexOf("some delayed") > 0, "the rest are still delayed")
       fake.primary = Object.assign({}, shell.richRows()[1], { feed_status: "demo" })
       wait(100)
       ensure(walk(popup, "omarkets-hero-tag").text === "DEMO", "demo hero tagged")
