@@ -26,7 +26,10 @@ is green when the core's `nq_effect` says the move helps NQ, red when it hurts,
 a faint grey when neutral, and an unfilled outline when the core gives no
 effect (an older core, or a quote the risk-tone rules leave out). A ▲/▼/– next to each pill
 says the same without colour. A falling yield is therefore green. The popup
-never works an effect out itself.
+never works an effect out itself. A one-line legend under the rows
+("Colour = effect on NQ: ▲ helps · ▼ weighs on · – little effect") explains
+the colours; hovering it adds that grey means little or no effect, not an
+error.
 
 A shut market is said once, in the header ("Closed · opens in 15h 34m"), not
 on every row. A row whose feed is stale or unavailable while its market is open
@@ -36,9 +39,8 @@ Demo data never looks real. A quote whose feed is `demo` is dimmed, tagged
 **DEMO** beside its symbol, and drawn without an effect colour (its pill is an
 outline, its tooltip says "demo data, not a real price"); the footer then leads
 with "DEMO data, not real prices" and turns the warning colour, even when the
-health badges are all OK. Delayed quotes are said once in the footer ("· delayed") when
-every quote on screen is delayed, the usual case; when the feeds are mixed, each
-delayed row carries a small "delayed" tag and the footer says "some delayed".
+health badges are all OK. The popup does not label
+delayed quotes; the Today page under the asset strip shows delayed vs live.
 
 Missing sparklines, hero levels, short names or groups (an older core or
 collector) leave those parts out; the rows still render.
@@ -69,12 +71,12 @@ otherwise source edits can hot-reload independently of the backend. QML does not
 assemble notes or call a model. See the current repair ledger for the
 actual installed release and its live acceptance.
 
-The bar tooltip shows the focus quote's feed status as text:
+The bar tooltip shows the focus quote's feed status as text (a delayed feed,
+the usual case, is left unsaid; the Today page shows delayed vs live):
 
 | Status | Meaning |
 | --- | --- |
 | LIVE | live feed |
-| DELAYED | delayed source |
 | CLOSED | shut market; the last value from the latest session |
 | STALE | no fresh quote recently |
 | DEMO | synthetic (demo) |

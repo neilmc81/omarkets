@@ -166,7 +166,6 @@ Panel {
   // Synthetic data must never look real: a demo quote is dimmed, tagged DEMO
   // and shown without an effect colour, whatever the core says about it.
   function quoteDemo(q) { return !!q && q.feed_status === "demo" }
-  function quoteDelayed(q) { return !!q && q.feed_status === "delayed" }
   // The effect to draw: the core's, except on demo data.
   function shownEffect(q) { return q && !root.quoteDemo(q) ? q.nq_effect : null }
   // A live feed problem, not "the market is shut": shown by dimming the row.
@@ -181,15 +180,10 @@ Panel {
     return out
   }
   readonly property bool anyDemo: root.shownQuotes.some(root.quoteDemo)
-  readonly property int delayedCount: root.shownQuotes.filter(root.quoteDelayed).length
-  // "Delayed" is said once in the footer when every quote is delayed (the usual
-  // case), like "Closed" in the header; per row only when the feeds are mixed.
-  readonly property bool allDelayed: root.delayedCount > 0 && root.delayedCount === root.shownQuotes.length
-  function feedTag(q) {
-    if (root.quoteDemo(q)) return "DEMO"
-    if (root.quoteDelayed(q) && !root.allDelayed) return "delayed"
-    return ""
-  }
+  // Delayed vs live is shown on the Today page, not here; only demo is tagged.
+  function feedTag(q) { return root.quoteDemo(q) ? "DEMO" : "" }
+  // The legend appears once any shown quote carries an effect colour.
+  readonly property bool anyRated: root.shownQuotes.some(function(q) { return root.effectKnown(root.shownEffect(q)) })
   function sparkValues(symbol) {
     var line = root.sparklines ? root.sparklines[symbol] : null
     return line && Array.isArray(line.values) ? line.values : []
@@ -281,10 +275,6 @@ Panel {
     if (root.aiHealth !== "ok") parts.push("AI " + root.aiHealth)
     return parts.join(" · ")
   }
-  function feedNote() {
-    if (root.delayedCount === 0) return ""
-    return root.allDelayed ? "delayed" : "some delayed"
-  }
   function footerText() {
     if (!root.online)
       return (root.showSnapshot ? "Last known snapshot · " : "") + root.lastResponseText()
@@ -292,7 +282,6 @@ Panel {
     var parts = []
     if (root.anyDemo) parts.push("DEMO data, not real prices")
     if (asOf) parts.push("Data as of " + asOf)
-    if (root.feedNote()) parts.push(root.feedNote())
     parts.push(root.healthText())
     return parts.join(" · ")
   }
@@ -416,7 +405,7 @@ Panel {
     }
   }
 
-  // A small DEMO / delayed word beside a symbol; empty for live data.
+  // A small DEMO word beside a symbol; empty for real data.
   component FeedTag: Text {
     property var quote: null
     visible: text !== ""
@@ -798,6 +787,66 @@ Panel {
                 }
               }
             }
+          }
+        }
+
+        // ---- what the tile colours mean (grey is "little effect", not broken)
+        Item {
+          id: legend
+          objectName: "omarkets-effect-legend"
+          width: parent.width
+          visible: root.showSnapshot && root.anyRated
+          implicitHeight: legendRow.implicitHeight
+          Row {
+            id: legendRow
+            spacing: Style.spacing.xl
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Colour = effect on NQ:"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Repeater {
+              model: ["helps", "hurts", "neutral"]
+              delegate: Row {
+                required property string modelData
+                objectName: "omarkets-legend-" + modelData
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.spacing.sm
+                Rectangle {
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(10); height: width
+                  radius: Style.spacing.xs
+                  color: root.effectColor(parent.modelData)
+                }
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: root.effectGlyph(parent.modelData) + " " + (parent.modelData === "helps" ? "helps"
+                    : parent.modelData === "hurts" ? "weighs on" : "little effect")
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+            }
+          }
+          MouseArea {
+            id: legendHover
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+          }
+          PanelToolTip {
+            objectName: "omarkets-legend-tip"
+            visible: legendHover.containsMouse
+            // Short lines: the tooltip text does not wrap, so one long sentence
+            // would run far past the panel edge.
+            text: "Tile colour is the move's effect on NQ,\n"
+              + "not whether the price rose or fell.\n"
+              + "Green helps NQ, red weighs on it.\n"
+              + "Grey means little or no effect (not an error).\n"
+              + "An outline with no fill means no rating."
           }
         }
 

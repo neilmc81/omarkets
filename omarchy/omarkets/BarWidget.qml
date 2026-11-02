@@ -138,8 +138,10 @@ BarWidget {
     // The core picks the primary (the focus instrument); the bar only names it.
     var nq = service.primary
     if (!nq) return "Omarkets — " + service.focusSymbol + " unavailable\nClick for market context"
+    // Delayed vs live is shown on the Today page; the bar names only other states.
+    var feed = nq.market_closed ? "closed" : nq.status === "stale" || nq.status === "unavailable" ? nq.status : String(nq.feed_status || "unavailable")
     var line = nq.symbol + " " + root.fmtValue(nq.value) + " " + root.fmtChangePct(nq.change_pct)
-      + " · feed " + (nq.market_closed ? "closed" : nq.status === "stale" || nq.status === "unavailable" ? nq.status : String(nq.feed_status || "unavailable")).toUpperCase()
+      + (feed === "delayed" ? "" : " · feed " + feed.toUpperCase())
     if (service.nextEvent) {
       line += "\n" + root.eventShortName(service.nextEvent) + " "
         + (service.nextEvent.time_et || "") + " · in " + root.fmtCountdown(service.nextEvent.scheduled_at)
