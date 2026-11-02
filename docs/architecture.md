@@ -461,10 +461,16 @@ received after the scheduled time, the calendar can show that current-vintage
 value with explicit provenance. It does not assert the original release value
 or publication instant. ISM-issued public newswire releases supply Manufacturing
 PMI and Prices actuals when the issuer, reference month, 10 a.m. Eastern
-publication time, headline and table agree. The consensus calendar row shows
-those figures only on an exact time and event match; the stored source records
-remain separate. An ADP title containing "Non-Farm" is classified as ADP,
-not as the official payroll release. Source identities remain separate. For
+publication time, headline and table agree. A report not on the listing yet
+is pending, not a fault: the provider stays healthy until an hour after the
+expected release (Manufacturing on the first business day, Services on the
+third, 10:00 ET), and only then reports it as missing. ISM business days are
+NYSE trading days less ISM's January holiday on the first trading day of the
+year, which matches ISM's published 2025 and 2026 release calendars. The
+consensus calendar row shows those figures only on an exact time and event
+match; the stored source records remain separate. An ADP title containing
+"Non-Farm" is classified as ADP, not as the official payroll release. Source
+identities remain separate. For
 coincident CPI, payroll and JOLTS slots, the Stage 2 calendar API candidate's
 `display_groups` points to a primary display event and all
 related source event IDs, while `events` and stored revisions remain separate.

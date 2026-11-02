@@ -91,7 +91,7 @@ PRESS_CONFERENCE_WINDOW = timedelta(minutes=60)
 WATCH_AFTER = timedelta(minutes=50)
 #: The playbook behind the cards is recounted at most this often.
 PLAYBOOK_TTL = timedelta(minutes=30)
-ASK_REUSE = timedelta(minutes=15)  # "Explain the market now" reuses a note this recent
+ASK_REUSE = timedelta(minutes=15)  # A "Desk Note" request reuses a note this recent
 PRESS_CONFERENCE_DELAY = PRESS_CONFERENCE_WINDOW + FEED_DELAY + timedelta(minutes=1)
 LOOKBACK = timedelta(hours=6)  # never write about something older than this
 MAX_ATTEMPTS = 3
@@ -1142,7 +1142,7 @@ class DeskService:
             await self.notify(
                 f"Omarkets could not write: {note.title}",
                 f"Tried {MAX_ATTEMPTS} times; last error: {note.error or 'unknown'}. "
-                "Quotes and the calendar keep updating; press \"Explain the market now\" "
+                "Quotes and the calendar keep updating; press \"Desk Note\" "
                 "for a fresh note.",
             )
         except Exception:  # noqa: BLE001 - notification is best effort

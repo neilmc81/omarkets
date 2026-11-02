@@ -6,12 +6,13 @@ import asyncio
 import calendar
 import hashlib
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from html.parser import HTMLParser
 from typing import Literal
 from zoneinfo import ZoneInfo
 
 from core.domain.economics import EconomicEvent, MacroObservation, MacroProvenance
+from core.domain.market_calendar import is_trading_day
 from core.providers.economic_base import EconomicBatch, EconomicProviderError
 from core.providers.economic_calendars import stable_id
 from core.providers.economic_http import HttpEconomicProvider
@@ -21,6 +22,14 @@ ORIGIN = "https://www.prnewswire.com"
 HEADERS = {"User-Agent": "Omarkets/0.1 (local economic calendar)", "Accept": "text/html"}
 _NUM = re.compile(r"\d{1,3}(?:\.\d+)?")
 _DATE = re.compile(r"\b([A-Z][a-z]{2} \d{2}, \d{4}, \d{1,2}:\d{2} ET)\b")
+_ET = ZoneInfo("America/New_York")
+# ISM publishes Manufacturing on the 1st business day and Services on the 3rd,
+# both at 10:00 ET. A report missing before then is simply not out yet.
+# ISM business days are NYSE trading days except ISM's own January holiday:
+# the first trading day of the year (Jan 2 in 2025 and 2026), which moved the
+# December reports to Jan 3/7, 2025 and Jan 5/7, 2026 on ISM's calendar.
+_RELEASE_BUSINESS_DAY = {"manufacturing": 1, "services": 3}
+_LISTING_GRACE = timedelta(hours=1)
 
 
 class _HTML(HTMLParser):
@@ -189,11 +198,41 @@ def parse_release(
     return published, values[pmi_label], values["Prices"]
 
 
+def _is_ism_business_day(day: date) -> bool:
+    if not is_trading_day(day):
+        return False
+    if day.month == 1:
+        first = date(day.year, 1, 1)
+        while not is_trading_day(first):
+            first += timedelta(days=1)
+        return day != first
+    return True
+
+
+def expected_release(
+    month: int, year: int, family: Literal["manufacturing", "services"]
+) -> datetime:
+    """When ISM is due to publish the report for ``month``/``year`` (10:00 ET).
+
+    Counts ISM business days: NYSE trading days less ISM's January holiday.
+    This matches every date on ISM's published 2025 and 2026 calendars.
+    """
+    next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+    day = date(next_year, next_month, 1)
+    remaining = _RELEASE_BUSINESS_DAY[family]
+    while True:
+        if _is_ism_business_day(day):
+            remaining -= 1
+            if remaining == 0:
+                return datetime.combine(day, time(10), tzinfo=_ET).astimezone(UTC)
+        day += timedelta(days=1)
+
+
 class ISMNewswireProvider(HttpEconomicProvider):
     provider_name = "ism_newswire"
 
     async def collect(self, now: datetime) -> EconomicBatch:
-        local = now.astimezone(ZoneInfo("America/New_York"))
+        local = now.astimezone(_ET)
         year, month = (local.year - 1, 12) if local.month == 1 else (local.year, local.month - 1)
         period = f"{year:04d}-{month:02d}"
         listing_body = await self.request("GET", LIST_URL, headers=HEADERS)
@@ -217,7 +256,15 @@ class ISMNewswireProvider(HttpEconomicProvider):
                     discover_release, listing_body, month, year, family
                 )
                 if listed is None:
-                    issues.append(f"ISM {family.title()} {period} report not yet listed")
+                    # Not released yet is expected, not a fault. Only a report
+                    # still missing well after its release time is an issue.
+                    due = expected_release(month, year, family)
+                    if now >= due + _LISTING_GRACE:
+                        due_local = due.astimezone(_ET)
+                        issues.append(
+                            f"ISM {family.title()} {period} report not listed after its "
+                            f"expected release ({due_local:%a %b %d}, 10:00 ET)"
+                        )
                     continue
                 release_body = await self.request("GET", listed, headers=HEADERS)
                 published, pmi, prices = await asyncio.to_thread(

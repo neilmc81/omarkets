@@ -34,7 +34,7 @@ export function ShellHeader({ page, onPage, feeds, statusOpen, onStatus, onExpla
         <i className="shell-dot" aria-hidden="true" />{feeds.label}
       </button>
       <button className="t-primary" onClick={onExplain} disabled={!canExplain || asking} aria-keyshortcuts="E">
-        {asking ? "Writing…" : "Explain the market now (E)"}
+        {asking ? "Writing…" : "Desk Note (E)"}
       </button>
     </div>
   </header>;

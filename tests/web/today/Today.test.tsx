@@ -50,7 +50,7 @@ describe("Today", () => {
     const headline = await screen.findByText("Inflation ran hotter than expected");
     fireEvent.click(headline);
     expect(screen.queryByText("What it means")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Explain the market now (E)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Desk Note (E)" }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/v1/desk/ask", expect.objectContaining({ method: "POST" })));
   });
 
@@ -60,7 +60,7 @@ describe("Today", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Desk is not enabled");
     expect(screen.getByText("Omarkets unavailable")).toBeInTheDocument();
     expect(screen.queryByText("Details")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Explain the market now (E)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Desk Note (E)" })).toBeDisabled();
   });
 
   it("labels New York time correctly on both sides of a daylight-saving change", () => {

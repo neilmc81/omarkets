@@ -2,11 +2,20 @@
 
 ## Unreleased
 
+- **The header button is now "Desk Note (E)"** (was "Explain the market
+  now (E)"). Same note, same E shortcut.
+- **An ISM report that is not out yet no longer shows as a health issue.**
+  Before its release (Manufacturing on the first business day of the month,
+  Services on the third, both 10:00 ET, on ISM's own calendar, which skips
+  the first trading day of January) a missing report is just pending. It
+  counts as an issue only if it is still not listed an hour after that time.
+  Fetch or parse failures are still issues straight away.
+
 - **VIX (the CBOE Volatility Index) now gets desk notes by default.** The
   default `desk_instruments` is
   `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y", "VIX"]` on
   `desk:v9`. VIX works like the dollar and the yields: its own move notes
-  (with its own 3-hour limit and move trigger) and "Explain the market now"
+  (with its own 3-hour limit and move trigger) and "Desk Note"
   notes when VIX is the focus. There is no VIX pre-market; only NQ gets the
   daily briefing (cost policy). VIX notes say they are about VIX, and their
   tone reads "… for VIX": supportive means pushing VIX up (bigger expected
@@ -45,7 +54,7 @@
   notes by default.** The default `desk_instruments` is
   `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]` on `desk:v9`.
   Each yield works like the dollar: its own move notes (with its own 3-hour
-  limit and move trigger) and "Explain the market now" notes when it is the
+  limit and move trigger) and "Desk Note" notes when it is the
   focus. There is no yield pre-market; only NQ gets the daily briefing (cost
   policy). Yield notes say which yield they are about, and their tone reads
   "… for US2Y" or "… for US10Y": supportive means pushing the yield up (rates
@@ -86,7 +95,7 @@
 - **The US Dollar Index (DXY) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]` on
   `desk:v9`. DXY works like gold: its own move notes (with its own 3-hour
-  limit and move trigger) and "Explain the market now" notes when DXY is the
+  limit and move trigger) and "Desk Note" notes when DXY is the
   focus. There is no DXY pre-market; only NQ gets the daily briefing (cost
   policy). Dollar notes say they are about the US Dollar Index, and their tone
   reads "… for DXY": supportive means pushing the dollar index up, negative
@@ -113,7 +122,7 @@
 - **Crude oil (WTI) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM", "GOLD", "WTI"]` on `desk:v9`. Oil
   works like gold: its own move notes (with its own 3-hour limit and move
-  trigger) and "Explain the market now" notes when WTI is the focus. There is
+  trigger) and "Desk Note" notes when WTI is the focus. There is
   no oil pre-market; only NQ gets the daily briefing (cost policy). Oil notes
   say they are about oil / WTI, and their tone reads "… for WTI": supportive
   means pushing oil's price up, negative pushing it down. The prompt explains
@@ -135,8 +144,8 @@
   joins the defaults too (above).
 - **Gold now gets desk notes by default.** The default `desk_instruments` is
   `["NQ", "ES", "YM", "GOLD"]` on `desk:v9`. Gold works like YM: its own move
-  notes (with its own 3-hour limit and move trigger) and "Explain the market
-  now" notes when GOLD is the focus. There is no gold pre-market; only NQ gets
+  notes (with its own 3-hour limit and move trigger) and "Desk Note"
+  notes when GOLD is the focus. There is no gold pre-market; only NQ gets
   the daily briefing (cost policy). Gold notes say they are about gold, and
   their tone reads "… for GOLD": supportive means pushing gold's price up,
   negative pushing it down. The prompt explains what usually moves gold
@@ -151,7 +160,7 @@
 - **YM (Dow futures) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM"]` on `desk:v9`. YM works like ES:
   its own move notes (with its own 3-hour limit and move trigger) and
-  "Explain the market now" notes when YM is the focus. There is no YM
+  "Desk Note" notes when YM is the focus. There is no YM
   pre-market; only NQ gets the daily briefing (cost policy). YM notes say they
   are about YM / the Dow, and their tone reads "… for YM". That means a few
   more notes and a little more AI spend each week. To leave YM out, set

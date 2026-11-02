@@ -16,7 +16,7 @@ Nasdaq 100 futures (NQ).
 | Fed | FOMC decision / minutes +26 min, press conference +71 min (60-min window + feed delay) | `release:<time>:<codes>` |
 | Mega-cap earnings | once results headlines appear, 30 min–4 h after the report | `earnings:<symbol>:<day>` |
 | Big move | NQ moves at least the scaled trigger (see "Normal move size") over about an hour; at most one per 3 hours | `move:<hour>` |
-| Market now | on request ("Explain the market now"); at most 5 per day; a note from the last 15 minutes is shown again instead of writing a new one | `ask:<time>` |
+| Market now | on request (the header "Desk Note" button); at most 5 per day; a note from the last 15 minutes is shown again instead of writing a new one | `ask:<time>` |
 | Treasury auction | 26 min after a notably strong or weak 2/5/7/10/20/30-year or TIPS auction (rule below) | `auction:<date>:<cusip>` |
 | Week in review | after the week's last cash close + 15 min (Friday 16:15, or Thursday in a holiday-shortened week), for up to two days | `review:<monday>` |
 
