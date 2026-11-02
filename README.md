@@ -14,7 +14,7 @@ Numbers come from ordinary, tested code. The AI only explains them.
 > what to trade. See the [disclaimer](#disclaimer).
 
 Desk notes cover NQ, ES (S&P 500 futures), YM (Dow futures), GOLD (gold
-futures) and WTI (crude oil futures) out of the box.
+futures), WTI (crude oil futures) and DXY (the US Dollar Index) out of the box.
 
 ![Omarkets demo: Today, chart, calendar, macro, news, desk notes and the bar popup](docs/assets/omarkets-demo.gif)
 
@@ -74,14 +74,14 @@ in `.env` and run `systemctl --user restart omarkets.service`. Use
 environment before running the installer.
 
 `install-plugin` installs `omarkets.service` for your checkout and starts it.
-The service runs on the built-in defaults: desk notes for NQ, ES, YM, GOLD and
-WTI with the `desk:v9` prompt. No extra systemd drop-in is needed; to change them, see
+The service runs on the built-in defaults: desk notes for NQ, ES, YM, GOLD,
+WTI and DXY with the `desk:v9` prompt. No extra systemd drop-in is needed; to change them, see
 [Configuration](#configuration). The installer checks these settings the way
 the service does at startup and warns if the service would refuse them.
 
 **Upgrading from an older install:** if you never set
 `OMARKETS_DESK_PROMPT_VERSION` or `OMARKETS_DESK_INSTRUMENTS`, the desk moves
-from `desk:v8` (NQ only) to `desk:v9` with NQ, ES, YM, GOLD and WTI after the update. That
+from `desk:v8` (NQ only) to `desk:v9` with NQ, ES, YM, GOLD, WTI and DXY after the update. That
 means more notes and a little more AI spend. Run `omarketsctl config` to
 check. To keep NQ only, set `OMARKETS_DESK_INSTRUMENTS=["NQ"]` and
 `OMARKETS_DESK_PROMPT_VERSION=desk:v8` in `.env` (see the
@@ -112,7 +112,7 @@ Settings live in `.env` (see [`.env.example`](.env.example)). The main ones:
 | `OMARKETS_AI_BUDGET_TIMEZONE` | Where budget days and weeks start. Auto-detected from the system; set to override. |
 | `OMARKETS_DESK_LOCAL_TIMEZONE` | Your time zone, for the daily plan. Auto-detected from the system (`TZ`, then `/etc/localtime`, else UTC); set to override. Market hours stay in New York time. |
 | `OMARKETS_DESK_MODELS` | Pick the OpenRouter model per note type. |
-| `OMARKETS_DESK_INSTRUMENTS` | Which instruments get desk notes (default `["NQ", "ES", "YM", "GOLD", "WTI"]`; NQ is always on). |
+| `OMARKETS_DESK_INSTRUMENTS` | Which instruments get desk notes (default `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]`; NQ is always on). |
 | `OMARKETS_DESK_PROMPT_VERSION` | Prompt version for new notes (default `desk:v9`; `desk:v8` is NQ only). |
 | `OMARKETS_DESK_NOTIFY` | Desktop notifications on or off. |
 

@@ -118,7 +118,7 @@ The backend is one process and one `systemd --user` unit installed from
 `omarchy/omarkets.service`; it also serves the built workstation. The QML layer
 never starts or manages the backend. The unit carries no settings of its own:
 the service reads the project `.env`, and anything unset uses the code
-defaults (desk notes for NQ, ES, YM, GOLD and WTI on `desk:v9`). No drop-in is required;
+defaults (desk notes for NQ, ES, YM, GOLD, WTI and DXY on `desk:v9`). No drop-in is required;
 `omarchy/smoke-defaults` checks a clean install.
 
 ```bash

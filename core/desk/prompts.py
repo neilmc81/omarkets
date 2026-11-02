@@ -208,6 +208,10 @@ class AssetDefaults:
     #: instrument's own sentence), or ``None`` where yields don't matter: then
     #: ``rates_read`` is optional and the prompt says to leave it out.
     rates_rule: str | None
+    #: Rule 15: when the overnight range starts and what the prior day is.
+    #: Futures by default; an index such as DXY has no futures session.
+    overnight_since: str = "futures reopened"
+    prior_day: str = "the previous full futures session"
 
 
 @dataclass(frozen=True)
@@ -240,8 +244,8 @@ class InstrumentSpec:
     #: (``facts.PARTICIPATION_INSTRUMENTS``): the stock indexes do, gold doesn't.
     participation: bool = True
     #: The per-instrument note kinds its profile has tasks for. Every instrument
-    #: but NQ is written move and ask only (``identity.instrument_kinds``); GOLD's
-    #: and WTI's profiles have no pre-market text at all.
+    #: but NQ is written move and ask only (``identity.instrument_kinds``); GOLD's,
+    #: WTI's and DXY's profiles have no pre-market text at all.
     kinds: frozenset[NoteKind] = INSTRUMENT_KINDS
     #: Whether its asset class's yields rule applies. False (WTI: oil is priced
     #: on supply, demand and the dollar) gives the "not a main driver" rule and
@@ -259,6 +263,14 @@ class InstrumentSpec:
     #: The ask task's line on the markets and news that drive it.
     ask_drivers: str = "what yields and the dollar are doing, any important headlines"
 
+
+#: How yields bear on an instrument outside the stock market, around its own
+#: ``rates_link`` sentence (commodities, the dollar index).
+_RATES_RULE = (
+    "Bond yields matter for {symbol}: {rates_link} The 2-year yield tracks Fed "
+    "expectations; the 10-year reflects longer-run growth and inflation. Explain "
+    "what the supplied yields did and connect it to {symbol}, but do not claim "
+    "yields caused a move unless the facts support it.")
 
 ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
     AssetClass.EQUITY_INDEX_FUTURE: AssetDefaults(
@@ -281,11 +293,22 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
                "the official closing price the exchange sets for each session. The US stock "
                "market opens at 09:30 ET and closes at 16:00 ET. Most US economic data is "
                "released at 08:30 ET."),
-        rates_rule=(
-            "Bond yields matter for {symbol}: {rates_link} The 2-year yield tracks Fed "
-            "expectations; the 10-year reflects longer-run growth and inflation. Explain "
-            "what the supplied yields did and connect it to {symbol}, but do not claim "
-            "yields caused a move unless the facts support it."),
+        rates_rule=_RATES_RULE,
+    ),
+    # The CNBC index quote the Today strip shows: no declared delay, the desk's
+    # 18:00-17:00 ET session calendar, and its change from the previous close.
+    AssetClass.FX_INDEX: AssetDefaults(
+        about=("The index is calculated from currency prices almost around the clock; "
+               "Omarkets follows it from 18:00 ET to 17:00 ET the next day, Sunday to "
+               "Friday, the same hours as the futures. Its feed declares no delay (see "
+               "\"expected_delay\"). It is an index, not a futures contract, so no exchange "
+               "sets a settle for it: its change today is measured from the previous "
+               "session's close, and its \"Prior settle\" level means that close. "
+               "The US stock market opens at 09:30 ET and closes at 16:00 ET. Most US "
+               "economic data is released at 08:30 ET."),
+        rates_rule=_RATES_RULE,
+        overnight_since="the session reopened at 18:00 ET",
+        prior_day="the previous full session, 18:00 ET to 17:00 ET",
     ),
 }
 
@@ -356,9 +379,9 @@ stands now, after revision) and "revision" (how far it moved, when known). Menti
 revision in plain words when it changes the picture. If neither field is present, \
 do not mention revisions.
 15. "{location}" says where {symbol} is against fixed price levels ("{sym}_is"): \
-the prior settle, the overnight high and low (since futures reopened; \
+the prior settle, the overnight high and low (since {overnight_since}; \
 "overnight_so_far" means that range is not complete yet), the prior day's high and \
-low (the previous full futures session) and the prior week's high and low. Each \
+low ({prior_day}) and the prior week's high and low. Each \
 level has the dates it was "measured" over: say "yesterday" or "last week" only when \
 the dates match, otherwise name the day. Mention the one or two levels that matter, \
 as plain facts (for example "{symbol} is above yesterday's high"). Never call a \
@@ -491,6 +514,7 @@ def _v9(spec: InstrumentSpec) -> Profile:
                   "the facts tie them to this note.".format(**fields))
     system = _V9_SYSTEM.format(
         **fields, what=spec.what, about=defaults.about, rates_rule=rates_rule,
+        overnight_since=defaults.overnight_since, prior_day=defaults.prior_day,
         drivers=spec.drivers, forecast_rule=spec.forecast_rule.format(**fields),
         gauge_rule=spec.gauge_rule.format(**fields),
         benchmark_rule=spec.benchmark_rule.format(**fields) + (
@@ -675,6 +699,67 @@ SPECS: Mapping[str, InstrumentSpec] = {
                      "demand (say if oil is moving against what they would usually "
                      "suggest)"),
     ),
+    "DXY": InstrumentSpec(
+        symbol="DXY", name="the US Dollar Index", asset=AssetClass.FX_INDEX,
+        what=("DXY is the ICE US Dollar Index: the US dollar's value against a basket of "
+              "six major currencies, weighted by trade: the euro (more than half of the "
+              "basket), the Japanese yen, the British pound, the Canadian dollar, the "
+              "Swedish krona and the Swiss franc. In the facts it is called \"US dollar\". "
+              "A rising DXY means the dollar is strengthening against them; because the "
+              "euro dominates the basket, DXY often moves as the mirror image of the euro. "
+              "The dollar often rises when US interest rates rise compared with other "
+              "countries' (for example when the Fed is expected to keep rates higher for "
+              "longer, which traders call \"hawkish\", or when an inflation surprise pushes "
+              "back expected Fed rate cuts), when the US economy looks stronger than the "
+              "rest of the world, or when worry sends investors into the safety of dollars "
+              "(a \"flight to the dollar\"); it often falls on the opposite, including when "
+              "investors are more willing to take risk. Geopolitical shocks can lift it as "
+              "a safe haven; mention that only when the supplied headlines or facts show "
+              "it, and never invent or assume one. These are tendencies, not rules: when "
+              "the supplied facts show the dollar moving against them, say so plainly. "
+              "Here \"supportive\" means pushing the dollar index up and \"negative\" means "
+              "pushing it down; neither is advice."),
+        rates_link=("the dollar tends to follow the gap between US interest rates and "
+                    "other countries' (the \"rate differential\"): when US yields rise, "
+                    "holding dollars pays more and the dollar often strengthens; when "
+                    "they fall it often weakens. The facts supply US yields only, not "
+                    "other countries', so say what US yields did and never claim the gap "
+                    "itself widened or narrowed."),
+        gauge_rule=("no fear gauge: no dollar or currency volatility index is supplied, "
+                    "so never use the VIX or VXN, which are stock-market gauges, as the "
+                    "dollar's."),
+        benchmark_rule=("Dollar notes get no \"nq_vs_es\". NQ (Nasdaq 100 futures) and ES "
+                        "(S&P 500 futures) in \"markets_today\" show how stocks are "
+                        "doing; use them only as context on investors' appetite for risk "
+                        "(stocks falling while the dollar rises can be a flight to "
+                        "safety), and say they are stock markets, not the dollar."),
+        benchmark_task=("how stocks are doing (NQ and ES in markets_today) as context on "
+                        "appetite for risk"),
+        megacap_rule=("Dollar notes get no \"megacap_participation\": individual stocks "
+                      "are not a driver of the dollar, so leave them out unless a "
+                      "supplied headline ties one to the dollar."),
+        macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100), not the "
+                    "dollar; if you use it, say it is about NQ. For the dollar, inflation, "
+                    "jobs and growth data matter mainly through what they mean for the "
+                    "Fed's rate path and for US growth compared with other economies."),
+        participation=False,
+        kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
+        drivers=("the Federal Reserve, interest rates and bond yields, economic data, "
+                 "appetite for risk and world news"),
+        forecast_rule=(
+            "\"Above\"/\"below\" forecast is not automatically good or bad for the "
+            "dollar. Explain what it means for the US economy and the Fed's rate path, "
+            "and therefore for {symbol}. For example, hotter inflation than expected can "
+            "push back expected Fed rate cuts, which often lifts the dollar; more jobless "
+            "claims than expected is weaker news for the US economy and can bring cuts "
+            "closer, which often weighs on it. If worry is also driving markets, demand "
+            "for safety can pull the dollar the other way, so say which way it actually "
+            "moved."),
+        ask_drivers=("what the 2-year and 10-year yields are doing (US rates and the "
+                     "Fed's expected path), any headlines on the Fed, other central banks, "
+                     "US growth or geopolitics (say if the dollar is moving against what "
+                     "they would usually suggest)"),
+    ),
 }
 
 #: Prompt profiles by version, then instrument symbol. desk:v8 is NQ's text
@@ -691,7 +776,7 @@ PROFILES: Mapping[str, Profile] = PROMPTS[PROMPT_VERSION]
 
 class NoPromptProfile(LookupError):
     """No prompt profile for this instrument at this version, or none for this
-    note kind (GOLD and WTI have no pre-market): refuse the note."""
+    note kind (GOLD, WTI and DXY have no pre-market): refuse the note."""
 
     def __init__(self, symbol: str, version: str = PROMPT_VERSION,
                  kind: NoteKind | None = None) -> None:

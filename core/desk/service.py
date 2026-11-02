@@ -167,7 +167,7 @@ class DeskService:
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
         #: Instruments that get their own notes (``desk_instruments``; NQ, ES, YM,
-        #: GOLD and WTI by default): NQ pre-market, move and ask, the others move and ask only
+        #: GOLD, WTI and DXY by default): NQ pre-market, move and ask, the others move and ask only
         #: (``identity.instrument_kinds``). Each needs a prompt profile at the
         #: writer's prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)
@@ -730,7 +730,8 @@ class DeskService:
             self._move_size(now, inst),
             state.instruments.get(gauge) if gauge else None,
             state.instruments.get(benchmark) if benchmark else None,
-            trigger_pct=trigger, trigger_scaled=scaled, gauge=gauge or "", benchmark=benchmark)
+            trigger_pct=trigger, trigger_scaled=scaled, gauge=gauge or "", benchmark=benchmark,
+            symbol=inst.symbol)
         return {**self._location(now, inst),
                 **({"normal_move_size": normal} if normal else {}),
                 **F.participation(state, inst.symbol)}

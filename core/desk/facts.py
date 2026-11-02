@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from core.analysis.cross_market import DEFAULT_TOLERANCE_PCT, compare_nq_es
 from core.desk import explainers as X
 from core.desk.models import Figure, Move, Quote, RatesView, Surprise, UpcomingItem, YieldLine
+from core.domain.instruments import get_instrument
 from core.domain.sessions import volatility_index_open
 
 #: Markets measured after a release or move, in display order.
@@ -684,6 +685,20 @@ LOCATION_LEVELS: tuple[str, ...] = (
 )
 
 
+#: Instruments whose desk prices, gaps and ranges are written at their quote
+#: precision (``Instrument.price_precision``): DXY's whole day is often under
+#: one index point, so whole points or two decimals would hide its moves. The
+#: others keep the text their notes have always had.
+QUOTE_PRECISION_SYMBOLS = frozenset({"DXY"})
+
+
+def _points_decimals(symbol: str, default: int) -> int:
+    """Decimals for ``symbol``'s points in desk facts: its quote precision where
+    listed in :data:`QUOTE_PRECISION_SYMBOLS`, else ``default``."""
+    definition = get_instrument(symbol) if symbol in QUOTE_PRECISION_SYMBOLS else None
+    return definition.price_precision if definition is not None else default
+
+
 def _when(moment: datetime) -> str:
     return moment.astimezone(_NEW_YORK).strftime("%a %b %d %H:%M ET")
 
@@ -698,11 +713,13 @@ def price_location(levels: Any, price: float | None,
     nothing to say and the result is ``None``. The overnight range is "so far"
     while the window is running or the latest quote (``quote_at``, delayed)
     has not reached its end. Fields are named for the instrument
-    (``nq_price``/``nq_is`` for NQ, ``es_price``/``es_is`` for ES).
+    (``nq_price``/``nq_is`` for NQ, ``es_price``/``es_is`` for ES). Prices and
+    gaps have two decimals, or the quote's own for DXY (:func:`_points_decimals`).
     """
     if price is None or not isfinite(price):
         return None
     sym = levels.symbol.lower()
+    decimals = _points_decimals(levels.symbol, 2)
     by_key = {level.key: level for level in levels.levels}
     rows: list[dict[str, Any]] = []
     overnight_so_far = False
@@ -710,10 +727,10 @@ def price_location(levels: Any, price: float | None,
         level = by_key.get(key)
         if level is None or level.value is None:
             continue
-        gap = round(price - level.value, 2)
+        gap = round(price - level.value, decimals)
         side = "above" if gap > 0 else "below" if gap < 0 else "at"
         row = {"level": level.label, "value": level.value_text,
-               f"{sym}_is": side if gap == 0 else f"{abs(gap):,.2f} points {side}"}
+               f"{sym}_is": side if gap == 0 else f"{abs(gap):,.{decimals}f} points {side}"}
         if level.window_start is not None and level.window_end is not None:
             row["measured"] = f"{_when(level.window_start)} to {_when(level.window_end)}"
         rows.append(row)
@@ -723,7 +740,9 @@ def price_location(levels: Any, price: float | None,
                 and quote_at < level.window_end)
     if not rows:
         return None
-    return {f"{sym}_price": _value_text(levels.symbol, price), "levels": rows,
+    price_text = (f"{price:,.{decimals}f}" if levels.symbol in QUOTE_PRECISION_SYMBOLS
+                  else _value_text(levels.symbol, price))
+    return {f"{sym}_price": price_text, "levels": rows,
             **({"overnight_so_far": True} if overnight_so_far else {})}
 
 
@@ -742,22 +761,25 @@ VOL_INDEXES: dict[str, tuple[str, str | None]] = {
 
 def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
                 trigger_scaled: bool, gauge: str = "VXN",
-                benchmark: str | None = "VIX") -> dict[str, Any] | None:
+                benchmark: str | None = "VIX", symbol: str = "NQ") -> dict[str, Any] | None:
     """How big an instrument's moves normally are, and its fear gauge, as text.
 
     ``size`` is a :class:`core.analysis.move_size.MoveSize`; ``vxn``/``vix`` are
     the market-state instruments for ``gauge`` and ``benchmark`` (or None);
     NQ's are VXN and VIX (:data:`VOL_INDEXES`). Unmeasurable parts are left
     out, and a finished session's range only when its quotes were complete.
+    Ranges are in whole points, or ``symbol``'s quote precision for DXY
+    (:func:`_points_decimals`).
     """
     out: dict[str, Any] = {}
+    decimals = _points_decimals(symbol, 0)
     if size is not None and size.typical_range is not None:
-        out["typical_daily_range"] = (f"{size.typical_range:,.0f} points "
+        out["typical_daily_range"] = (f"{size.typical_range:,.{decimals}f} points "
                                       f"({size.typical_range_pct:.2f}%)")
         out["typical_measured_over"] = f"median of the last {size.sessions} complete sessions"
     if size is not None and size.today_range is not None and (
             size.today_partial or size.today_complete):
-        today = (f"{size.trade_date:%a %b %d} session: {size.today_range:,.0f} points "
+        today = (f"{size.trade_date:%a %b %d} session: {size.today_range:,.{decimals}f} points "
                  f"({size.today_range_pct:.2f}%)")
         if size.typical_range_pct:
             share = size.today_range_pct / size.typical_range_pct * 100
