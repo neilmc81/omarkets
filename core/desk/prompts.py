@@ -258,7 +258,7 @@ class InstrumentSpec:
     participation: bool = True
     #: The per-instrument note kinds its profile has tasks for. Every instrument
     #: but NQ is written move and ask only (``identity.instrument_kinds``); GOLD's,
-    #: WTI's, DXY's and the yields' profiles have no pre-market text at all.
+    #: WTI's, DXY's, the yields' and VIX's profiles have no pre-market text at all.
     kinds: frozenset[NoteKind] = INSTRUMENT_KINDS
     #: Whether its asset class's yields rule applies. False (WTI: oil is priced
     #: on supply, demand and the dollar) gives the "not a main driver" rule and
@@ -352,6 +352,30 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
         levels_of="yield",
         move_size=("the typical daily range (high to low, in basis points) and the current "
                    "or last session's range compared with it (labelled with its date)."),
+    ),
+    # The CNBC .VIX quote the Today strip shows: the Cboe cash index (not VX
+    # futures), computed 03:15-16:15 ET (``sessions.VOLATILITY_INDEX_HOURS``), no
+    # declared delay, and its change from the previous close. Yields reach a
+    # volatility index through stocks, so they are not a main driver.
+    AssetClass.VOLATILITY_INDEX: AssetDefaults(
+        about=("Cboe calculates a volatility index from the prices of stock index options: "
+               "it measures how much that stock index is expected to swing over the next 30 "
+               "days, as a yearly percentage. It is calculated from 03:15 ET to "
+               "16:15 ET on trading days; outside those hours its value is the last close, "
+               "and \"markets_today\" marks it closed. Its feed declares no delay (see "
+               "\"expected_delay\"). It is an index, not a futures contract, so no exchange "
+               "sets a settle for it: its change today is measured from the previous "
+               "session's close, and its \"Prior settle\" level means that close. The US "
+               "stock market opens at 09:30 ET and closes at 16:00 ET. Most US economic "
+               "data is released at 08:30 ET."),
+        rates_rule=None,
+        overnight_since=("Cboe began calculating it at 03:15 ET, though the \"measured\" "
+                         "window starts at 18:00 ET"),
+        prior_day="the previous trading day, 03:15 ET to 16:15 ET",
+        levels_of="index",
+        move_size=("the typical daily range (high to low, in index points and as a "
+                   "percentage of its level) and the current or last session's range "
+                   "compared with it (labelled with its date)."),
     ),
 }
 
@@ -913,6 +937,76 @@ SPECS: Mapping[str, InstrumentSpec] = {
         macro=("For the 10-year, inflation, jobs and growth data matter through the Fed's "
                "rate path and through what they say about long-run growth and inflation."),
     ),
+    "VIX": InstrumentSpec(
+        symbol="VIX", name="the CBOE Volatility Index", asset=AssetClass.VOLATILITY_INDEX,
+        what=("VIX is the CBOE Volatility Index: how much the S&P 500 is expected to swing, "
+              "worked out from the prices of S&P 500 index options. It is the cash index "
+              "the Today strip shows, not a VIX futures price (VIX futures trade "
+              "separately and are not supplied). In the facts it is called \"VIX fear "
+              "gauge\". VIX is itself the stock market's main fear gauge: in these notes it "
+              "is the market being explained, never an outside input. Its level is in index "
+              "points (traders also call them vol points); its change today and its moves "
+              "in the facts are percentages of that level, and its ranges are in index "
+              "points. VIX points are not NQ's or ES's points: never compare or mix them. A "
+              "rising VIX means options traders are paying more for protection against big "
+              "stock-market swings, usually because worry is rising; a falling VIX means "
+              "calmer markets, and a VIX that stays low for a long time can be a sign of "
+              "complacency (investors expecting little risk). VIX usually moves the "
+              "opposite way to the S&P 500: it often jumps when stocks fall, most of all in "
+              "a fast selloff, and drifts lower when stocks rise steadily. It can also rise "
+              "while traders buy protection ahead of a big scheduled event (a Fed decision, "
+              "inflation or jobs data, big-tech earnings), then ease once the event passes "
+              "without a shock. A sharp jump in yields or a surprise from the Fed or an "
+              "inflation report can lift it when it knocks stocks lower, and geopolitical "
+              "shocks can lift it too; mention those only when the supplied headlines or "
+              "facts show them, and never invent or assume one. After a spike VIX has "
+              "tended to fall back toward its usual range as worry fades (traders call "
+              "this mean reversion), but that is a tendency, not a forecast: never predict "
+              "when or whether it will fall back. These are tendencies, not rules: when the "
+              "supplied facts show VIX moving against them, for example rising while stocks "
+              "rise, say so plainly. Here \"supportive\" means pushing VIX up (bigger "
+              "expected swings, usually more worry) and \"negative\" means pushing it down "
+              "(calmer markets); neither is advice, and neither means good or bad: a higher "
+              "VIX is not good news, it usually comes with falling, more nervous stock "
+              "markets."),
+        rates_link="",
+        gauge_rule=("It is itself the stock market's fear gauge, so it has no other gauge "
+                    "here: no VXN (the Nasdaq's gauge), VVIX (the volatility of VIX), VIX "
+                    "futures or MOVE index (the bond market's gauge) is supplied, so never "
+                    "invent one, and never treat bond yields as a volatility gauge."),
+        benchmark_rule=("VIX notes get no \"nq_vs_es\". ES (S&P 500 futures) and NQ "
+                        "(Nasdaq 100 futures) in \"markets_today\" show how stocks are "
+                        "doing; VIX is calculated from S&P 500 options, so ES is the closest "
+                        "context. Use them to say whether VIX is moving the way stocks "
+                        "would usually suggest, and say they are stock markets, not VIX. The "
+                        "dollar, yields, gold and oil are other markets: use them only as "
+                        "context on appetite for risk."),
+        benchmark_task=("how stocks are doing (ES and NQ in markets_today), since VIX "
+                        "usually moves the opposite way to them"),
+        megacap_rule=("VIX notes get no \"megacap_participation\": VIX is calculated from "
+                      "S&P 500 index options, not from single stocks, so leave individual "
+                      "stocks out unless a supplied headline ties one to this note."),
+        macro_rule=("Its \"for_nq\" line is written for NQ (the Nasdaq 100), not VIX; if "
+                    "you use it, say it is about NQ. For VIX, economic data matters mainly "
+                    "through how it moves stocks and the Fed's expected path, and a big "
+                    "release can hold VIX up beforehand and let it ease after."),
+        participation=False,
+        kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
+        drivers=("stock-market swings, worry and appetite for risk, the Federal Reserve, "
+                 "economic data and world news"),
+        forecast_rule=(
+            "\"Above\"/\"below\" forecast is not automatically good or bad, and it does "
+            "not move VIX by itself. What matters for {symbol} is whether the surprise "
+            "unsettles stocks: for example, hotter inflation than expected can push back "
+            "expected Fed rate cuts, lift yields and knock stocks lower, which often lifts "
+            "VIX; a number close to forecast can let VIX ease as the wait for it ends. Say "
+            "which way {symbol} actually moved."),
+        ask_drivers=("any scheduled event traders may be buying protection for (a Fed "
+                     "decision, inflation or jobs data, big-tech earnings), any headlines "
+                     "on worry, risk or geopolitics, and yields or the dollar only as "
+                     "context (say if VIX is moving against what stocks would usually "
+                     "suggest)"),
+    ),
 }
 
 #: Prompt profiles by version, then instrument symbol. desk:v8 is NQ's text
@@ -929,7 +1023,7 @@ PROFILES: Mapping[str, Profile] = PROMPTS[PROMPT_VERSION]
 
 class NoPromptProfile(LookupError):
     """No prompt profile for this instrument at this version, or none for this
-    note kind (GOLD, WTI, DXY, US2Y and US10Y have no pre-market): refuse the note."""
+    note kind (GOLD, WTI, DXY, US2Y, US10Y and VIX have no pre-market): refuse the note."""
 
     def __init__(self, symbol: str, version: str = PROMPT_VERSION,
                  kind: NoteKind | None = None) -> None:

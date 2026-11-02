@@ -316,6 +316,7 @@ _KEY_SETTINGS = {
     "desk_instruments",
     "desk_move_threshold_bp",
     "desk_move_threshold_pct",
+    "desk_move_threshold_vol_pct",
     "desk_prompt_version",
     "openrouter_api_key",
 }

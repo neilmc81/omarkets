@@ -16,7 +16,15 @@ Deterministic, from stored hourly OHLC buckets and the session engine:
   fewer than ``MIN_SESSIONS`` complete sessions there is no typical range and
   the caller's fixed threshold is used. A Treasury yield's trigger is in basis
   points instead (``MoveSize.trigger_bp``): a percent of a yield's level is not
-  how rates move, and the desk measures yield moves in basis points.
+  how rates move, and the desk measures yield moves in basis points. A
+  volatility index (VIX) keeps a percent trigger with its own bounds
+  (``MoveSize.trigger_vol_pct``): an ordinary VIX hour moves several times more,
+  in percent, than an ordinary NQ hour.
+
+A volatility index is computed only in Cboe's hours (03:15-16:15 ET), so its
+sessions are measured over those hours, not the futures' 23, and it gets no
+realised volatility: the volatility of a volatility index is not what its level
+means, and the yearly rate assumes the futures' hours.
 """
 
 from __future__ import annotations
@@ -27,12 +35,14 @@ from datetime import date, datetime, timedelta
 from math import log, sqrt
 from statistics import median, stdev
 
+from core.domain.instruments import AssetClass, get_instrument
 from core.domain.sessions import (
     GlobexSession,
     active_session,
     globex_session,
     previous_trade_date,
     trading_windows,
+    volatility_index_window,
 )
 from core.storage.base import OhlcBucket
 
@@ -54,6 +64,13 @@ TRIGGER_MAX_PCT = 1.5
 TRIGGER_MIN_BP = 4.0
 TRIGGER_MAX_BP = 10.0
 TRIGGER_FALLBACK_BP = 6.0
+#: A volatility index's one-hour trigger in percent: the same share of its
+#: typical daily range, kept between these, and a fixed one without enough
+#: history. A normal VIX day is about 5-10% of its level high to low, and an
+#: ordinary hour moves it a percent or two.
+TRIGGER_MIN_VOL_PCT = 4.0
+TRIGGER_MAX_VOL_PCT = 10.0
+TRIGGER_FALLBACK_VOL_PCT = 5.0
 
 _HOUR = timedelta(hours=1)
 
@@ -89,6 +106,21 @@ class MoveSize:
         return min(TRIGGER_MAX_BP, max(TRIGGER_MIN_BP,
                                        round(TRIGGER_SHARE * self.typical_range * 100, 1)))
 
+    def trigger_vol_pct(self, fallback: float = TRIGGER_FALLBACK_VOL_PCT) -> float:
+        """A volatility index's one-hour move that counts as large, in percent of
+        its level, or ``fallback`` without history."""
+        if self.typical_range_pct is None:
+            return fallback
+        return min(TRIGGER_MAX_VOL_PCT, max(TRIGGER_MIN_VOL_PCT,
+                                            round(TRIGGER_SHARE * self.typical_range_pct, 2)))
+
+
+def volatility_index(symbol: str) -> bool:
+    """Whether ``symbol`` is a volatility index (VIX, VXN), computed only in
+    Cboe's hours."""
+    definition = get_instrument(symbol)
+    return definition is not None and definition.asset_class is AssetClass.VOLATILITY_INDEX
+
 
 def _lookback(session: GlobexSession) -> list[GlobexSession]:
     sessions: list[GlobexSession] = []
@@ -99,13 +131,21 @@ def _lookback(session: GlobexSession) -> list[GlobexSession]:
     return sessions
 
 
-def _windows(session: GlobexSession, until: datetime) -> list[tuple[datetime, datetime]]:
-    return [(start, min(end, until)) for start, end in trading_windows(session) if start < until]
+def _windows(session: GlobexSession, until: datetime,
+             cash: bool = False) -> list[tuple[datetime, datetime]]:
+    """The session's trading hours up to ``until``; with ``cash``, only Cboe's
+    hours for a volatility index (:func:`volatility_index_window`)."""
+    opens, closes = volatility_index_window(session.trade_date) if cash else (None, None)
+    spans = [(start if opens is None else max(start, opens),
+              min(end, until) if closes is None else min(end, until, closes))
+             for start, end in trading_windows(session)]
+    return [(start, end) for start, end in spans if start < end]
 
 
-def _complete(session: GlobexSession, rows: list[OhlcBucket], until: datetime) -> bool:
+def _complete(session: GlobexSession, rows: list[OhlcBucket], until: datetime,
+              cash: bool = False) -> bool:
     """Quotes from one contract cover at least ``MIN_COVERAGE`` of the trading hours."""
-    hours = sum((end - start) / _HOUR for start, end in _windows(session, until))
+    hours = sum((end - start) / _HOUR for start, end in _windows(session, until, cash))
     contracts = {c for row in rows for c in row.contracts}
     return hours > 0 and len(rows) >= MIN_COVERAGE * hours and len(contracts) <= 1
 
@@ -118,8 +158,9 @@ def _returns(rows: list[OhlcBucket]) -> list[float]:
 def move_size(symbol: str, ohlc: OhlcFn, *, now: datetime) -> MoveSize:
     session = active_session(now)
     past = _lookback(session)
+    cash = volatility_index(symbol)
     # Only quotes inside trading hours: none after an early close or in a halt.
-    within = [w for s in (*reversed(past), session) for w in _windows(s, now)]
+    within = [w for s in (*reversed(past), session) for w in _windows(s, now, cash)]
     rows = sorted(ohlc(symbol, start=within[0][0], end=within[-1][1], bucket_seconds=3600,
                        within=within), key=lambda b: b.start)
     by_session: dict[date, list[OhlcBucket]] = {}
@@ -133,7 +174,7 @@ def move_size(symbol: str, ohlc: OhlcFn, *, now: datetime) -> MoveSize:
     returns: list[float] = []
     for s in past:
         bucket = by_session.get(s.trade_date, [])
-        if not _complete(s, bucket, s.closes_at):
+        if not _complete(s, bucket, s.closes_at, cash):
             continue
         high, low, last = max(b.high for b in bucket), min(b.low for b in bucket), bucket[-1].close
         ranges.append((high - low, (high - low) / last * 100))
@@ -144,7 +185,8 @@ def move_size(symbol: str, ohlc: OhlcFn, *, now: datetime) -> MoveSize:
         typical = median(r for r, _ in ranges)
         typical_pct = median(p for _, p in ranges)
     vol = (stdev(returns) * sqrt(HOURS_PER_YEAR) * 100
-           if len(ranges) >= MIN_SESSIONS and len(returns) >= MIN_RETURNS else None)
+           if not cash and len(ranges) >= MIN_SESSIONS and len(returns) >= MIN_RETURNS
+           else None)
 
     today = by_session.get(session.trade_date, [])
     today_range = today_pct = None
@@ -154,9 +196,12 @@ def move_size(symbol: str, ohlc: OhlcFn, *, now: datetime) -> MoveSize:
     return MoveSize(
         trade_date=session.trade_date, sessions=len(ranges), typical_range=typical,
         typical_range_pct=typical_pct, realised_vol_pct=vol, today_range=today_range,
-        today_range_pct=today_pct, today_partial=session.contains(now),
-        today_complete=_complete(session, today, now),
+        today_range_pct=today_pct,
+        # A volatility index's day is over at Cboe's close, before the session's.
+        today_partial=session.contains(now) and (
+            not cash or now < volatility_index_window(session.trade_date)[1]),
+        today_complete=_complete(session, today, now, cash),
     )
 
 
-__all__ = ["MoveSize", "move_size"]
+__all__ = ["MoveSize", "move_size", "volatility_index"]

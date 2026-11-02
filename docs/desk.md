@@ -54,7 +54,7 @@ so a restart cannot produce a duplicate note or notification.
   selectable. `desk:v9` (Phase 1 slice 5) is one set of shared rules plus an
   instrument profile on top of its asset class's defaults
   (session hours, what "close" means, the expected delay, how yields matter).
-  NQ's wording lives in NQ's profile; ES, YM, GOLD, WTI, DXY, US2Y and US10Y have
+  NQ's wording lives in NQ's profile; ES, YM, GOLD, WTI, DXY, US2Y, US10Y and VIX have
   their own reviewed profiles (YM's: the Dow is 30 price-weighted stocks, `nq_vs_es` and the
   megacaps are NQ/ES context, and the VIX stands in as the S&P 500's gauge).
   GOLD's profile sits on commodity defaults (Globex hours, about 10 minutes
@@ -105,8 +105,9 @@ so a restart cannot produce a duplicate note or notification.
   18:00–17:00 ET session, not "futures"), and DXY is the one instrument in
   `facts.QUOTE_PRECISION_SYMBOLS`: its `dxy_price`, `dxy_is` gaps and
   `normal_move_size` ranges use its 3-decimal quote precision, since its daily
-  range is usually under one point. Every other instrument keeps two-decimal
-  gaps and whole-point ranges, except the yields (below).
+  range is usually under one point. VIX is the other one (two decimals: its
+  typical day is about one index point). Every other instrument keeps
+  two-decimal gaps and whole-point ranges, except the yields (below).
   US2Y's and US10Y's profiles sit on new Treasury-yield defaults that match how
   the strip already streams them (CNBC's `US2Y`/`US10Y`: the same 18:00–17:00 ET
   hours, no declared delay, a change in basis points from the previous
@@ -143,8 +144,37 @@ so a restart cannot produce a duplicate note or notification.
   `us2y_yield` / `us10y_yield`, not a price: levels in percent ("4.258%") and
   gaps in basis points ("2.3bp above"). Every other instrument keeps
   `<sym>_price_location` and `<sym>_price`.
+  VIX's profile sits on new volatility-index defaults that match how the strip
+  already streams it (CNBC's `.VIX`: the Cboe cash index, not VX futures,
+  calculated 03:15–16:15 ET on trading days and "closed" outside them, no
+  declared delay, a change from the previous close, not a settle; the 30-day
+  definition is in the defaults so a note may quote it). It says what VIX is
+  (expected S&P 500 swings from index options; level in index points, which
+  are not NQ's or ES's points) and what usually moves it, as tendencies rather
+  than rules: it usually moves opposite to stocks and jumps most in a fast
+  selloff, can stay firm before a big scheduled event and ease after, rises on
+  rate, Fed or inflation shocks when they knock stocks lower and on
+  geopolitical shocks (only when the facts show them), and has tended to fall
+  back after a spike (mean reversion, never predicted). VIX *is* the fear
+  gauge, so its prompt never treats "the VIX" as an outside input: rule 16 has
+  its own sentence (ranges in index points and percent, no realised
+  volatility) and then "It is itself the stock market's fear gauge": no VXN,
+  VVIX, VIX futures or MOVE index is supplied, and yields are never a
+  volatility gauge. Yields are not a main driver (the volatility-index
+  defaults have no rates rule), so rule 10 is the "not a main driver" line and
+  `rates_read` is left out. Rule 18 reads ES and NQ as the stock context VIX
+  usually moves against (ES closest, VIX being from S&P 500 options) and the
+  dollar, yields, gold and oil as risk context only; `for_nq` is labelled as
+  about NQ. A data surprise is read through whether it unsettles stocks. Tone
+  is VIX up (supportive: bigger expected swings, usually more worry) or down
+  (negative: calmer markets); neither is advice, and a higher VIX is never
+  called good. Rule 15 calls its levels index levels and says the overnight
+  range starts at Cboe's 03:15 ET open though the window is measured from
+  18:00 ET; the prior day is the previous trading day, 03:15–16:15 ET. Move
+  and ask tasks only; the ask task asks for stocks and the scheduled events
+  traders may be buying protection for.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
-  matter (every equity index future, gold, DXY and the yields). Each note task has a
+  matter (every equity index future, gold, DXY and the yields; not WTI or VIX). Each note task has a
   length target, recorded by
   `eval check` and never retried. v9 notes get `recent_lessons` in their facts
   (the terms the latest five Learn boxes taught, newest first) and are told
@@ -158,9 +188,10 @@ so a restart cannot produce a duplicate note or notification.
   (release, Fed, earnings, auction, primer, review) stay desk-wide on NQ's
   profile.
 - `desk_instruments` (`OMARKETS_DESK_INSTRUMENTS`, JSON list, default
-  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]`) is which
+  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y", "VIX"]`) is which
   instruments get their own notes. A fresh install runs NQ, ES, YM, GOLD, WTI,
-  DXY, US2Y and US10Y on desk:v9 with no setting;
+  DXY, US2Y, US10Y and VIX on desk:v9 with no setting;
+  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]`,
   `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]`, `["NQ", "ES", "YM", "GOLD", "WTI"]`,
   `["NQ", "ES", "YM", "GOLD"]`,
   `["NQ", "ES", "YM"]`, `["NQ", "ES"]` or `["NQ"]` (optionally with `desk:v8`)
@@ -177,13 +208,15 @@ so a restart cannot produce a duplicate note or notification.
   yields, US2Y ("2-year yield") then US10Y ("10-year yield"): each reads its own
   row once and its own move window, and NQ, ES, YM, GOLD, WTI and DXY facts are
   unchanged with or without them. A yield's move trigger is in basis points
-  (below). NQ is always on and
+  (below). Then VIX ("VIX fear gauge"): its own row once and its own move
+  window, and every other instrument's facts unchanged with or without it; its
+  move trigger has its own percent bounds (below). NQ is always on and
   gets pre-market, move and ask notes; every other instrument gets move and ask
   notes only, never the daily pre-market (cost policy;
   `identity.instrument_kinds`). Each instrument has its own 3-hour move limit
   and move trigger; the daily ask limit is shared. The service refuses to start
   when an instrument has no prompt profile at `desk_prompt_version` (ES, YM,
-  GOLD, WTI, DXY, US2Y or US10Y under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
+  GOLD, WTI, DXY, US2Y, US10Y or VIX under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
   `?instrument=`; omitted, it uses the saved workspace focus (the Chart page's
   instrument), and NQ only when no focus is saved or the store can't be read.
   An instrument or saved focus not in `desk_instruments` gets a 400 before
@@ -227,8 +260,9 @@ so a restart cannot produce a duplicate note or notification.
 | `OMARKETS_DESK_MODEL_PARAMS` | `{}`; JSON map of model to extra request fields, replacing the default per model |
 | `OMARKETS_DESK_MODEL_RATES` | `{}`; JSON map of model to `[input, output]` USD per million tokens |
 | `OMARKETS_DESK_INPUT_RATE` / `_OUTPUT_RATE` | `3.0` / `15.0`, for models with no rates (reservation upper bound) |
-| `OMARKETS_DESK_MOVE_THRESHOLD_PCT` | `0.8`; used only until there are 10 complete sessions to scale the trigger; never for a yield |
+| `OMARKETS_DESK_MOVE_THRESHOLD_PCT` | `0.8`; used only until there are 10 complete sessions to scale the trigger; never for a yield or VIX |
 | `OMARKETS_DESK_MOVE_THRESHOLD_BP` | `6.0`; the same for US2Y and US10Y, in basis points (their scaled trigger is 4–10bp) |
+| `OMARKETS_DESK_MOVE_THRESHOLD_VOL_PCT` | `5.0`; the same for VIX, in percent of its level (its scaled trigger is 4–10%) |
 | `OMARKETS_DESK_NOTIFY` | `true` |
 | `OMARKETS_DESK_DAILY_PLAN` | `true` (the 07:00 ET plan notification) |
 | `OMARKETS_DESK_LOCAL_TIMEZONE` | `America/New_York` (times in the daily plan) |
@@ -398,7 +432,9 @@ The primer, week in review and auction notes do not get it.
 the chart), read only inside trading hours (`trading_windows`: nothing after an
 early close or in the 2026 Labor Day halt). A session counts when quotes cover
 at least 80% of its trading hours from one contract; gappy or rolled sessions
-are skipped, never counted as zero.
+are skipped, never counted as zero. A volatility index (VIX) is calculated only
+03:15–16:15 ET, so its trading hours are those (`volatility_index_window`), not
+the futures' 23: 13 hours of VIX quotes are a full day.
 
 - **Typical daily range:** median high-minus-low of the complete sessions among
   the last 20, in points and percent (needs at least 10).
@@ -415,8 +451,11 @@ are skipped, never counted as zero.
   VIX alone, YM VIX alone as the wider market's gauge (the feeds have no Dow
   gauge, and YM's prompt says the VIX is the S&P 500's); an instrument without
   one (GOLD, WTI, DXY and the yields: the feeds have no gold, oil, currency or
-  Treasury gauge) gets no gauge, never NQ's. A yield's ranges are in basis
-  points and it gets no realised volatility.
+  Treasury gauge) gets no gauge, never NQ's. VIX is a gauge itself and gets
+  none either. A yield's ranges are in basis points and it gets no realised
+  volatility; VIX's ranges keep two decimals and it gets no realised
+  volatility (the volatility of a volatility index is not what its level
+  means, and the yearly rate assumes the futures' hours).
 
 The same notes as price location get these as `normal_move_size`, as
 ready-made text (prompt `desk:v7`).
@@ -431,7 +470,13 @@ facts always describe the trigger actually in use. A Treasury yield's moves are
 measured in basis points, so its trigger is too (`MoveSize.trigger_bp`): 0.55 ×
 its typical daily range in basis points, kept between 4bp and 10bp, or
 `OMARKETS_DESK_MOVE_THRESHOLD_BP` (default 6bp) without enough history or if
-storage fails (never the percent threshold read as basis points).
+storage fails (never the percent threshold read as basis points). VIX keeps a
+percent trigger with its own bounds (`MoveSize.trigger_vol_pct`): 0.55 × its
+typical daily range in percent, kept between 4% and 10%, or
+`OMARKETS_DESK_MOVE_THRESHOLD_VOL_PCT` (default 5%) without enough history. In
+the live history (Sep 18–Oct 30, 2026) VIX's median day was about 6% high to
+low and its one-hour moves had a median of 0.6% and a 95th percentile of 4.1%,
+so NQ's 0.6–1.5% bounds would fire on ordinary VIX hours.
 `normal_move(..., trigger=...)` takes the trigger in whichever unit the
 instrument's moves are measured in, so the keyword names neither.
 
@@ -454,7 +499,7 @@ New writer facts, all deterministic and with no prompt change (`desk:v8`):
   their status and change, and how many are up, down or flat (within 0.05%),
   counting live quotes only. NQ, ES and YM notes get both blocks (for YM as
   context on whether tech led the wider market); other instruments (GOLD,
-  WTI, DXY, US2Y, US10Y) get neither.
+  WTI, DXY, US2Y, US10Y, VIX) get neither.
 - **Events in the move window** (`events_in_move_window`, move notes): US
   economic and Fed events from 15 minutes before the move to its end, with the
   window checked, so an empty list means "no event on the supplied calendar".

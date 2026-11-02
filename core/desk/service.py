@@ -17,7 +17,13 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from core.analysis.levels import key_levels
-from core.analysis.move_size import TRIGGER_FALLBACK_BP, MoveSize, move_size
+from core.analysis.move_size import (
+    TRIGGER_FALLBACK_BP,
+    TRIGGER_FALLBACK_VOL_PCT,
+    MoveSize,
+    move_size,
+    volatility_index,
+)
 from core.desk import auctions as A
 from core.desk import breaking as B
 from core.desk import calendar as CAL
@@ -152,6 +158,7 @@ class DeskService:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         move_threshold_pct: float = 0.8,
         move_threshold_bp: float = TRIGGER_FALLBACK_BP,
+        move_threshold_vol_pct: float = TRIGGER_FALLBACK_VOL_PCT,
         ask_daily_limit: int = 5,
         enabled: bool = True,
         poll_seconds: float = 60.0,
@@ -170,8 +177,11 @@ class DeskService:
         #: A Treasury yield's fixed trigger in basis points, used like
         #: ``move_threshold_pct`` until there is history to scale it.
         self.move_threshold_bp = move_threshold_bp
+        #: A volatility index's (VIX's) fixed trigger in percent, sized for it,
+        #: never NQ's ``move_threshold_pct``.
+        self.move_threshold_vol_pct = move_threshold_vol_pct
         #: Instruments that get their own notes (``desk_instruments``; NQ, ES, YM,
-        #: GOLD, WTI, DXY, US2Y and US10Y by default): NQ pre-market, move and ask,
+        #: GOLD, WTI, DXY, US2Y, US10Y and VIX by default): NQ pre-market, move and ask,
         #: the others move and ask only (``identity.instrument_kinds``). Each needs
         #: a prompt profile at the writer's prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)
@@ -712,18 +722,22 @@ class DeskService:
         scaled to its typical daily range (once per instrument and trade date) or
         the configured fixed threshold. A Treasury yield's is in basis points, as
         its moves are measured (``MoveSize.trigger_bp``), and its fixed threshold
-        is ``move_threshold_bp``. A storage failure is retried on the next poll,
-        not cached."""
+        is ``move_threshold_bp``; a volatility index's is in percent with its own
+        bounds (``MoveSize.trigger_vol_pct``) and ``move_threshold_vol_pct``. A
+        storage failure is retried on the next poll, not cached."""
         key = (inst.symbol, active_session(now).trade_date)
         if key in self._trigger:
             return self._trigger[key]
         size = self._move_size(now, inst)
         yields = inst.symbol in F.YIELD_SYMBOLS
+        vol = volatility_index(inst.symbol)
         if size is None:
-            return (self.move_threshold_bp if yields else self.move_threshold_pct), False
+            return (self.move_threshold_bp if yields else self.move_threshold_vol_pct if vol
+                    else self.move_threshold_pct), False
         # Only the current session is ever read; drop older entries.
         self._trigger = {k: v for k, v in self._trigger.items() if k[1] == key[1]}
         self._trigger[key] = ((size.trigger_bp(self.move_threshold_bp) if yields
+                               else size.trigger_vol_pct(self.move_threshold_vol_pct) if vol
                                else size.trigger_pct(self.move_threshold_pct)),
                               size.typical_range_pct is not None)
         return self._trigger[key]
