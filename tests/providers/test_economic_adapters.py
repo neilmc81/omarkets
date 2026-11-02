@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from core.providers.economic_bls import BLS_INPUT_UNITS, BLSEconomicProvider
+from core.providers.economic_bls import BLS_INPUT_UNITS, BLSEconomicProvider, near_release
 from core.providers.economic_calendars import BEACalendarProvider, FedCalendarProvider, fed_datetime
 from core.providers.economic_demo import DemoEconomicProvider
 from core.providers.economic_factory import build_economic_providers
@@ -583,3 +583,75 @@ async def test_speech_without_a_time_does_not_degrade_the_fed_calendar():
         batch = await FedCalendarProvider(client, clock=lambda: NOW).fetch()
     assert batch.status == "healthy"
     assert sorted(e.event_code for e in batch.events) == ["FED_SPEECH", "FOMC"]
+
+
+@pytest.mark.parametrize(
+    "moment,expected",
+    [
+        (datetime(2026, 10, 2, 12, 28, tzinfo=UTC), True),  # 08:28 EDT
+        (datetime(2026, 10, 2, 12, 44, 59, tzinfo=UTC), True),
+        (datetime(2026, 10, 2, 12, 45, tzinfo=UTC), False),
+        (datetime(2026, 10, 2, 14, 5, tzinfo=UTC), True),  # 10:05 EDT (JOLTS)
+        (datetime(2026, 11, 6, 13, 31, tzinfo=UTC), True),  # 08:31 EST
+        (datetime(2026, 10, 3, 12, 30, tzinfo=UTC), False),  # Saturday
+        (NOW, False),  # 11:00 EDT
+    ],
+)
+def test_bls_release_bell_window(moment, expected):
+    assert near_release(moment) is expected
+
+
+BELL = datetime(2026, 10, 2, 12, 30, 21, tzinfo=UTC)  # jobs day, 08:30:21 ET
+
+
+async def _bls_with_failures(now, failures):
+    calls, sleeps = [], []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) <= failures:
+            return httpx.Response(200, json={"status": "REQUEST_NOT_PROCESSED", "message": []})
+        return httpx.Response(200, json=bls_payload())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        batch = await BLSEconomicProvider(client, clock=lambda: now, sleep=sleep).fetch()
+    return batch, len(calls), sleeps
+
+
+async def test_bls_miss_at_the_bell_is_retried_before_it_counts():
+    batch, calls, sleeps = await _bls_with_failures(BELL, failures=2)
+    assert batch.status == "healthy" and batch.observations
+    assert (calls, sleeps) == (3, [60, 60])
+
+
+async def test_bls_still_failing_after_bell_retries_is_unavailable():
+    batch, calls, sleeps = await _bls_with_failures(BELL, failures=99)
+    assert batch.status == "unavailable"
+    assert (calls, sleeps) == (5, [60] * 4)
+
+
+async def test_bls_failure_away_from_a_release_is_not_retried():
+    batch, calls, sleeps = await _bls_with_failures(NOW, failures=1)
+    assert batch.status == "unavailable"
+    assert (calls, sleeps) == (1, [])
+
+
+async def test_bls_bell_retry_stops_once_the_window_closes():
+    calls, sleeps = [], []
+    now = [datetime(2026, 10, 2, 12, 43, 30, tzinfo=UTC)]  # 08:43:30 ET
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += timedelta(seconds=seconds)
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"status": "REQUEST_NOT_PROCESSED", "message": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        batch = await BLSEconomicProvider(client, clock=lambda: now[0], sleep=sleep).fetch()
+    assert batch.status == "unavailable"
+    assert (len(calls), sleeps) == (3, [60, 60])  # 08:43:30, 08:44:30, then 08:45:30 stops

@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.domain.economics import EconomicEvent
-from core.providers.economic_base import EconomicBatch
+from core.providers.economic_base import EconomicBatch, ReleasePending, require_published
 from core.providers.economic_calendars import stable_id
 from core.providers.economic_http import HttpEconomicProvider
 
@@ -29,8 +29,9 @@ def parse_claims(text: str, now: datetime) -> EconomicEvent:
     publication = datetime.strptime(date[1], "%B %d, %Y").replace(
         hour=8, minute=30, tzinfo=ZoneInfo("America/New_York")
     )
-    if publication > now:
-        raise ValueError("claims release is still embargoed")
+    # A PDF dated later today (posted a moment early, or a lagging clock) is
+    # still embargoed: pending, not a broken feed.
+    require_published(publication, now, "claims release (still embargoed)")
     period = datetime.strptime(f"{values[1]}, {publication.year}", "%B %d, %Y")
     if period.date() > publication.date():
         period = period.replace(year=period.year - 1)
@@ -79,6 +80,10 @@ class DOLClaimsProvider(HttpEconomicProvider):
     provider_name = "dol_claims"
 
     async def collect(self, now: datetime) -> EconomicBatch:
-        event = parse_claims(await extract_first_page(await self.request("GET", CLAIMS_URL)), now)
-        return EconomicBatch(provider=self.name, checked_at=now, events=[event],
+        text = await extract_first_page(await self.request("GET", CLAIMS_URL))
+        try:
+            events = [parse_claims(text, now)]
+        except ReleasePending:
+            events = []
+        return EconomicBatch(provider=self.name, checked_at=now, events=events,
                              checked_series_ids=[], status="healthy")

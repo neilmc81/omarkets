@@ -58,3 +58,18 @@ def test_unrecognised_headline_fails_closed(summary):
     page = card("Oct 27, 2026, 10:00", "US Consumer Confidence Increased in October", summary)
     with pytest.raises(ValueError):
         parse_listing(page.encode(), NOW)
+
+
+def test_card_stamped_later_today_is_skipped_but_far_future_fails():
+    early = datetime(2026, 10, 27, 13, 59, tzinfo=UTC)  # 09:59 ET, card says 10:00
+    september = card(
+        "Sep 29, 2026, 10:00",
+        "US Consumer Confidence Fell in September",
+        "The Conference Board Consumer Confidence Index&reg; fell by 1.0 points to 84.2 "
+        "(1985=100) in September, down from 85.2 in August.",
+        slug="us-consumer-confidence-fell-in-september-302900000",
+    )
+    [event] = parse_listing((OCTOBER + september).encode(), early)
+    assert event.period == "2026-09"
+    with pytest.raises(ValueError):
+        parse_listing(OCTOBER.encode(), datetime(2026, 10, 20, tzinfo=UTC))

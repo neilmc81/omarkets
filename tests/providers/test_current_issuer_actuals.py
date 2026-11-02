@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from core.providers.economic_base import ReleasePending
 from core.providers.economic_census_retail import CensusRetailProvider
 from core.providers.economic_census_retail import parse_series as census
 from core.providers.economic_fed_g17 import FedG17Provider
@@ -144,3 +145,14 @@ def test_g17_reads_the_official_text_release_without_a_headline_sentence():
     assert event.released_at == datetime(2026, 10, 16, 13, 15, tzinfo=UTC)
     with pytest.raises(ValueError):  # a missing table is still never guessed around
         fed(body.replace(b"Total index", b"Totals"), datetime(2026, 10, 21, tzinfo=UTC))
+
+
+async def test_g17_dated_later_today_is_pending_not_feed_down():
+    early = datetime(2026, 9, 18, 13, 14, tzinfo=UTC)  # 09:14 EDT, release 09:15
+    with pytest.raises(ReleasePending):
+        fed(G17, early)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, content=G17))
+    ) as client:
+        batch = await FedG17Provider(client, clock=lambda: early).fetch()
+    assert batch.status == "healthy" and batch.events == [] and batch.issues == []

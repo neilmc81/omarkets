@@ -10,6 +10,20 @@
   the first trading day of January) a missing report is just pending. It
   counts as an issue only if it is still not listed an hour after that time.
   Fetch or parse failures are still issues straight away.
+- **ADP no longer false-alarms between releases.** The old rule wanted a
+  release in the last 35 days, which had no slack on five-week gaps (Sep 30
+  to Nov 4, Dec 2 to Jan 6). Now each report has an expected release: monthly
+  on the Wednesday of jobs-report week, weekly on Tuesdays (Wednesday after a
+  Monday holiday, none in the monthly week), both 08:15 ET. A missing report
+  is pending until an hour after that time, then an issue.
+- **A release file dated a moment in the future is "not out yet", not a
+  broken feed.** DOL jobless claims (seen at 08:29:59 ET on Oct 29), Fed G.17
+  industrial production, NAR existing-home sales and Conference Board
+  confidence stay healthy and simply wait for the release time. A date more
+  than a day ahead is still an error.
+- **A BLS API miss right at 08:30 or 10:00 ET is retried before it counts.**
+  Near those times on weekdays, a failed BLS check is retried up to four
+  times, a minute apart, instead of putting a 15-minute issue on the chip.
 
 - **VIX (the CBOE Volatility Index) now gets desk notes by default.** The
   default `desk_instruments` is

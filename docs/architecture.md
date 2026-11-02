@@ -496,7 +496,7 @@ period rollover and restart. The observed release feed still selects the newest
 period; issuer records alone never manufacture historical observed members.
 ISM schedule attachment rejects cancelled slots and conflicting explicit periods.
 The ADP issuer adapter reads at most two official listings and eight releases
-within a 35-day window. It verifies monthly headline/total/reference month and
+within a 42-day window. It verifies monthly headline/total/reference month and
 weekly NER Pulse headline/table/week ending. Weekly units are jobs per week
 (four-week moving average, seasonally adjusted), distinct from monthly jobs.
 Monthly publication time comes from the issuer ITEMDATE; weekly time uses the
@@ -509,6 +509,23 @@ original source records and revisions remain intact. Historical weekly table row
 never become earlier release actuals. Missing/unsupported issuer shapes degrade
 provider health and retain unavailable actuals; no estimates or database injection
 are used. Polling is every 15 minutes, at most every minute near a known ADP slot.
+No new ADP report before its expected release is pending, not a fault. Monthly
+is due on the Wednesday of BLS jobs-report week (the third Friday after the week
+holding the 12th, a week later when that lands on Jan 1-3); weekly is due
+Tuesdays (the next trading day after a Monday or Tuesday market holiday), with
+no weekly in the monthly report's week. Both are due at 08:15 Eastern. A family
+counts as missing only when no release from the latest due slot's week is found
+an hour after that slot. A page dated a moment in the future is skipped as
+pending, not rejected.
+
+**Not out yet versus broken.** DOL claims, Fed G.17, NAR and Conference Board
+pages carry their own release time. When that time is up to a day after the
+local clock (posted a moment early, or a lagging clock), the release is pending:
+the check stays healthy with no new event (Conference Board skips just that
+card). A date further ahead is still invalid and fails the check. The BLS API
+often fails right at the bell; a failed BLS check on a weekday from 2 minutes
+before until 15 minutes after 08:30 or 10:00 Eastern is retried up to four
+times, a minute apart, before it is recorded as unavailable.
 News ingestion converts summary HTML and entities to readable plain text while
 retaining the raw source payload and source URL; it never injects provider HTML.
 

@@ -16,7 +16,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.domain.economics import EconomicEvent
-from core.providers.economic_base import EconomicBatch
+from core.providers.economic_base import EconomicBatch, ReleasePending, require_published
 from core.providers.economic_calendars import stable_id
 from core.providers.economic_http import HttpEconomicProvider
 
@@ -51,8 +51,13 @@ def parse_listing(body: bytes, now: datetime) -> list[EconomicEvent]:
             raise ValueError("consumer confidence headline not recognised")
         actual, month, previous, prior_month = match.groups()
         released = datetime.strptime(stamp, "%b %d, %Y, %H:%M").replace(tzinfo=NY)
-        if released > now or month not in MONTHS:
+        if month not in MONTHS:
             raise ValueError("invalid consumer confidence release")
+        try:
+            require_published(released, now, "consumer confidence release")
+        except ReleasePending:
+            # Listed a moment before its stated time: skip the card until then.
+            continue
         year = released.year - (1 if MONTHS[month] > released.month else 0)
         period = f"{year:04d}-{MONTHS[month]:02d}"
         if prior_month and MONTHS.get(prior_month) != (MONTHS[month] - 2) % 12 + 1:
