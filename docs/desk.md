@@ -146,39 +146,37 @@ so a restart cannot produce a duplicate note or notification.
   `<sym>_price_location` and `<sym>_price`.
   VIX's profile sits on new volatility-index defaults that match how the strip
   already streams it (CNBC's `.VIX`: the Cboe cash index, not VX futures,
-  calculated 03:15–16:15 ET on trading days (to 13:15 ET on an early-close
-  day) and "closed" outside them, no
-  declared delay, a change from the previous close, not a settle; the 30-day
-  definition is in the defaults so a note may quote it). It says what VIX is
-  (expected S&P 500 swings from index options; level in index points, which
-  are not NQ's or ES's points) and what usually moves it, as tendencies rather
-  than rules: it usually moves opposite to stocks and jumps most in a fast
-  selloff, can stay firm before a big scheduled event and ease after, rises on
-  rate, Fed or inflation shocks when they knock stocks lower and on
-  geopolitical shocks (only when the facts show them), and has tended to fall
-  back after a spike (mean reversion, never predicted). VIX *is* the fear
-  gauge, so its prompt never treats "the VIX" as an outside input: rule 16 has
-  its own sentence (ranges in index points and percent, no realised
+  calculated 03:15–16:15 ET on trading days (to 13:15 ET on an early-close day)
+  and "closed" outside them, no declared delay, a change from the previous
+  close, not a settle; the 30-day definition is in the defaults so a note may
+  quote it). It says what VIX is (expected S&P 500 swings from index options;
+  level in index points, which are not NQ's or ES's points) and what usually
+  moves it, as tendencies rather than rules: it usually moves opposite to stocks
+  and jumps most in a fast selloff, can stay firm before a big scheduled event
+  and ease after, rises on rate, Fed or inflation shocks when they knock stocks
+  lower and on geopolitical shocks (only when the facts show them), and has
+  tended to fall back after a spike (mean reversion, never predicted). VIX *is*
+  the fear gauge, so its prompt never treats "the VIX" as an outside input: rule
+  16 has its own sentence (ranges in index points and percent, no realised
   volatility) and then "It is itself the stock market's fear gauge": no VXN,
-  VVIX, VIX futures or MOVE index is supplied, and yields are never a
-  volatility gauge. Yields are not a main driver (the volatility-index
-  defaults have no rates rule), so rule 10 is the "not a main driver" line and
-  `rates_read` is left out. Rule 18 reads ES and NQ as the stock context VIX
-  usually moves against (ES closest, VIX being from S&P 500 options) and the
-  dollar, yields, gold and oil as risk context only; `for_nq` is labelled as
-  about NQ. A data surprise is read through whether it unsettles stocks. Tone
-  is VIX up (supportive: bigger expected swings, usually more worry) or down
-  (negative: calmer markets); neither is advice, and a higher VIX is never
-  called good. Rule 15 calls its levels index levels and says the overnight
-  range starts at Cboe's 03:15 ET open though the window is measured from
-  18:00 ET; likewise the prior day is the previous trading day, which on a
-  regular day Cboe calculates only 03:15–16:15 ET, though its levels'
-  "measured" window is the full 18:00–17:00 ET session (`key_levels` reads the
-  session; VIX has no quotes outside Cboe's hours, so the values are the
-  same). Both end at 13:15 ET after an early close, so the rule calls those
-  regular-day hours and tells the writer to state the "measured" times. Move
-  and ask tasks only; the ask task asks for stocks and the scheduled events
-  traders may be buying protection for.
+  VVIX, VIX futures or MOVE index is supplied, and yields are never a volatility
+  gauge. Yields are not a main driver (the volatility-index defaults have no
+  rates rule), so rule 10 is the "not a main driver" line and `rates_read` is
+  left out. Rule 18 reads ES and NQ as the stock context VIX usually moves
+  against (ES closest, VIX being from S&P 500 options) and the dollar, yields,
+  gold and oil as risk context only; `for_nq` is labelled as about NQ. A data
+  surprise is read through whether it unsettles stocks. Tone is VIX up
+  (supportive: bigger expected swings, usually more worry) or down (negative:
+  calmer markets); neither is advice, and a higher VIX is never called good.
+  Rule 15 calls its levels index levels and says the overnight range starts at
+  Cboe's 03:15 ET open though the window is measured from 18:00 ET; likewise the
+  prior day is the previous trading day, which on a regular day Cboe calculates
+  only 03:15–16:15 ET, though its levels' "measured" window is the full
+  18:00–17:00 ET session (`key_levels` reads the session; VIX has no quotes
+  outside Cboe's hours, so the values are the same). Both end at 13:15 ET after
+  an early close, so the rule calls those regular-day hours and tells the writer
+  to state the "measured" times. Move and ask tasks only; the ask task asks for
+  stocks and the scheduled events traders may be buying protection for.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
   matter (every equity index future, gold, DXY and the yields; not WTI or VIX). Each note task has a
   length target, recorded by
@@ -438,9 +436,10 @@ The primer, week in review and auction notes do not get it.
 the chart), read only inside trading hours (`trading_windows`: nothing after an
 early close or in the 2026 Labor Day halt). A session counts when quotes cover
 at least 80% of its trading hours from one contract; gappy or rolled sessions
-are skipped, never counted as zero. A volatility index (VIX) is calculated only
-03:15–16:15 ET, so its trading hours are those (`volatility_index_window`), not
-the futures' 23: 13 hours of VIX quotes are a full day.
+are skipped, never counted as zero. A volatility index (VIX) is calculated
+only 03:15–16:15 ET (to 13:15 ET on an early-close day), so its trading hours
+are those (`volatility_index_window`), not the futures' 23: 13 hours of VIX
+quotes are a full regular day, 10 hours an early-close day.
 
 - **Typical daily range:** median high-minus-low of the complete sessions among
   the last 20, in points and percent (needs at least 10).

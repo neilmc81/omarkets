@@ -21,10 +21,11 @@ Deterministic, from stored hourly OHLC buckets and the session engine:
   (``MoveSize.trigger_vol_pct``): an ordinary VIX hour moves several times more,
   in percent, than an ordinary NQ hour.
 
-A volatility index is computed only in Cboe's hours (03:15-16:15 ET), so its
-sessions are measured over those hours, not the futures' 23, and it gets no
-realised volatility: the volatility of a volatility index is not what its level
-means, and the yearly rate assumes the futures' hours.
+A volatility index is computed only in Cboe's hours (03:15-16:15 ET, to 13:15
+ET on an early-close day), so its sessions are measured over those hours, not
+the futures' 23, and it gets no realised volatility: the volatility of a
+volatility index is not what its level means, and the yearly rate assumes the
+futures' hours.
 """
 
 from __future__ import annotations

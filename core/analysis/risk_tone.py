@@ -23,10 +23,10 @@ Anything smaller is 0 (neutral). The label then follows the count of signals:
 * none either way: **quiet**.
 
 An input is left out when its value or change is unavailable, or when its quote
-is stale. VIX is the exception: it is a cash index computed only 03:15–16:15 ET,
-so a VIX quote that stopped outside those hours is its close, which still
-describes the latest session; it is used and worded as "closed". Thresholds are
-typical day-to-day moves, not forecasts.
+is stale. VIX is the exception: it is a cash index computed only 03:15–16:15 ET
+(to 13:15 ET on an early-close day), so a VIX quote that stopped outside those
+hours is its close, which still describes the latest session; it is used and
+worded as "closed". Thresholds are typical day-to-day moves, not forecasts.
 
 **Effect on NQ** (:func:`nq_effect`) applies the same rules to one quote at a
 time, for every instrument the popup shows, so the shell colours a row by what

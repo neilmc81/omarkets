@@ -23,12 +23,12 @@
   VXN, VVIX or MOVE index is supplied, and yields are never used as one).
   Yields are not a main driver of VIX, so its notes have no separate rates
   section. No NQ vs ES comparison or megacap count. VIX is calculated only
-  03:15–16:15 ET (to 13:15 ET on an early-close day), so its typical daily range is measured over those hours
-  (before, 13 hours of quotes in a 23-hour session never counted as a full
-  day) and its ranges keep two decimals ("1.04 points (6.11%)"). A typical
-  VIX hour moves about 0.6%, but a busy one 4% or more, so a VIX move note
-  needs a one-hour move of 0.55 × its typical daily range, between 4% and 10%
-  (5% until there is enough history, set by
+  03:15–16:15 ET (to 13:15 ET on an early-close day), so its typical daily
+  range is measured over those hours (before, 13 hours of quotes in a 23-hour
+  session never counted as a full day) and its ranges keep two decimals
+  ("1.04 points (6.11%)"). A typical VIX hour moves about 0.6%, but a busy one
+  4% or more, so a VIX move note needs a one-hour move of 0.55 × its typical
+  daily range, between 4% and 10% (5% until there is enough history, set by
   `OMARKETS_DESK_MOVE_THRESHOLD_VOL_PCT`; `OMARKETS_DESK_MOVE_THRESHOLD_PCT`
   never applies to VIX). A VIX move note is written only while Cboe
   calculates VIX or up to 10 minutes after its close (16:15 ET, or 13:15 ET
