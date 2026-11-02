@@ -1,7 +1,8 @@
 """Strip desk coverage after DXY is the Treasury yields: US2Y, then US10Y, are
 wired through the desk like DXY.
 
-Both yields are in the production default on desk:v9, after DXY. Each gets move
+Both yields are in the production default on desk:v9, after DXY and before VIX.
+Each gets move
 and ask notes with its own 3-hour move limit and a move trigger in basis points,
 never a pre-market (their profiles have no pre-market text at all), and its notes
 are written from its own prompt and say they are about that yield, never NQ. The
@@ -102,11 +103,11 @@ def rule(symbol: str, number: int) -> str:
 # --------------------------------------------------------------------------- defaults
 
 
-def test_the_yields_are_last_in_the_default_desk_us2y_then_us10y():
-    assert ID.PRODUCTION_INSTRUMENTS == ALL
-    assert ID.PRODUCTION_INSTRUMENTS[-2:] == ("US2Y", "US10Y")
+def test_the_yields_follow_dxy_in_the_default_desk_us2y_then_us10y():
+    assert ID.PRODUCTION_INSTRUMENTS[:8] == ALL
+    assert ID.PRODUCTION_INSTRUMENTS[6:8] == ("US2Y", "US10Y")
     settings = Settings(_env_file=None)
-    assert settings.desk_instruments == list(ALL)
+    assert settings.desk_instruments[:8] == list(ALL)
     assert settings.desk_prompt_version == "desk:v9"
     assert all(P.has_profile(s, version=P.V9) for s in settings.desk_instruments)
 
@@ -152,8 +153,8 @@ def test_each_yield_is_the_existing_cnbc_feed_on_treasury_yield_defaults(symbol)
 
 
 def test_treasury_yield_defaults_leave_the_other_asset_classes_alone():
-    assert set(P.ASSET_DEFAULTS) == {AssetClass.EQUITY_INDEX_FUTURE, AssetClass.COMMODITY,
-                                     AssetClass.FX_INDEX, AssetClass.TREASURY_YIELD}
+    assert {AssetClass.EQUITY_INDEX_FUTURE, AssetClass.COMMODITY, AssetClass.FX_INDEX,
+            AssetClass.TREASURY_YIELD} <= set(P.ASSET_DEFAULTS)
     yields = P.ASSET_DEFAULTS[AssetClass.TREASURY_YIELD]
     assert yields.rates_rule is not None
     assert yields.rates_rule != P.ASSET_DEFAULTS[AssetClass.FX_INDEX].rates_rule

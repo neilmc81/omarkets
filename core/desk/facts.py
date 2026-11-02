@@ -687,9 +687,10 @@ LOCATION_LEVELS: tuple[str, ...] = (
 
 #: Instruments whose desk prices, gaps and ranges are written at their quote
 #: precision (``Instrument.price_precision``): DXY's whole day is often under
-#: one index point, so whole points or two decimals would hide its moves. The
-#: others keep the text their notes have always had.
-QUOTE_PRECISION_SYMBOLS = frozenset({"DXY"})
+#: one index point, so whole points or two decimals would hide its moves, and
+#: VIX's typical day is about one index point, so its ranges keep two decimals.
+#: The others keep the text their notes have always had.
+QUOTE_PRECISION_SYMBOLS = frozenset({"DXY", "VIX"})
 
 
 def _points_decimals(symbol: str, default: int) -> int:
@@ -721,7 +722,7 @@ def price_location(levels: Any, price: float | None,
     while the window is running or the latest quote (``quote_at``, delayed)
     has not reached its end. Fields are named for the instrument
     (``nq_price``/``nq_is`` for NQ, ``es_price``/``es_is`` for ES). Prices and
-    gaps have two decimals, or the quote's own for DXY (:func:`_points_decimals`);
+    gaps have two decimals, or the quote's own for DXY and VIX (:func:`_points_decimals`);
     a yield's levels are in percent and its gaps in basis points, and its current
     level is ``us2y_yield``/``us10y_yield``, not a price.
     """
@@ -781,7 +782,7 @@ def normal_move(size: Any, vxn: Any, vix: Any, *, trigger: float,
     the market-state instruments for ``gauge`` and ``benchmark`` (or None);
     NQ's are VXN and VIX (:data:`VOL_INDEXES`). Unmeasurable parts are left
     out, and a finished session's range only when its quotes were complete.
-    Ranges are in whole points, or ``symbol``'s quote precision for DXY
+    Ranges are in whole points, or ``symbol``'s quote precision for DXY and VIX
     (:func:`_points_decimals`). A Treasury yield's are in basis points
     (:func:`_yield_normal_move`). ``trigger`` is in the unit the instrument's
     moves are measured in: percent, or basis points for a yield

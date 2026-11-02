@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- **VIX (the CBOE Volatility Index) now gets desk notes by default.** The
+  default `desk_instruments` is
+  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y", "VIX"]` on
+  `desk:v9`. VIX works like the dollar and the yields: its own move notes
+  (with its own 3-hour limit and move trigger) and "Explain the market now"
+  notes when VIX is the focus. There is no VIX pre-market; only NQ gets the
+  daily briefing (cost policy). VIX notes say they are about VIX, and their
+  tone reads "… for VIX": supportive means pushing VIX up (bigger expected
+  swings, usually more worry), negative pushing it down (calmer markets);
+  neither is advice, and a higher VIX is never called good news. The prompt
+  explains what VIX is (the cash index on the Today strip, worked out from
+  S&P 500 options, not a VIX futures price; its level is in index points) and
+  what usually moves it, as tendencies rather than rules: it usually moves
+  opposite to stocks and jumps most in a fast selloff, can stay firm before a
+  big scheduled event and ease after it, can rise on rate, Fed or inflation
+  shocks when they knock stocks lower, and has tended to fall back after a
+  spike (never predicted). VIX is itself the stock market's fear gauge, so its
+  notes never treat "the VIX" as an outside input and have no other gauge (no
+  VXN, VVIX or MOVE index is supplied, and yields are never used as one).
+  Yields are not a main driver of VIX, so its notes have no separate rates
+  section. No NQ vs ES comparison or megacap count. VIX is calculated only
+  03:15–16:15 ET, so its typical daily range is measured over those hours
+  (before, 13 hours of quotes in a 23-hour session never counted as a full
+  day) and its ranges keep two decimals ("1.04 points (6.11%)"). An ordinary
+  VIX hour moves a percent or two, so a VIX move note needs a one-hour move of
+  0.55 × its typical daily range, between 4% and 10% (5% until there is
+  enough history, set by `OMARKETS_DESK_MOVE_THRESHOLD_VOL_PCT`;
+  `OMARKETS_DESK_MOVE_THRESHOLD_PCT` never applies to VIX). NQ, ES, YM, gold,
+  oil, dollar and yield notes are unchanged. That means a few more notes and a
+  little more AI spend each week. To leave VIX out, set
+  `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]`
+  in `.env` and restart; listing VIX with `desk:v8` refuses to start. After
+  updating, the log line reads
+  `desk notes for NQ, ES, YM, GOLD, WTI, DXY, US2Y, US10Y, VIX on desk:v9`.
+
 - **The US 2-year and 10-year Treasury yields (US2Y, US10Y) now get desk
   notes by default.** The default `desk_instruments` is
   `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]` on `desk:v9`.

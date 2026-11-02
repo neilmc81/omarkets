@@ -59,12 +59,12 @@ def test_parser_reads_legacy_and_scoped_ids(value, ref):
 
 def test_production_writes_for_every_default_instrument_and_nq_only_stays_selectable():
     assert ID.PRODUCTION_INSTRUMENTS == ("NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y",
-                                         "US10Y")
+                                         "US10Y", "VIX")
     base, _, _ = make(RELEASE)
     assert [i.symbol for i in base.instruments] == ["NQ"]  # chosen, as desk_instruments can
     service = DeskService(sources=base.sources, store=base.store, writer=base.writer)
     assert [i.symbol for i in service.instruments] == [
-        "NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]
+        "NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y", "VIX"]
 
 
 async def test_nq_and_es_premarkets_carry_their_own_facts_and_ids():

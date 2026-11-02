@@ -284,10 +284,10 @@ def test_new_install_uses_omarkets_database(clean_env, tmp_path):
 # --- desk_instruments (Phase 2 slice 1) ---
 
 
-def test_desk_defaults_are_nq_es_ym_gold_wti_dxy_and_the_yields_on_desk_v9(clean_env):
+def test_desk_defaults_are_nq_es_ym_gold_wti_dxy_the_yields_and_vix_on_desk_v9(clean_env):
     settings = Settings(_env_file=None)
     assert settings.desk_instruments == ["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y",
-                                         "US10Y"]
+                                         "US10Y", "VIX"]
     assert settings.desk_prompt_version == "desk:v9"
 
 
@@ -303,7 +303,7 @@ def test_the_shipped_env_example_leaves_the_desk_defaults(clean_env):
     example = Path(__file__).parents[2] / ".env.example"
     settings = Settings(_env_file=example)
     assert settings.desk_instruments == ["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y",
-                                         "US10Y"]
+                                         "US10Y", "VIX"]
     assert settings.desk_prompt_version == "desk:v9"
 
 

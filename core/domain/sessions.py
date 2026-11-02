@@ -234,6 +234,12 @@ def volatility_index_open(moment: datetime) -> bool:
     return is_trading_day(day) and opens <= local < closes
 
 
+def volatility_index_window(trade_date: date) -> tuple[datetime, datetime]:
+    """When Cboe computes VIX/VXN on ``trade_date``, in UTC (03:15-16:15 ET)."""
+    opens, closes = VOLATILITY_INDEX_HOURS
+    return _et_utc(trade_date, opens), _et_utc(trade_date, closes)
+
+
 def previous_trade_date(day: date) -> date:
     """The previous trading day (weekends and exchange holidays skipped)."""
     return previous_trading_day(day)
@@ -446,5 +452,6 @@ __all__ = [
     "session_segments",
     "trading_windows",
     "volatility_index_open",
+    "volatility_index_window",
     "week_start",
 ]
