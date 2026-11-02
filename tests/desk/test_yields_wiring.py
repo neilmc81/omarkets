@@ -8,6 +8,7 @@ are written from its own prompt and say they are about that yield, never NQ. The
 yields are already on the Today strip, so their notes read their own quotes
 there; NQ, ES, YM, GOLD, WTI and DXY notes are unchanged."""
 
+import dataclasses
 import hashlib
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -33,8 +34,8 @@ from core.storage.workspace import WorkspaceStore
 from tests.desk.test_complete_inputs import inst
 from tests.desk.test_identity import MOVE_AT, falling
 from tests.desk.test_prompt_snapshot import check
+from tests.desk.test_prompt_v9 import NO_NUMBERS, text
 from tests.desk.test_prompt_v9 import V9Writer as SentWriter
-from tests.desk.test_prompt_v9 import text
 from tests.desk.test_service import FakeWriter, cpi_rows, make
 
 YIELDS = ("US2Y", "US10Y")
@@ -170,7 +171,8 @@ def test_each_yield_s_notes_use_its_own_v9_prompt(symbol, kind):
     assert all(prompt.system != system(s) for s in (*OTHERS, OTHER[symbol]))
     assert f"move the US {YEARS[symbol]} Treasury yield ({symbol})" in prompt.system
     assert f'In the facts it is called "{LABEL[symbol]}"' in prompt.system
-    assert f"{sym}_price_location" in prompt.system and f'"{sym}_is"' in prompt.system
+    assert f'"{sym}_location"' in prompt.system and f'"{sym}_is"' in prompt.system
+    assert f"{sym}_price" not in prompt.system
     assert "nq_price_location" not in prompt.system and "gold" not in prompt.system.lower()
     assert f"supportive or negative for {symbol}" in prompt.system
     assert symbol in prompt.task and "NQ has" not in prompt.task
@@ -328,7 +330,7 @@ def test_other_v9_profiles_are_byte_identical_to_main(symbol):
 @pytest.mark.parametrize("symbol", YIELDS)
 def test_a_yield_s_prompt_says_borrowed_facts_are_about_other_markets(symbol):
     text_ = system(symbol)
-    assert "never use the VIX or VXN, which are stock-market gauges, as a yield's" in text_
+    assert "never use the VIX or VXN, which are stock-market gauges, for a yield" in text_
     assert 'Yield notes get no "nq_vs_es"' in text_
     assert "use stocks only as context on investors' appetite for risk" in text_
     assert "the dollar as context on the Fed and US rates" in text_
@@ -444,7 +446,7 @@ def test_a_yield_s_move_trigger_is_in_basis_points_scaled_to_its_range():
 
 @pytest.mark.parametrize("symbol", YIELDS)
 def test_a_yield_s_normal_move_size_is_in_basis_points(symbol):
-    facts = F.normal_move(yield_size(), None, None, trigger_pct=4.0, trigger_scaled=True,
+    facts = F.normal_move(yield_size(), None, None, trigger=4.0, trigger_scaled=True,
                           gauge="", benchmark=None, symbol=symbol)
     assert facts == {
         "typical_daily_range": "7.2bp",
@@ -477,7 +479,11 @@ def test_a_yield_s_price_location_is_in_percent_and_basis_points():
         level("prior_settle", 4.258, "4.258"), level("prior_day_high", 4.3, "4.300"),
         level("prior_day_low", 4.281, "4.281")])
     location = F.price_location(levels, 4.281)
-    assert location["us10y_price"] == "4.281%"
+    # A yield, not a price: the current level is "us10y_yield" in a section
+    # named "us10y_location" (NQ's stay "nq_price" in "nq_price_location").
+    assert location["us10y_yield"] == "4.281%" and "us10y_price" not in location
+    assert F.location_key("US10Y") == "us10y_location"
+    assert F.location_key("NQ") == "nq_price_location"
     assert [(row["value"], row["us10y_is"]) for row in location["levels"]] == [
         ("4.258%", "2.3bp above"), ("4.300%", "1.9bp below"), ("4.281%", "at")]
 
@@ -666,3 +672,89 @@ async def test_v9_yield_snapshots(symbol):
     await service.ask(instrument)
     facts = own_facts(writer, NoteKind.ASK, symbol)
     check(f"v9_{sym}_ask.txt", text(P.render(NoteKind.ASK, instrument, facts, version=P.V9)))
+
+
+# --------------------------------------------------------------------------- review polish
+
+
+def test_the_yield_fallback_trigger_is_its_own_basis_point_setting(monkeypatch):
+    # OMARKETS_DESK_MOVE_THRESHOLD_PCT is a percent and never reaches a yield;
+    # yields have their own fallback in basis points, defaulting to today's 6bp.
+    assert Settings(_env_file=None).desk_move_threshold_bp == 6.0
+    monkeypatch.setenv("OMARKETS_DESK_MOVE_THRESHOLD_BP", "8.5")
+    assert Settings(_env_file=None).desk_move_threshold_bp == 8.5
+    with pytest.raises(ValueError):
+        Settings(_env_file=None, desk_move_threshold_bp=0)
+
+
+@pytest.mark.parametrize("symbol", YIELDS)
+async def test_the_bp_setting_is_the_yield_trigger_until_there_is_history(symbol):
+    # No stored history: the fixed fallback is used. 2.5bp fires at 1.5bp and
+    # not at the 6bp default (test_an_ordinary_yield_hour_does_not_fire).
+    series = {"NQ": flat(30000.0), symbol: drifting(4.0, 2.5)}
+    service, _, _ = desk(MOVE_AT, series, threshold_bp=1.5)
+    assert service._move_trigger(MOVE_AT, ID.Instrument.of(symbol)) == (1.5, False)
+    [note] = await service.tick()
+    assert note.id == f"move:{symbol}:20261020T10"
+    # NQ keeps the percent setting.
+    assert service._move_trigger(MOVE_AT) == (0.8, False)
+
+
+def test_the_bp_setting_is_the_fallback_inside_trigger_bp():
+    service, _, _ = desk(MOVE_AT, threshold_bp=7.5)
+    service.sources = dataclasses.replace(service.sources, ohlc=object())
+    service._move_size = lambda now, inst=ID.NQ: yield_size(typical_range=None,
+                                                            typical_range_pct=None)
+    assert service._move_trigger(MOVE_AT, US10Y) == (7.5, False)
+    # With history the 4-10bp scaled trigger is unchanged.
+    service._trigger = {}
+    service._move_size = lambda now, inst=ID.NQ: yield_size(typical_range=0.10)
+    assert service._move_trigger(MOVE_AT, US10Y) == (5.5, True)
+
+
+def test_normal_move_takes_a_unit_agnostic_trigger():
+    # The keyword carries percent for most instruments and basis points for a
+    # yield, so it is named for neither.
+    from tests.desk.test_normal_move import size
+    nq = F.normal_move(size(), None, None, trigger=0.8, trigger_scaled=True)
+    assert nq["large_move_trigger"].startswith("0.80% in one hour")
+    ten = F.normal_move(yield_size(), None, None, trigger=4.0, trigger_scaled=True,
+                        gauge="", benchmark=None, symbol="US10Y")
+    assert ten["large_move_trigger"].startswith("4.0bp in one hour")
+    with pytest.raises(TypeError):
+        F.normal_move(yield_size(), None, None, trigger_pct=4.0, trigger_scaled=True,
+                      symbol="US10Y")
+
+
+@pytest.mark.parametrize("symbol", YIELDS)
+def test_rule_16_reads_as_two_clean_sentences_for_a_yield(symbol):
+    sixteen = rule(symbol, 16)
+    assert "and no fear gauge" not in sixteen
+    assert ("the typical daily range (high to low, in basis points) and the current or "
+            "last session's range compared with it (labelled with its date). It has no "
+            "fear gauge: no Treasury volatility index") in sixteen
+
+
+@pytest.mark.parametrize("kind", [NoteKind.MOVE, NoteKind.ASK])
+@pytest.mark.parametrize("symbol", YIELDS)
+def test_a_yield_prompt_never_states_the_futures_10_minute_delay(symbol, kind):
+    prompt = P.render(kind, ID.Instrument.of(symbol), {})
+    assert "10 minutes" not in prompt.system and "10 minutes" not in prompt.stated_facts
+    assert "10 minutes" not in prompt.number_sources
+    from core.desk.evaluation import checker
+    note = {**NO_NUMBERS, "summary": "Prices are about 10 minutes delayed."}
+    score = checker.score_draft(case_id="x", kind=kind.value, model="m",
+                                created_at="2026-10-20T15:00:00+00:00", draft=note, facts={},
+                                facts_complete=True, history=[], instrument=symbol,
+                                prompt_version="desk:v9")
+    assert score.numbers_not_in_facts == ["10"]
+
+
+@pytest.mark.parametrize("symbol", YIELDS)
+def test_a_yield_s_levels_are_called_yield_levels_not_prices(symbol):
+    sym = symbol.lower()
+    fifteen = rule(symbol, 15)
+    assert fifteen.startswith(f'15. "{sym}_location" says where {symbol} is against fixed '
+                              f'yield levels ("{sym}_is")')
+    assert "price" not in fifteen
+    assert "price levels" in rule("DXY", 15)

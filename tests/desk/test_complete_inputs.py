@@ -248,10 +248,10 @@ def test_headline_facts_keep_received_apart_from_published():
 def test_each_instrument_reads_its_own_fear_gauge():
     vix = SimpleNamespace(value=18.39, timestamp=NOW)
     vxn = SimpleNamespace(value=26.4, timestamp=NOW)
-    nq = F.normal_move(size(), vxn, vix, trigger_pct=0.8, trigger_scaled=True)
+    nq = F.normal_move(size(), vxn, vix, trigger=0.8, trigger_scaled=True)
     assert nq["vxn"] == "26.40" and nq["vxn_minus_vix"] == "+8.01 points"
     gauge, benchmark = F.VOL_INDEXES["ES"]
-    es = F.normal_move(size(), vix, None, trigger_pct=0.8, trigger_scaled=True,
+    es = F.normal_move(size(), vix, None, trigger=0.8, trigger_scaled=True,
                        gauge=gauge, benchmark=benchmark)
     assert es["vix"] == "18.39" and es["vix_as_of"] == "Tue Oct 20 11:00 ET"
     assert not {"vxn", "vxn_as_of", "vxn_minus_vix"} & es.keys()

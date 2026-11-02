@@ -46,7 +46,7 @@ def cpi_rows(actual=0.4):
 
 
 def make(now, *, rows=None, news=(), series=None, writer=None, threshold=0.8,
-         instruments=("NQ",)):
+         instruments=("NQ",), threshold_bp=None):
     clock = {"now": now}
     series = series or {}
 
@@ -71,6 +71,7 @@ def make(now, *, rows=None, news=(), series=None, writer=None, threshold=0.8,
         notify=notify,
         clock=lambda: clock["now"],
         move_threshold_pct=threshold,
+        **({} if threshold_bp is None else {"move_threshold_bp": threshold_bp}),
         instruments=instruments,
     )
     return service, clock, notes

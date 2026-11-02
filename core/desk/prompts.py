@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from core.desk import facts as F
 from core.desk.identity import INSTRUMENT_KINDS, LEGACY, Instrument
 from core.desk.models import NoteKind
 from core.domain.instruments import AssetClass
@@ -212,9 +213,14 @@ class AssetDefaults:
     #: Futures by default; an index such as DXY has no futures session.
     overnight_since: str = "futures reopened"
     prior_day: str = "the previous full futures session"
-    #: Rule 16: what ``normal_move_size`` holds before the fear gauge. A yield's
-    #: ranges are in basis points and it gets no realised volatility (a yearly
-    #: percentage of a yield level would mislead).
+    #: Rule 15: what its fixed levels are levels of. A yield's are yields in
+    #: percent, not prices.
+    levels_of: str = "price"
+    #: Rule 16: what ``normal_move_size`` holds, ending where the fear gauge rule
+    #: continues the sentence ("... and"). A yield's ranges are in basis points
+    #: and it gets no realised volatility (a yearly percentage of a yield level
+    #: would mislead); it has no gauge either, so its list is a sentence of its
+    #: own and its gauge rule another.
     move_size: str = ("the typical daily range (high to low), the current or last "
                       "session's range compared with it (labelled with its date), "
                       "realised volatility (how much {symbol} has actually moved, as a "
@@ -343,8 +349,9 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
             "but do not claim one yield moved the other unless the facts support it."),
         overnight_since="the session reopened at 18:00 ET",
         prior_day="the previous full session, 18:00 ET to 17:00 ET",
-        move_size=("the typical daily range (high to low, in basis points), the current or "
-                   "last session's range compared with it (labelled with its date) and"),
+        levels_of="yield",
+        move_size=("the typical daily range (high to low, in basis points) and the current "
+                   "or last session's range compared with it (labelled with its date)."),
     ),
 }
 
@@ -414,7 +421,7 @@ headline, not a confirmed fact.
 stands now, after revision) and "revision" (how far it moved, when known). Mention a \
 revision in plain words when it changes the picture. If neither field is present, \
 do not mention revisions.
-15. "{location}" says where {symbol} is against fixed price levels ("{sym}_is"): \
+15. "{location}" says where {symbol} is against fixed {levels_of} levels ("{sym}_is"): \
 the prior settle, the overnight high and low (since {overnight_since}; \
 "overnight_so_far" means that range is not complete yet), the prior day's high and \
 low ({prior_day}) and the prior week's high and low. Each \
@@ -536,7 +543,7 @@ def _v9(spec: InstrumentSpec) -> Profile:
     its asset class's defaults."""
     defaults = ASSET_DEFAULTS[spec.asset]
     fields = {"symbol": spec.symbol, "name": spec.name, "sym": spec.symbol.lower(),
-              "location": f"{spec.symbol.lower()}_price_location",
+              "location": F.location_key(spec.symbol),
               "benchmark_task": spec.benchmark_task + (_MEGACAP_TASK if spec.participation
                                                        else "")}
     fields["ask_drivers"] = spec.ask_drivers.format(**fields)
@@ -548,7 +555,7 @@ def _v9(spec: InstrumentSpec) -> Profile:
     system = _V9_SYSTEM.format(
         **fields, what=spec.what, about=defaults.about, rates_rule=rates_rule,
         overnight_since=defaults.overnight_since, prior_day=defaults.prior_day,
-        move_size=defaults.move_size.format(**fields),
+        levels_of=defaults.levels_of, move_size=defaults.move_size.format(**fields),
         drivers=spec.drivers, forecast_rule=spec.forecast_rule.format(**fields),
         gauge_rule=spec.gauge_rule.format(**fields),
         benchmark_rule=spec.benchmark_rule.format(**fields) + (
@@ -571,9 +578,9 @@ _YIELD_TONE = (
     "against them, say so plainly. Here \"supportive\" means pushing the {years} yield up "
     "(rates higher) and \"negative\" means pushing it down; neither is advice, and higher "
     "yields are not good or bad in themselves.")
-_YIELD_GAUGE = ("no fear gauge: no Treasury volatility index (such as the MOVE index) is "
-                "supplied, so never use the VIX or VXN, which are stock-market gauges, as a "
-                "yield's.")
+_YIELD_GAUGE = ("It has no fear gauge: no Treasury volatility index (such as the MOVE "
+                "index) is supplied, so never use the VIX or VXN, which are stock-market "
+                "gauges, for a yield.")
 _YIELD_BENCHMARK = (
     "Yield notes get no \"nq_vs_es\". NQ (Nasdaq 100 futures), ES (S&P 500 futures) and the "
     "US dollar in \"markets_today\" are other markets: use stocks only as context on "

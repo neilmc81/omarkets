@@ -130,12 +130,19 @@ so a restart cannot produce a duplicate note or notification.
   fear gauge (no Treasury volatility index such as the MOVE is fed; the VIX is
   never used as one); NQ, ES and the dollar are context only, and `for_nq` is
   labelled as about NQ. Move and ask tasks only. The Treasury-yield defaults set
-  rule 15 like the FX index and rule 16's list (`AssetDefaults.move_size`:
-  ranges in basis points, no realised volatility). In the facts, a yield's
+  rule 15 like the FX index but call the levels yield levels, not price levels
+  (`AssetDefaults.levels_of`), and give rule 16 its own sentence
+  (`AssetDefaults.move_size`: ranges in basis points, no realised volatility),
+  with "It has no fear gauge" as the next. A yield's stated facts are its own
+  defaults' text: they say its feed declares no delay and never the futures'
+  "about 10 minutes delayed". In the facts, a yield's
   `normal_move_size` ranges are in basis points ("7.2bp", today's share of a
   typical day from those), with no realised volatility (a yearly percentage of
-  a yield level would mislead), and its price location gives levels in percent
-  ("4.258%") and gaps in basis points ("2.3bp above").
+  a yield level would mislead), and its location is `us2y_location` /
+  `us10y_location` (`facts.location_key`) with its current level as
+  `us2y_yield` / `us10y_yield`, not a price: levels in percent ("4.258%") and
+  gaps in basis points ("2.3bp above"). Every other instrument keeps
+  `<sym>_price_location` and `<sym>_price`.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
   matter (every equity index future, gold, DXY and the yields). Each note task has a
   length target, recorded by
@@ -220,7 +227,8 @@ so a restart cannot produce a duplicate note or notification.
 | `OMARKETS_DESK_MODEL_PARAMS` | `{}`; JSON map of model to extra request fields, replacing the default per model |
 | `OMARKETS_DESK_MODEL_RATES` | `{}`; JSON map of model to `[input, output]` USD per million tokens |
 | `OMARKETS_DESK_INPUT_RATE` / `_OUTPUT_RATE` | `3.0` / `15.0`, for models with no rates (reservation upper bound) |
-| `OMARKETS_DESK_MOVE_THRESHOLD_PCT` | `0.8`; used only until there are 10 complete sessions to scale the trigger |
+| `OMARKETS_DESK_MOVE_THRESHOLD_PCT` | `0.8`; used only until there are 10 complete sessions to scale the trigger; never for a yield |
+| `OMARKETS_DESK_MOVE_THRESHOLD_BP` | `6.0`; the same for US2Y and US10Y, in basis points (their scaled trigger is 4–10bp) |
 | `OMARKETS_DESK_NOTIFY` | `true` |
 | `OMARKETS_DESK_DAILY_PLAN` | `true` (the 07:00 ET plan notification) |
 | `OMARKETS_DESK_LOCAL_TIMEZONE` | `America/New_York` (times in the daily plan) |
@@ -421,8 +429,11 @@ fails, `OMARKETS_DESK_MOVE_THRESHOLD_PCT` is used (a failure is retried on the
 next poll). The trigger and whether it was scaled are cached together, so the
 facts always describe the trigger actually in use. A Treasury yield's moves are
 measured in basis points, so its trigger is too (`MoveSize.trigger_bp`): 0.55 ×
-its typical daily range in basis points, kept between 4bp and 10bp, or a fixed
-6bp without enough history (never the percent threshold read as basis points).
+its typical daily range in basis points, kept between 4bp and 10bp, or
+`OMARKETS_DESK_MOVE_THRESHOLD_BP` (default 6bp) without enough history or if
+storage fails (never the percent threshold read as basis points).
+`normal_move(..., trigger=...)` takes the trigger in whichever unit the
+instrument's moves are measured in, so the keyword names neither.
 
 ## Complete inputs (Phase 1 slice 4, October 31, 2026)
 

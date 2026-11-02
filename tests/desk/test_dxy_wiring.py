@@ -339,7 +339,7 @@ def dxy_size():
 
 
 def test_dxy_s_sub_one_point_ranges_keep_their_decimals():
-    facts = F.normal_move(dxy_size(), None, None, trigger_pct=0.3, trigger_scaled=True,
+    facts = F.normal_move(dxy_size(), None, None, trigger=0.3, trigger_scaled=True,
                           gauge="", benchmark=None, symbol="DXY")
     assert facts["typical_daily_range"] == "0.420 points (0.42%)"
     assert facts["session_range_so_far"].endswith(

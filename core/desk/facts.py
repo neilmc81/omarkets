@@ -703,6 +703,13 @@ def _when(moment: datetime) -> str:
     return moment.astimezone(_NEW_YORK).strftime("%a %b %d %H:%M ET")
 
 
+def location_key(symbol: str) -> str:
+    """The facts field :func:`price_location` goes in: ``nq_price_location`` for
+    NQ, ``us10y_location`` for a Treasury yield (a yield level, not a price)."""
+    sym = symbol.lower()
+    return f"{sym}_location" if symbol in YIELD_SYMBOLS else f"{sym}_price_location"
+
+
 def price_location(levels: Any, price: float | None,
                    quote_at: datetime | None = None) -> dict[str, Any] | None:
     """Where ``price`` sits against the key levels, as ready-made text.
@@ -715,7 +722,8 @@ def price_location(levels: Any, price: float | None,
     has not reached its end. Fields are named for the instrument
     (``nq_price``/``nq_is`` for NQ, ``es_price``/``es_is`` for ES). Prices and
     gaps have two decimals, or the quote's own for DXY (:func:`_points_decimals`);
-    a yield's levels are in percent and its gaps in basis points.
+    a yield's levels are in percent and its gaps in basis points, and its current
+    level is ``us2y_yield``/``us10y_yield``, not a price.
     """
     if price is None or not isfinite(price):
         return None
@@ -747,7 +755,7 @@ def price_location(levels: Any, price: float | None,
         return None
     price_text = (f"{price:,.{decimals}f}" if levels.symbol in QUOTE_PRECISION_SYMBOLS
                   else _value_text(levels.symbol, price))
-    return {f"{sym}_price": price_text, "levels": rows,
+    return {f"{sym}_yield" if yields else f"{sym}_price": price_text, "levels": rows,
             **({"overnight_so_far": True} if overnight_so_far else {})}
 
 
@@ -764,7 +772,7 @@ VOL_INDEXES: dict[str, tuple[str, str | None]] = {
     "NQ": ("VXN", "VIX"), "ES": ("VIX", None), "YM": ("VIX", None)}
 
 
-def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
+def normal_move(size: Any, vxn: Any, vix: Any, *, trigger: float,
                 trigger_scaled: bool, gauge: str = "VXN",
                 benchmark: str | None = "VIX", symbol: str = "NQ") -> dict[str, Any] | None:
     """How big an instrument's moves normally are, and its fear gauge, as text.
@@ -775,10 +783,12 @@ def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
     out, and a finished session's range only when its quotes were complete.
     Ranges are in whole points, or ``symbol``'s quote precision for DXY
     (:func:`_points_decimals`). A Treasury yield's are in basis points
-    (:func:`_yield_normal_move`).
+    (:func:`_yield_normal_move`). ``trigger`` is in the unit the instrument's
+    moves are measured in: percent, or basis points for a yield
+    (``DeskService._move_trigger``).
     """
     if symbol in YIELD_SYMBOLS:
-        return _yield_normal_move(size, trigger_bp=trigger_pct, trigger_scaled=trigger_scaled)
+        return _yield_normal_move(size, trigger_bp=trigger, trigger_scaled=trigger_scaled)
     out: dict[str, Any] = {}
     decimals = _points_decimals(symbol, 0)
     if size is not None and size.typical_range is not None:
@@ -809,7 +819,7 @@ def normal_move(size: Any, vxn: Any, vix: Any, *, trigger_pct: float,
             out[f"{own}_minus_{other}"] = f"{vxn_value - vix_value:+.2f} points"
     if not out:
         return None
-    out["large_move_trigger"] = (f"{trigger_pct:.2f}% in one hour, "
+    out["large_move_trigger"] = (f"{trigger:.2f}% in one hour, "
                                  + _trigger_basis(trigger_scaled))
     return out
 

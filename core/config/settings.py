@@ -276,6 +276,10 @@ class Settings(BaseSettings):
     #: NQ move over about an hour that earns its own "why is NQ moving" note, used
     #: until there is enough history to scale it (``core/analysis/move_size.py``).
     desk_move_threshold_pct: float = Field(default=0.8, gt=0, allow_inf_nan=False)
+    #: The same for a Treasury yield (US2Y, US10Y), in basis points: a yield's
+    #: move is measured in basis points, never as a percent of its level. Once
+    #: there is history its trigger scales between 4bp and 10bp.
+    desk_move_threshold_bp: float = Field(default=6.0, gt=0, allow_inf_nan=False)
     desk_notify: bool = True
     #: The 07:00 ET "what's on today" notification (no AI).
     desk_daily_plan: bool = True
