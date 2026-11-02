@@ -146,7 +146,8 @@ so a restart cannot produce a duplicate note or notification.
   `<sym>_price_location` and `<sym>_price`.
   VIX's profile sits on new volatility-index defaults that match how the strip
   already streams it (CNBC's `.VIX`: the Cboe cash index, not VX futures,
-  calculated 03:15–16:15 ET on trading days and "closed" outside them, no
+  calculated 03:15–16:15 ET on trading days (to 13:15 ET on an early-close
+  day) and "closed" outside them, no
   declared delay, a change from the previous close, not a settle; the 30-day
   definition is in the defaults so a note may quote it). It says what VIX is
   (expected S&P 500 swings from index options; level in index points, which
@@ -170,10 +171,12 @@ so a restart cannot produce a duplicate note or notification.
   (negative: calmer markets); neither is advice, and a higher VIX is never
   called good. Rule 15 calls its levels index levels and says the overnight
   range starts at Cboe's 03:15 ET open though the window is measured from
-  18:00 ET; likewise the prior day is the previous trading day, which Cboe
-  calculated only 03:15–16:15 ET, though its levels' "measured" window is the
-  full 18:00–17:00 ET session (`key_levels` reads the session; VIX has no
-  quotes outside Cboe's hours, so the values are the same). Move
+  18:00 ET; likewise the prior day is the previous trading day, which on a
+  regular day Cboe calculates only 03:15–16:15 ET, though its levels'
+  "measured" window is the full 18:00–17:00 ET session (`key_levels` reads the
+  session; VIX has no quotes outside Cboe's hours, so the values are the
+  same). Both end at 13:15 ET after an early close, so the rule calls those
+  regular-day hours and tells the writer to state the "measured" times. Move
   and ask tasks only; the ask task asks for stocks and the scheduled events
   traders may be buying protection for.
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields

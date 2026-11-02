@@ -122,8 +122,8 @@ INSTRUMENTS: tuple[Explainer, ...] = (
            "A weaker dollar usually goes with calmer markets and tends to help NQ."),
     _entry("instrument", "VIX", "VIX fear gauge",
            "The VIX 'fear gauge' measures how much movement options traders expect in "
-           "the S&P 500 over the next month. It is only calculated 03:15–16:15 ET; "
-           "outside those hours it shows its close.",
+           "the S&P 500 over the next month. It is only calculated 03:15–16:15 ET (to "
+           "13:15 ET on an early-close day); outside those hours it shows its close.",
            "It is the market's nervousness in one number, and it usually moves the opposite "
            "way to stocks.",
            "A jump in the VIX usually comes with falling stocks and bigger swings in NQ.",

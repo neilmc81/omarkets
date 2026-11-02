@@ -142,7 +142,7 @@ def test_vix_is_the_existing_cnbc_cash_index_on_volatility_index_defaults():
     # exchange settle: an index has a close, which the shared location facts
     # still label "Prior settle".
     assert "10 minutes delayed" not in stated and "declares no delay" in stated
-    assert "from 03:15 ET to 16:15 ET on trading days" in stated
+    assert "from 03:15 ET to 16:15 ET on a regular trading day" in stated
     assert "over the next 30 days" in stated
     assert "not a futures contract" in stated and "no exchange sets a settle for it" in stated
     assert ("its change today is measured from the previous session's close, and its "
@@ -288,9 +288,10 @@ def test_vix_s_location_rule_speaks_of_cboe_hours_not_futures():
                               'index levels ("vix_is")')
     assert "futures" not in fifteen
     assert "(since Cboe began calculating it at 03:15 ET" in fifteen
-    assert ("the prior day's high and low (the previous trading day; Cboe calculated it "
-            "only from 03:15 ET to 16:15 ET, though the \"measured\" window is the full "
-            "session from 18:00 ET to 17:00 ET)") in fifteen
+    assert ("the prior day's high and low (the previous trading day; on a regular day "
+            "Cboe calculates it only from 03:15 ET to 16:15 ET and the \"measured\" window "
+            "is the full session from 18:00 ET to 17:00 ET, but both end early on an "
+            "early-close day, so state the times its \"measured\" field gives)") in fifteen
 
 
 def test_vix_s_prior_day_wording_matches_the_window_its_levels_are_measured_over():
@@ -769,3 +770,54 @@ async def test_v9_vix_snapshots():
     await service.ask(VIX)
     facts = vix_facts(writer, NoteKind.ASK)
     check("v9_vix_ask.txt", text(P.render(NoteKind.ASK, VIX, facts, version=P.V9)))
+
+
+# ------------------------------------------------------------ early-close polish
+
+#: Monday Nov 30, 2026, 10:00 ET: the prior day is Friday Nov 27, an early close.
+AFTER_EARLY_CLOSE = datetime(2026, 11, 30, 15, 0, tzinfo=UTC)
+
+
+def test_vix_s_prior_day_after_an_early_close_is_measured_to_13_15_and_the_rule_defers_to_it():
+    # On the day after Thanksgiving Cboe stops at 13:15 ET and so does the
+    # session key_levels reads: rule 15's 16:15 / 17:00 ET are only a regular
+    # day's hours, and the writer is told to state the "measured" times.
+    friday = datetime(2026, 11, 27).date()
+    rows = [r for r in cash_rows(friday)
+            if r.start < datetime(2026, 11, 27, 18, 15, tzinfo=UTC)]
+    levels = key_levels("VIX", vix_quote(), ohlc_of(rows), now=AFTER_EARLY_CLOSE)
+    day = {lv.key: lv for lv in levels.levels}["prior_day_high"]
+    assert day.value is not None
+    assert day.window_end.astimezone(NEW_YORK).strftime("%a %H:%M") == "Fri 13:15"
+    location = F.price_location(levels, 17.42)
+    [row] = [r for r in location["levels"] if r["level"] == "Prior day high"]
+    assert row["measured"] == "Thu Nov 26 18:00 ET to Fri Nov 27 13:15 ET"
+    fifteen = rule(15)
+    assert "on a regular day Cboe calculates it only from 03:15 ET to 16:15 ET" in fifteen
+    assert ("both end early on an early-close day, so state the times its \"measured\" "
+            "field gives") in fifteen
+
+
+def test_vix_s_hours_copy_names_the_early_close():
+    from core.desk.explainers import INSTRUMENTS
+    stated = P.PROMPTS[P.V9]["VIX"].stated_facts
+    assert "16:15 ET on a regular trading day (to 13:15 ET on an early-close day)" in stated
+    [vix] = [e for e in INSTRUMENTS if e.name == "VIX"]
+    assert "(to 13:15 ET on an early-close day)" in vix.what
+
+
+@pytest.mark.parametrize("close", [CBOE_CLOSE, EARLY_CLOSE], ids=["regular", "early"])
+def test_vix_move_gate_includes_exactly_ten_minutes_after_cboe_s_close(close):
+    from core.desk.service import _volatility_index_within_grace
+    assert _volatility_index_within_grace(close + timedelta(minutes=10))
+    assert not _volatility_index_within_grace(close + timedelta(minutes=10, seconds=1))
+
+
+async def test_a_vix_move_is_still_written_exactly_ten_minutes_after_the_close():
+    # The last quote is Cboe's close itself, so it is exactly 10 minutes old too.
+    now = CBOE_CLOSE + timedelta(minutes=10)
+    series = {"NQ": flat(30000.0, now),
+              "VIX": spiking(step=0.002, now=CBOE_CLOSE + timedelta(minutes=1))}
+    service, _, _ = desk(now, series)
+    [note] = await vix_notes(service)
+    assert note.title.endswith("in the last hour")

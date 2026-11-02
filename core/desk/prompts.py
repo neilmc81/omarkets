@@ -354,14 +354,16 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
                    "or last session's range compared with it (labelled with its date)."),
     ),
     # The CNBC .VIX quote the Today strip shows: the Cboe cash index (not VX
-    # futures), computed 03:15-16:15 ET (``sessions.VOLATILITY_INDEX_HOURS``), no
+    # futures), computed 03:15-16:15 ET (``sessions.VOLATILITY_INDEX_HOURS``; to
+    # 13:15 ET on an early-close day, ``sessions.volatility_index_window``), no
     # declared delay, and its change from the previous close. Yields reach a
     # volatility index through stocks, so they are not a main driver.
     AssetClass.VOLATILITY_INDEX: AssetDefaults(
         about=("Cboe calculates a volatility index from the prices of stock index options: "
                "it measures how much that stock index is expected to swing over the next 30 "
                "days, as a yearly percentage. It is calculated from 03:15 ET to "
-               "16:15 ET on trading days; outside those hours its value is the last close, "
+               "16:15 ET on a regular trading day (to 13:15 ET on an early-close day); "
+               "outside those hours its value is the last close, "
                "and \"markets_today\" marks it closed. Its feed declares no delay (see "
                "\"expected_delay\"). It is an index, not a futures contract, so no exchange "
                "sets a settle for it: its change today is measured from the previous "
@@ -372,12 +374,14 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
         overnight_since=("Cboe began calculating it at 03:15 ET, though the \"measured\" "
                          "window starts at 18:00 ET"),
         # Like the overnight range, the prior day's levels are read over the
-        # 18:00-17:00 ET session (``core.analysis.levels``); VIX has quotes only
-        # in Cboe's hours, so the values are the same, and the facts' "measured"
-        # window must match what the prompt says.
-        prior_day=("the previous trading day; Cboe calculated it only from 03:15 ET to "
-                   "16:15 ET, though the \"measured\" window is the full session from "
-                   "18:00 ET to 17:00 ET"),
+        # 18:00-17:00 ET session (``core.analysis.levels``; it ends at 13:15 ET
+        # after an early close, as Cboe does); VIX has quotes only in Cboe's
+        # hours, so the values are the same. Those hours are a regular day's, so
+        # the prompt defers to the "measured" times the facts supply.
+        prior_day=("the previous trading day; on a regular day Cboe calculates it only "
+                   "from 03:15 ET to 16:15 ET and the \"measured\" window is the full "
+                   "session from 18:00 ET to 17:00 ET, but both end early on an "
+                   "early-close day, so state the times its \"measured\" field gives"),
         levels_of="index",
         move_size=("the typical daily range (high to low, in index points and as a "
                    "percentage of its level) and the current or last session's range "

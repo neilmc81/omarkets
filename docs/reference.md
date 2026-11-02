@@ -744,7 +744,8 @@ draws. Times are UTC; unavailable values are `null` with a reason, never zero.
   to the London open (08:00 Europe/London, so UK clock changes are respected);
   Europe to 08:00 ET; pre-market 08:00 ET to the 09:30 cash open; US cash; after
   the cash close to the Globex close (13:15 ET on early-close days). VIX and VXN
-  are computed 03:15–16:15 ET on trading days (`volatility_index_open`).
+  are computed 03:15–16:15 ET on trading days, to 13:15 ET on an early-close
+  day (`volatility_index_open`).
 - **Key levels** (`/api/v1/levels/{symbol}`): overnight high/low (Globex open to
   09:30 ET, `partial` before then), prior settle (the source's previous close),
   prior day high/low (the previous full 18:00–17:00 ET session), prior week

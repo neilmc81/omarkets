@@ -66,7 +66,7 @@ from core.domain.sessions import (
     active_session,
     next_session_open,
     session_phase,
-    volatility_index_open,
+    volatility_index_window,
 )
 from core.providers.earnings_nasdaq import EarningsDate, NasdaqEarningsCalendar
 from core.providers.treasury_auctions import Auction, TreasuryAuctions
@@ -152,6 +152,16 @@ class DeskSources:
     ohlc: Callable[..., Sequence[Any]] | None = None
     #: The economic service's macro series, for the macro trends in notes.
     macro_series: Callable[[], Sequence[Any]] | None = None
+
+
+def _volatility_index_within_grace(now: datetime) -> bool:
+    """Whether Cboe is computing VIX/VXN at ``now`` or closed at most
+    ``VOL_INDEX_CLOSE_GRACE`` ago (inclusive), on a regular or early-close day."""
+    day = now.astimezone(NEW_YORK).date()
+    if not is_trading_day(day):
+        return False
+    opens, closes = volatility_index_window(day)
+    return opens <= now <= closes + VOL_INDEX_CLOSE_GRACE
 
 
 class DeskService:
@@ -659,8 +669,7 @@ class DeskService:
         # it (or just after its close) and only from a quote that recent.
         vol = volatility_index(inst.symbol)
         if vol:
-            if not (volatility_index_open(now)
-                    or volatility_index_open(now - VOL_INDEX_CLOSE_GRACE)):
+            if not _volatility_index_within_grace(now):
                 return None
         elif session_phase(now) not in {SessionPhase.RTH, SessionPhase.OVERNIGHT}:
             return None
