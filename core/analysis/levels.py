@@ -1,5 +1,6 @@
 """Key price levels for a desk instrument: the futures (NQ on Today and the
-Chart page) and the DXY index, on the same 18:00-17:00 ET session calendar.
+Chart page), the DXY index and the Treasury yields, on the same 18:00-17:00 ET
+session calendar.
 
 Deterministic, from stored observations and the session engine:
 
@@ -8,7 +9,8 @@ Deterministic, from stored observations and the session engine:
   open (09:30 ET), or "so far" before 09:30 ET.
 * **Prior settle** — the previous session's settlement as reported by the quote
   source (the instrument's ``previous_close``); today's change is measured from it.
-  An index has no settle, so for DXY this is the previous session's close.
+  An index or a yield has no settle, so for DXY, US2Y and US10Y this is the
+  previous session's close.
 * **Prior day high / low** — the previous full session (18:00–17:00 ET; Globex
   for the futures).
 * **Prior week high / low** — every session of the previous Monday–Friday week.

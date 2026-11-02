@@ -12,6 +12,34 @@
   only a little more budget is held while it runs and is released when it
   settles.
 
+- **The US 2-year and 10-year Treasury yields (US2Y, US10Y) now get desk
+  notes by default.** The default `desk_instruments` is
+  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]` on `desk:v9`.
+  Each yield works like the dollar: its own move notes (with its own 3-hour
+  limit and move trigger) and "Explain the market now" notes when it is the
+  focus. There is no yield pre-market; only NQ gets the daily briefing (cost
+  policy). Yield notes say which yield they are about, and their tone reads
+  "… for US2Y" or "… for US10Y": supportive means pushing the yield up (rates
+  higher), negative pushing it down; neither is advice. The prompts explain
+  what each is (a constant-maturity Treasury yield, not a futures price, moving
+  in basis points) and what usually moves it, as tendencies rather than rules:
+  the 2-year follows what markets expect from the Fed most closely; the
+  10-year carries more of the long-run growth and inflation outlook and the
+  term premium (deficits, heavy Treasury supply, weak auctions). Because the
+  note is about a yield, it reads the other yield and the curve (10-year minus
+  2-year) instead of treating "yields" as an outside driver. No NQ vs ES
+  comparison, megacap count or fear gauge (the feeds have no Treasury gauge;
+  the VIX is never used as one). Yield notes give their ranges, distance to
+  each level and move trigger in basis points ("7.2bp"), not index points. A
+  yield move note needs a one-hour move of 0.55 × its typical daily range,
+  between 4bp and 10bp (6bp until there is enough history), so routine
+  2–3bp hours don't trigger one. NQ, ES, YM, gold, oil and dollar notes are
+  unchanged. That means a few more notes and a little more AI spend each week.
+  To leave the yields out, set
+  `OMARKETS_DESK_INSTRUMENTS=["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]` in `.env`
+  and restart; listing either yield with `desk:v8` refuses to start. After
+  updating, the log line reads
+  `desk notes for NQ, ES, YM, GOLD, WTI, DXY, US2Y, US10Y on desk:v9`.
 - **The US Dollar Index (DXY) now gets desk notes by default.** The default
   `desk_instruments` is `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]` on
   `desk:v9`. DXY works like gold: its own move notes (with its own 3-hour

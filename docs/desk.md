@@ -54,8 +54,8 @@ so a restart cannot produce a duplicate note or notification.
   selectable. `desk:v9` (Phase 1 slice 5) is one set of shared rules plus an
   instrument profile on top of its asset class's defaults
   (session hours, what "close" means, the expected delay, how yields matter).
-  NQ's wording lives in NQ's profile; ES, YM, GOLD, WTI and DXY have their own reviewed
-  profiles (YM's: the Dow is 30 price-weighted stocks, `nq_vs_es` and the
+  NQ's wording lives in NQ's profile; ES, YM, GOLD, WTI, DXY, US2Y and US10Y have
+  their own reviewed profiles (YM's: the Dow is 30 price-weighted stocks, `nq_vs_es` and the
   megacaps are NQ/ES context, and the VIX stands in as the S&P 500's gauge).
   GOLD's profile sits on commodity defaults (Globex hours, about 10 minutes
   delayed) and says what moves gold: it pays no interest, so yields and Fed
@@ -106,9 +106,39 @@ so a restart cannot produce a duplicate note or notification.
   `facts.QUOTE_PRECISION_SYMBOLS`: its `dxy_price`, `dxy_is` gaps and
   `normal_move_size` ranges use its 3-decimal quote precision, since its daily
   range is usually under one point. Every other instrument keeps two-decimal
-  gaps and whole-point ranges.
+  gaps and whole-point ranges, except the yields (below).
+  US2Y's and US10Y's profiles sit on new Treasury-yield defaults that match how
+  the strip already streams them (CNBC's `US2Y`/`US10Y`: the same 18:00–17:00 ET
+  hours, no declared delay, a change in basis points from the previous
+  session's close, not a settle). Each says what it is (a constant-maturity
+  Treasury yield, not a futures price; yields move opposite to bond prices;
+  moves are in basis points) and what usually moves it, as tendencies rather
+  than rules: the 2-year is the yield most tied to the Fed's expected path
+  (inflation and jobs surprises, hawkish or dovish signals), with growth,
+  flight to quality and supply behind; the 10-year carries more of long-run
+  growth and inflation and a term premium (deficits, heavy supply, weak
+  auctions), and is less tied to the next few Fed meetings. The instrument
+  *is* a yield, so rule 10 is not the "yields matter for …" wording: it says
+  `bond_market` lists the yield with the other one and the curve (10-year
+  minus 2-year), explains how each end moves the curve, and says never to work
+  out a spread or claim one yield moved the other. `rates_read` stays required
+  but asks how the yield moved alongside the other one and what the supplied
+  curve did (`InstrumentSpec.rates_field`); the ask task asks for the other
+  yield and the curve, never the yield itself. Tone is the yield up
+  (supportive, rates higher) or down (negative); neither is advice, and higher
+  yields are not good or bad in themselves. No `nq_vs_es`, megacap count or
+  fear gauge (no Treasury volatility index such as the MOVE is fed; the VIX is
+  never used as one); NQ, ES and the dollar are context only, and `for_nq` is
+  labelled as about NQ. Move and ask tasks only. The Treasury-yield defaults set
+  rule 15 like the FX index and rule 16's list (`AssetDefaults.move_size`:
+  ranges in basis points, no realised volatility). In the facts, a yield's
+  `normal_move_size` ranges are in basis points ("7.2bp", today's share of a
+  typical day from those), with no realised volatility (a yearly percentage of
+  a yield level would mislead), and its price location gives levels in percent
+  ("4.258%") and gaps in basis points ("2.3bp above").
   v9 asks for `tone` (stored as `nq_tone`), and `rates_read` only where yields
-  matter (every equity index future, gold and DXY). Each note task has a length target, recorded by
+  matter (every equity index future, gold, DXY and the yields). Each note task has a
+  length target, recorded by
   `eval check` and never retried. v9 notes get `recent_lessons` in their facts
   (the terms the latest five Learn boxes taught, newest first) and are told
   not to teach one again; v8 facts never carry it. v9's stated facts include
@@ -121,9 +151,11 @@ so a restart cannot produce a duplicate note or notification.
   (release, Fed, earnings, auction, primer, review) stay desk-wide on NQ's
   profile.
 - `desk_instruments` (`OMARKETS_DESK_INSTRUMENTS`, JSON list, default
-  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]`) is which instruments get their own
-  notes. A fresh install runs NQ, ES, YM, GOLD, WTI and DXY on desk:v9 with no
-  setting; `["NQ", "ES", "YM", "GOLD", "WTI"]`, `["NQ", "ES", "YM", "GOLD"]`,
+  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y"]`) is which
+  instruments get their own notes. A fresh install runs NQ, ES, YM, GOLD, WTI,
+  DXY, US2Y and US10Y on desk:v9 with no setting;
+  `["NQ", "ES", "YM", "GOLD", "WTI", "DXY"]`, `["NQ", "ES", "YM", "GOLD", "WTI"]`,
+  `["NQ", "ES", "YM", "GOLD"]`,
   `["NQ", "ES", "YM"]`, `["NQ", "ES"]` or `["NQ"]` (optionally with `desk:v8`)
   narrows it back. A YM note's facts always include YM in `markets_today` and
   in the measured moves, though YM is not on the Today strip; GOLD is on the
@@ -134,13 +166,17 @@ so a restart cannot produce a duplicate note or notification.
   GOLD facts are the same with or without WTI enabled), then DXY ("US
   dollar"): its own row once, its own move window, and NQ, ES, YM, GOLD and
   WTI facts unchanged with or without DXY. A one-hour DXY move rarely reaches
-  the move trigger's 0.6% floor, so dollar move notes are rare. NQ is always on and
+  the move trigger's 0.6% floor, so dollar move notes are rare. Then the
+  yields, US2Y ("2-year yield") then US10Y ("10-year yield"): each reads its own
+  row once and its own move window, and NQ, ES, YM, GOLD, WTI and DXY facts are
+  unchanged with or without them. A yield's move trigger is in basis points
+  (below). NQ is always on and
   gets pre-market, move and ask notes; every other instrument gets move and ask
   notes only, never the daily pre-market (cost policy;
   `identity.instrument_kinds`). Each instrument has its own 3-hour move limit
   and move trigger; the daily ask limit is shared. The service refuses to start
   when an instrument has no prompt profile at `desk_prompt_version` (ES, YM,
-  GOLD, WTI or DXY under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
+  GOLD, WTI, DXY, US2Y or US10Y under desk:v8) and says which setting to change. `POST /api/v1/desk/ask` takes
   `?instrument=`; omitted, it uses the saved workspace focus (the Chart page's
   instrument), and NQ only when no focus is saved or the store can't be read.
   An instrument or saved focus not in `desk_instruments` gets a 400 before
@@ -370,8 +406,9 @@ are skipped, never counted as zero.
   Each instrument reads its own gauge (`VOL_INDEXES`): NQ VXN against VIX, ES
   VIX alone, YM VIX alone as the wider market's gauge (the feeds have no Dow
   gauge, and YM's prompt says the VIX is the S&P 500's); an instrument without
-  one (GOLD, WTI and DXY: the feeds have no gold, oil or currency gauge) gets
-  no gauge, never NQ's.
+  one (GOLD, WTI, DXY and the yields: the feeds have no gold, oil, currency or
+  Treasury gauge) gets no gauge, never NQ's. A yield's ranges are in basis
+  points and it gets no realised volatility.
 
 The same notes as price location get these as `normal_move_size`, as
 ready-made text (prompt `desk:v7`).
@@ -382,7 +419,10 @@ was 1.46%, so the trigger is 0.80%, the same as the old fixed value; it rises in
 volatile weeks and falls in quiet ones. Without enough history, or if storage
 fails, `OMARKETS_DESK_MOVE_THRESHOLD_PCT` is used (a failure is retried on the
 next poll). The trigger and whether it was scaled are cached together, so the
-facts always describe the trigger actually in use.
+facts always describe the trigger actually in use. A Treasury yield's moves are
+measured in basis points, so its trigger is too (`MoveSize.trigger_bp`): 0.55 ×
+its typical daily range in basis points, kept between 4bp and 10bp, or a fixed
+6bp without enough history (never the percent threshold read as basis points).
 
 ## Complete inputs (Phase 1 slice 4, October 31, 2026)
 
@@ -403,7 +443,7 @@ New writer facts, all deterministic and with no prompt change (`desk:v8`):
   their status and change, and how many are up, down or flat (within 0.05%),
   counting live quotes only. NQ, ES and YM notes get both blocks (for YM as
   context on whether tech led the wider market); other instruments (GOLD,
-  WTI, DXY) get neither.
+  WTI, DXY, US2Y, US10Y) get neither.
 - **Events in the move window** (`events_in_move_window`, move notes): US
   economic and Fed events from 15 minutes before the move to its end, with the
   window checked, so an empty list means "no event on the supplied calendar".
