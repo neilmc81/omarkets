@@ -17,7 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from core.analysis.levels import key_levels
-from core.analysis.move_size import MoveSize, move_size
+from core.analysis.move_size import TRIGGER_FALLBACK_BP, MoveSize, move_size
 from core.desk import auctions as A
 from core.desk import breaking as B
 from core.desk import calendar as CAL
@@ -151,6 +151,7 @@ class DeskService:
         notify: Notify | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         move_threshold_pct: float = 0.8,
+        move_threshold_bp: float = TRIGGER_FALLBACK_BP,
         ask_daily_limit: int = 5,
         enabled: bool = True,
         poll_seconds: float = 60.0,
@@ -166,10 +167,13 @@ class DeskService:
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
+        #: A Treasury yield's fixed trigger in basis points, used like
+        #: ``move_threshold_pct`` until there is history to scale it.
+        self.move_threshold_bp = move_threshold_bp
         #: Instruments that get their own notes (``desk_instruments``; NQ, ES, YM,
-        #: GOLD, WTI and DXY by default): NQ pre-market, move and ask, the others move and ask only
-        #: (``identity.instrument_kinds``). Each needs a prompt profile at the
-        #: writer's prompt version.
+        #: GOLD, WTI, DXY, US2Y and US10Y by default): NQ pre-market, move and ask,
+        #: the others move and ask only (``identity.instrument_kinds``). Each needs
+        #: a prompt profile at the writer's prompt version.
         self.instruments = tuple(Instrument.of(s) for s in instruments)
         #: The prompt version notes are written with: the writer's (test doubles
         #: without one use the production default).
@@ -706,17 +710,21 @@ class DeskService:
     def _move_trigger(self, now: datetime, inst: Instrument = NQ) -> tuple[float, bool]:
         """The one-hour move that triggers an instrument's note, and whether it is
         scaled to its typical daily range (once per instrument and trade date) or
-        the configured fixed threshold. A storage failure is retried on the next
-        poll, not cached."""
+        the configured fixed threshold. A Treasury yield's is in basis points, as
+        its moves are measured (``MoveSize.trigger_bp``), and its fixed threshold
+        is ``move_threshold_bp``. A storage failure is retried on the next poll,
+        not cached."""
         key = (inst.symbol, active_session(now).trade_date)
         if key in self._trigger:
             return self._trigger[key]
         size = self._move_size(now, inst)
+        yields = inst.symbol in F.YIELD_SYMBOLS
         if size is None:
-            return self.move_threshold_pct, False
+            return (self.move_threshold_bp if yields else self.move_threshold_pct), False
         # Only the current session is ever read; drop older entries.
         self._trigger = {k: v for k, v in self._trigger.items() if k[1] == key[1]}
-        self._trigger[key] = (size.trigger_pct(self.move_threshold_pct),
+        self._trigger[key] = ((size.trigger_bp(self.move_threshold_bp) if yields
+                               else size.trigger_pct(self.move_threshold_pct)),
                               size.typical_range_pct is not None)
         return self._trigger[key]
 
@@ -730,7 +738,7 @@ class DeskService:
             self._move_size(now, inst),
             state.instruments.get(gauge) if gauge else None,
             state.instruments.get(benchmark) if benchmark else None,
-            trigger_pct=trigger, trigger_scaled=scaled, gauge=gauge or "", benchmark=benchmark,
+            trigger=trigger, trigger_scaled=scaled, gauge=gauge or "", benchmark=benchmark,
             symbol=inst.symbol)
         return {**self._location(now, inst),
                 **({"normal_move_size": normal} if normal else {}),
@@ -755,7 +763,7 @@ class DeskService:
         location = F.price_location(levels, getattr(nq, "value", None), quote_at)
         if location is None:
             return {}
-        return {f"{inst.symbol.lower()}_price_location": {**location, "as_of": et(quote_at)}}
+        return {F.location_key(inst.symbol): {**location, "as_of": et(quote_at)}}
 
     def _delayed(self) -> frozenset[str]:
         state = self.sources.market_state()

@@ -302,6 +302,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
         auctions=TreasuryAuctions(),
         notify=notify if settings.desk_notify else None,
         move_threshold_pct=settings.desk_move_threshold_pct,
+        move_threshold_bp=settings.desk_move_threshold_bp,
         enabled=settings.desk_enabled,
         local_tz=ZoneInfo(settings.desk_local_timezone),
         daily_plan=settings.desk_daily_plan,

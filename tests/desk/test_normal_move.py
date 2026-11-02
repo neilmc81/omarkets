@@ -30,7 +30,7 @@ def index(value, at=VXN_AT):
 
 
 def test_normal_move_texts():
-    facts = F.normal_move(size(), index(26.4), index(18.39), trigger_pct=0.8, trigger_scaled=True)
+    facts = F.normal_move(size(), index(26.4), index(18.39), trigger=0.8, trigger_scaled=True)
     assert facts == {
         "typical_daily_range": "451 points (1.46%)",
         "typical_measured_over": "median of the last 14 complete sessions",
@@ -46,28 +46,28 @@ def test_finished_session_and_missing_parts_are_left_out():
     facts = F.normal_move(size(typical_range=None, typical_range_pct=None,
                                realised_vol_pct=None, today_partial=False,
                                today_complete=True),
-                          None, None, trigger_pct=0.8, trigger_scaled=False)
+                          None, None, trigger=0.8, trigger_scaled=False)
     assert facts == {"session_range": "Thu Oct 22 session: 170 points (0.58%)",
                      "large_move_trigger": "0.80% in one hour, fixed (not enough history to "
                                            "scale it)"}
-    assert F.normal_move(None, None, None, trigger_pct=0.8, trigger_scaled=False) is None
+    assert F.normal_move(None, None, None, trigger=0.8, trigger_scaled=False) is None
     # A finished session with gaps in its quotes says nothing about its range.
     incomplete = size(typical_range=None, typical_range_pct=None, realised_vol_pct=None,
                       today_partial=False, today_complete=False)
-    assert F.normal_move(incomplete, None, None, trigger_pct=0.8, trigger_scaled=False) is None
-    assert F.normal_move(None, index(None), index(float("nan")), trigger_pct=0.8,
+    assert F.normal_move(incomplete, None, None, trigger=0.8, trigger_scaled=False) is None
+    assert F.normal_move(None, index(None), index(float("nan")), trigger=0.8,
                          trigger_scaled=True) is None
 
 
 def test_vxn_and_vix_compared_only_when_quoted_together():
     facts = F.normal_move(None, index(26.4), index(18.39, VXN_AT - timedelta(hours=2)),
-                          trigger_pct=0.8, trigger_scaled=True)
+                          trigger=0.8, trigger_scaled=True)
     assert facts["vxn"] == "26.40"
     assert "vix" not in facts and "vxn_minus_vix" not in facts
 
 
 def test_normal_move_numbers_pass_the_writer_number_check():
-    facts = F.normal_move(size(), index(26.4), index(18.39), trigger_pct=0.8, trigger_scaled=True)
+    facts = F.normal_move(size(), index(26.4), index(18.39), trigger=0.8, trigger_scaled=True)
     draft = NoteDraft(
         headline="NQ is having a quiet day", summary="NQ has moved 170 points, 40% of normal.",
         what_it_means="A typical day is 451 points; VXN is 26.40, 8.01 above VIX.",

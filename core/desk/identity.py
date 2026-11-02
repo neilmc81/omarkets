@@ -22,7 +22,8 @@ INSTRUMENT_KINDS = frozenset({NoteKind.PREMARKET, NoteKind.MOVE, NoteKind.ASK})
 #: Instruments the production desk writes for by default (``desk_instruments``
 #: overrides). Each needs a profile at the default prompt version. Tests may
 #: pass others.
-PRODUCTION_INSTRUMENTS: tuple[str, ...] = ("NQ", "ES", "YM", "GOLD", "WTI", "DXY")
+PRODUCTION_INSTRUMENTS: tuple[str, ...] = ("NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y",
+                                          "US10Y")
 #: What every instrument but NQ gets: move and ask notes, no daily pre-market
 #: (the pre-market is written by the premium model; docs/PLAN.md §7 cost policy).
 SECONDARY_KINDS = frozenset({NoteKind.MOVE, NoteKind.ASK})

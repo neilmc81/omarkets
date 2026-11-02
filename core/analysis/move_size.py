@@ -14,7 +14,9 @@ Deterministic, from stored hourly OHLC buckets and the session engine:
 * **Large-move trigger** — a one-hour move of ``TRIGGER_SHARE`` of the typical
   daily range, kept between ``TRIGGER_MIN_PCT`` and ``TRIGGER_MAX_PCT``. With
   fewer than ``MIN_SESSIONS`` complete sessions there is no typical range and
-  the caller's fixed threshold is used.
+  the caller's fixed threshold is used. A Treasury yield's trigger is in basis
+  points instead (``MoveSize.trigger_bp``): a percent of a yield's level is not
+  how rates move, and the desk measures yield moves in basis points.
 """
 
 from __future__ import annotations
@@ -46,6 +48,12 @@ HOURS_PER_YEAR = 252 * 23
 TRIGGER_SHARE = 0.55
 TRIGGER_MIN_PCT = 0.6
 TRIGGER_MAX_PCT = 1.5
+#: A yield's one-hour trigger: the same share of its typical daily range, in
+#: basis points, kept between these, and a fixed one without enough history. A
+#: normal 2-year or 10-year day is several basis points high to low.
+TRIGGER_MIN_BP = 4.0
+TRIGGER_MAX_BP = 10.0
+TRIGGER_FALLBACK_BP = 6.0
 
 _HOUR = timedelta(hours=1)
 
@@ -72,6 +80,14 @@ class MoveSize:
             return fallback
         return min(TRIGGER_MAX_PCT, max(TRIGGER_MIN_PCT,
                                         round(TRIGGER_SHARE * self.typical_range_pct, 2)))
+
+    def trigger_bp(self, fallback: float = TRIGGER_FALLBACK_BP) -> float:
+        """A yield's one-hour move that counts as large, in basis points (its range
+        is in percentage points), or ``fallback`` without history."""
+        if self.typical_range is None:
+            return fallback
+        return min(TRIGGER_MAX_BP, max(TRIGGER_MIN_BP,
+                                       round(TRIGGER_SHARE * self.typical_range * 100, 1)))
 
 
 def _lookback(session: GlobexSession) -> list[GlobexSession]:
