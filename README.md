@@ -136,6 +136,15 @@ fees with the default models (a strong model for the pre-market note and the
 weekly review, a cheap one for the rest). This is a rough estimate; it depends
 on how much news there is. Spending caps stop writing before a cap is passed.
 
+## Support
+
+The software is free and open source. The AI notes still cost OpenRouter
+fees — about **$1.60 a month** with the defaults (see [Costs](#costs)).
+
+If the desk is useful, you can sponsor the work on
+[GitHub Sponsors](https://github.com/sponsors/neilmc81). Sponsorships help
+cover that AI spend and keep the desk free.
+
 ## Data sources
 
 Omarkets fetches data from public sources on your computer, at runtime.

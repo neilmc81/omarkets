@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **GitHub Sponsors.** The repo now has a Sponsor button
+  (`.github/FUNDING.yml`) and a Support section in the README linking to
+  [github.com/sponsors/neilmc81](https://github.com/sponsors/neilmc81).
+
 - **The Omarkets widget explains its tile colours.** A one-line legend under
   the rows reads "Colour = effect on NQ: ▲ helps · ▼ weighs on · – little
   effect"; hovering it adds that grey means little or no effect on NQ, not a
