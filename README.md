@@ -21,7 +21,7 @@ futures), WTI (crude oil futures), DXY (the US Dollar Index), the US 2-year
 and 10-year Treasury yields (US2Y, US10Y) and VIX (the CBOE Volatility Index)
 out of the box.
 
-<video src="docs/assets/omarkets-demo.mp4" width="800" autoplay muted loop playsinline title="Omarkets demo: Today, chart, calendar, macro, news, desk notes and the bar popup"></video>
+![Omarkets demo: Today, chart, calendar, macro, news, desk notes and the bar popup](docs/assets/omarkets-demo.gif)
 
 ## What you get
 
