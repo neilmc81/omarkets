@@ -13,6 +13,8 @@ macro news moves markets, using NQ as the main lens.
 
 Numbers come from ordinary, tested code. The AI only explains them.
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/neilmc81)
+
 > **Not financial advice.** Omarkets never places orders and never tells you
 > what to trade. See the [disclaimer](#disclaimer).
 
@@ -141,9 +143,10 @@ on how much news there is. Spending caps stop writing before a cap is passed.
 The software is free and open source. The AI notes still cost OpenRouter
 fees — about **$1.60 a month** with the defaults (see [Costs](#costs)).
 
-If the desk is useful, you can sponsor the work on
-[GitHub Sponsors](https://github.com/sponsors/neilmc81). Sponsorships help
-cover that AI spend and keep the desk free.
+If the desk is useful, sponsor the work on
+[GitHub Sponsors](https://github.com/sponsors/neilmc81) (the Sponsor button
+at the top of the README, and on the repo). Sponsorships help cover that
+AI spend and keep the desk free.
 
 ## Data sources
 

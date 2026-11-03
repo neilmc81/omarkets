@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The Sponsor button is at the top of the README.** A GitHub Sponsors
+  badge sits under the opening description, linking to
+  [github.com/sponsors/neilmc81](https://github.com/sponsors/neilmc81). The
+  Support section still follows Costs.
+
 - **GitHub Sponsors.** The repo now has a Sponsor button
   (`.github/FUNDING.yml`) and a Support section in the README linking to
   [github.com/sponsors/neilmc81](https://github.com/sponsors/neilmc81).
