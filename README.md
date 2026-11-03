@@ -1,12 +1,15 @@
 # Omarkets
 
-**A plain-English market desk for Nasdaq-100 futures (NQ), built into the Omarchy desktop.**
+**A plain-English multi-asset market desk, built into the Omarchy desktop.
+Nasdaq-100 futures (NQ) are the focus; the rest of the desk shows how macro
+news reaches them.**
 
-Omarkets shows delayed NQ quotes, a chart, an economic calendar, macro data
-and the news. It writes short desk notes in plain English with AI (through
+Omarkets shows delayed quotes for US index futures, yields, the dollar,
+volatility, oil and gold, with a chart, an economic calendar, macro data and
+the news. It writes short desk notes in plain English with AI (through
 OpenRouter): before the open, after each data release, after Fed events, after
 big moves and at the end of the week. It is meant for people learning how
-macro news moves markets.
+macro news moves markets, using NQ as the main lens.
 
 Numbers come from ordinary, tested code. The AI only explains them.
 
@@ -18,13 +21,16 @@ futures), WTI (crude oil futures), DXY (the US Dollar Index), the US 2-year
 and 10-year Treasury yields (US2Y, US10Y) and VIX (the CBOE Volatility Index)
 out of the box.
 
-![Omarkets demo: Today, chart, calendar, macro, news, desk notes and the bar popup](docs/assets/omarkets-demo.gif)
+<video src="docs/assets/omarkets-demo.mp4" width="800" autoplay muted loop playsinline title="Omarkets demo: Today, chart, calendar, macro, news, desk notes and the bar popup"></video>
 
 ## What you get
 
-- **Today**: NQ and related markets (S&P 500 futures, yields, dollar, VIX,
-  oil, gold) and the latest desk notes.
-- **Chart**: NQ candles with key price levels and economic releases marked.
+- **Today**: the focus instrument (NQ by default) and a strip of related
+  markets (S&P 500 futures, yields, dollar, VIX, oil, gold), and the latest
+  desk notes.
+- **Chart**: candles for the focus instrument with key price levels and
+  economic releases marked.
+- **Watchlists**: pick which instruments the Today strip shows.
 - **Calendar**: this week's and next week's US releases, with forecasts and
   actuals.
 - **Macro**: inflation, jobs, growth and rates data from official sources.
@@ -159,12 +165,14 @@ the data have been retrieved from BLS.gov.
 
 ## Roadmap
 
-1. YM (Dow futures) desk notes
-2. European indices: Euro Stoxx 50, DAX 40, FTSE 100, CAC 40, SMI, IBEX 35,
-   FTSE MIB, AEX, Stoxx 600
+Desk notes for YM, gold, oil, the dollar, yields and VIX have shipped. Next,
+in order:
+
+1. Crypto desk notes: BTC first, then ETH and SOL
+2. US megacaps: sessions and key levels for the eight stocks Omarkets already
+   quotes (NVDA, MSFT, AAPL, AMZN, META, GOOGL, AVGO, TSLA)
 3. Forex
-4. Crypto
-5. US stocks
+4. European indices, one venue at a time
 
 ## Disclaimer
 
