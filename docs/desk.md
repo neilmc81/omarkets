@@ -40,7 +40,7 @@ so a restart cannot produce a duplicate note or notification.
 - `core/desk/followup.py` measures "did it hold?" (below); `core/desk/review.py`
   works out the week for the weekly review.
 - `core/desk/writer.py` makes one OpenRouter call per note (up to three: one
-  retry on `desk_fallback_model` if that fails, and one regeneration on the
+  retry on `desk_fallback_model` if one is set, which it is not by default, and one regeneration on the
   writing model if the note contains numbers not in the facts; each call is
   reserved separately) with the facts as JSON
   and the beginner-focused prompt in `core/desk/prompts.py`. Every call is
@@ -282,9 +282,15 @@ with `allow_fallbacks: false`, because the OpenRouter privacy setting blocks
 DeepSeek's own provider. The DeepSeek rates are `0.15` / `0.60` and the Opus
 rates are `5` / `25`.
 
-If the first model fails (HTTP or network error, invalid output, or the advice
-filter), the note is written once more on the fallback model. That retry
-reserves its own budget, so the weekly cap can stop it. The note records the
+DeepSeek runs at low reasoning effort, because at higher effort it could spend
+all of `max_tokens` reasoning and return no note.
+
+No fallback model is set by default. An Opus fallback made failed routine notes
+cost about 40 times as much and used most of a week's budget (Nov 2026). A failed
+note gets the desk's later attempts on the same model. If
+`OMARKETS_DESK_FALLBACK_MODEL` is set and the first model fails (HTTP or network
+error, invalid output, or the advice filter), the note is written once more on
+that model. That retry reserves its own budget, so the weekly cap can stop it. The note records the
 model that actually wrote it. Cost is OpenRouter's `usage.cost` when it is
 reported; otherwise it is worked out from that model's rates.
 

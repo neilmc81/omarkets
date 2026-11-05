@@ -177,6 +177,7 @@ async def test_truncated_output_is_logged_with_its_token_use(caplog):
 from core.config.settings import (  # noqa: E402
     DEEPSEEK,
     DEEPSEEK_PROVIDER,
+    DESK_MODEL_PARAMS,
     OPUS,
     Settings,
 )
@@ -186,6 +187,10 @@ from core.desk.writer import invented_numbers, reserve_pad  # noqa: E402
 
 def desk_settings(**env):
     return Settings(_env_file=None, **env)
+
+
+def opus_fallback():
+    return desk_settings(desk_fallback_model=OPUS)
 
 
 def split_writer(handler, guard=None, settings=None):
@@ -205,7 +210,10 @@ def test_default_model_map():
     for kind in NoteKind:
         expected = OPUS if kind in {NoteKind.REVIEW, NoteKind.PREMARKET} else DEEPSEEK
         assert settings.desk_model_for(kind) == expected
-    assert settings.desk_fallback_model == OPUS
+    # No Opus fallback: failed routine notes must not cost ~40x.
+    assert settings.desk_fallback_model == ""
+    # Low effort leaves DeepSeek room to write the note within max_tokens.
+    assert DESK_MODEL_PARAMS[DEEPSEEK]["reasoning"] == {"effort": "low"}
 
 
 def test_env_overrides_and_precedence(monkeypatch):
@@ -238,6 +246,19 @@ async def test_deepseek_request_carries_pinned_provider_routing():
     assert bodies[0]["model"] == OPUS and "provider" not in bodies[0]
 
 
+async def test_failed_routine_note_never_retries_on_opus_by_default():
+    models = []
+
+    def handler(request):
+        models.append(json.loads(request.content)["model"])
+        return httpx.Response(200, json={
+            "choices": [{"finish_reason": "length", "message": {"content": ""}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 4000, "cost": .002}})
+
+    result = await split_writer(handler).write(NoteKind.MOVE, {}, instrument=NQ)
+    assert result.draft is None and models == [DEEPSEEK]
+
+
 async def test_deepseek_failure_falls_back_to_opus():
     models = []
 
@@ -249,7 +270,8 @@ async def test_deepseek_failure_falls_back_to_opus():
         return completion(json.dumps(GOOD), cost=0.06)
 
     guard = FakeGuard()
-    result = await split_writer(handler, guard).write(NoteKind.RELEASE, FACTS, instrument=None)
+    writer = split_writer(handler, guard, settings=opus_fallback())
+    result = await writer.write(NoteKind.RELEASE, FACTS, instrument=None)
     assert models == [DEEPSEEK, OPUS]
     assert result.draft is not None and result.model == OPUS
     assert result.cost_usd == 0.0605
@@ -264,7 +286,8 @@ async def test_http_and_advice_failures_also_fall_back():
                 return failure()
             return completion(json.dumps(GOOD))
 
-        result = await split_writer(handler).write(NoteKind.ASK, {}, instrument=NQ)
+        writer = split_writer(handler, settings=opus_fallback())
+        result = await writer.write(NoteKind.ASK, {}, instrument=NQ)
         assert result.model == OPUS and result.draft is not None
 
 
@@ -281,7 +304,8 @@ async def test_budget_cap_blocks_the_fallback():
         models.append(json.loads(request.content)["model"])
         return httpx.Response(500)
 
-    result = await split_writer(handler, CapGuard()).write(NoteKind.MOVE, {}, instrument=NQ)
+    writer = split_writer(handler, CapGuard(), settings=opus_fallback())
+    result = await writer.write(NoteKind.MOVE, {}, instrument=NQ)
     assert models == [DEEPSEEK]
     assert result.draft is None and result.model == DEEPSEEK
     assert "fallback" in result.error and "AI budget" in result.error
