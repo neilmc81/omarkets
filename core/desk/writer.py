@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -73,17 +73,27 @@ def _json_object(text: str) -> dict[str, Any]:
 
 
 def _draft_text(draft: NoteDraft) -> str:
+    why = [draft.why.text, draft.why.ruled_out or ""] if draft.why else []
     return " ".join([draft.headline, draft.summary, draft.what_it_means,
-                     draft.market_reaction, draft.rates_read or "", draft.learn, *draft.watch_next])
+                     draft.market_reaction, draft.rates_read or "", draft.learn, *why,
+                     *draft.watch_next])
 
 
-def check_draft(draft: NoteDraft, *, rates_read_required: bool = True) -> str | None:
+def check_draft(draft: NoteDraft, *, rates_read_required: bool = True,
+                why_required: bool = False, evidence_ids: Iterable[int] = ()) -> str | None:
     if _ADVICE.search(_draft_text(draft)):
         return "draft contained trading advice"
     # The reader accepts a missing rates_read; a prompt that asks for it (every
     # v8 prompt, and v9 wherever yields matter) treats a draft without it as invalid.
     if rates_read_required and draft.rates_read is None:
         return "model output was not valid"
+    if why_required:
+        why = draft.why
+        if why is None:
+            return "model output was not valid"
+        # A reason has to rest on a report that was really supplied.
+        if set(why.evidence) - set(evidence_ids) or (why.level != "unknown" and not why.evidence):
+            return "note cited evidence that was not supplied"
     return None
 
 
@@ -152,6 +162,8 @@ class DeskWriter:
         # off after 2,023 characters (finish_reason=length). DeepSeek reasons for
         # ~1.8k tokens per note. Billing is by use.
         max_output_tokens: int = 4000,
+        #: A higher (or lower) ceiling for particular models.
+        model_max_output: Mapping[str, int] | None = None,
         timeout_seconds: float = 90.0,
         client: httpx.AsyncClient | None = None,
         url: str = OPENROUTER_URL,
@@ -172,6 +184,7 @@ class DeskWriter:
         self._default_rates = (input_rate, output_rate)
         self._guard = cost_guard
         self._max_output = max_output_tokens
+        self._model_max_output = dict(model_max_output or {})
         self._timeout = timeout_seconds
         self._client = client
         self._url = url
@@ -216,11 +229,14 @@ class DeskWriter:
             "model": result.model,
             #: Routing of the model that wrote the note (the fallback's, if it did).
             "model_params": self._params.get(result.model, {}),
-            "max_output_tokens": self._max_output,
+            "max_output_tokens": self._output_limit(result.model),
         }
         if instrument is not None:
             envelope["instrument"] = instrument.symbol
         return envelope
+
+    def _output_limit(self, model: str) -> int:
+        return self._model_max_output.get(model, self._max_output)
 
     def _rates_for(self, model: str) -> tuple[float, float]:
         return self._rates.get(model, self._default_rates)
@@ -243,14 +259,15 @@ class DeskWriter:
         prompt = self.prompt(kind, facts, instrument=instrument)
         rate_in, rate_out = self._rates_for(model)
         tokens_in = len((prompt.system + prompt.user).encode()) + 500
-        return (tokens_in * rate_in + self._max_output * rate_out) / 1e6
+        return (tokens_in * rate_in + self._output_limit(model) * rate_out) / 1e6
 
     def _bound(self, model: str, prompt: Prompt) -> float:
         # ~3 characters per token is conservative for English/JSON; plus the
         # model's reservation margin (``reserve_pad``).
         rate_in, rate_out = self._rates_for(model)
         tokens_in = (len(prompt.system) + len(prompt.user)) / 3 + 200
-        return (tokens_in * rate_in + self._max_output * rate_out) / 1e6 * reserve_pad(model)
+        return ((tokens_in * rate_in + self._output_limit(model) * rate_out) / 1e6
+                * reserve_pad(model))
 
     def _prepare(self, kind: NoteKind, facts: dict[str, Any], instrument: Instrument | None,
                  model: str) -> Prompt | WriteResult:
@@ -324,7 +341,7 @@ class DeskWriter:
                 return WriteResult(None, model, error=f"AI budget: {exc}")
         body = {
             "model": model,
-            "max_tokens": self._max_output,
+            "max_tokens": self._output_limit(model),
             "temperature": TEMPERATURE,
             "response_format": {"type": "json_object"},
             "usage": {"include": True},
@@ -376,10 +393,12 @@ class DeskWriter:
                     "completion_tokens=%s reasoning_tokens=%s max_tokens=%d",
                     type(exc).__name__, choice.get("finish_reason"), len(content),
                     usage.get("completion_tokens"), details.get("reasoning_tokens"),
-                    self._max_output,
+                    self._output_limit(model),
                 )
                 return WriteResult(None, model, cost, error="model output was not valid")
-            problem = check_draft(draft, rates_read_required=prompt.rates_read_required)
+            problem = check_draft(draft, rates_read_required=prompt.rates_read_required,
+                                  why_required=prompt.why_required,
+                                  evidence_ids=prompt.evidence_ids)
             if problem:
                 return WriteResult(None, model, cost, error=problem)
             return WriteResult(draft, model, cost)

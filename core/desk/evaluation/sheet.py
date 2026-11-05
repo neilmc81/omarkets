@@ -23,8 +23,9 @@ SHEET, SCORES, KEY = "sheet.md", "scores.csv", "key.json"
 #: Scored 0 (breaks it), 1 (partly) or 2 (follows it).
 CRITERIA: dict[str, str] = {
     "coverage": "Covers what the task asks for, using the facts supplied, without padding.",
-    "attribution": "Honest about cause: no ranking of causes, unconfirmed links labelled, "
-                   "nothing claimed beyond the facts.",
+    "attribution": "Honest about cause: a reason is labelled by how strong its evidence is "
+                   "(a named report, the desk's own read, or unknown), nothing is claimed "
+                   "beyond the facts, and it says what it can rule out.",
     "windows": "Keeps measurement windows and times apart (today vs overnight vs the "
                "release window; yesterday only when the dates match); closed, stale and "
                "unavailable kept distinct.",
@@ -39,8 +40,13 @@ def _note_text(entry: Mapping[str, Any] | None) -> str:
     if not draft:
         return f"_(no note: {(entry or {}).get('error') or 'not written'})_"
     tone = draft.get("tone") or draft.get("nq_tone")
-    parts = [f"**{draft.get('headline', '')}**", "", draft.get("summary", ""), "",
-             f"*What it means.* {draft.get('what_it_means', '')}", "",
+    parts = [f"**{draft.get('headline', '')}**", "", draft.get("summary", ""), ""]
+    if draft.get("why"):
+        why = draft["why"]
+        parts += [f"*Why ({why.get('level')}).* {why.get('text', '')} "
+                  f"Ruled out: {why.get('ruled_out') or 'nothing stated'}. "
+                  f"Evidence: {why.get('evidence') or 'none'}.", ""]
+    parts += [f"*What it means.* {draft.get('what_it_means', '')}", "",
              f"*Market reaction.* {draft.get('market_reaction', '')}"]
     if draft.get("rates_read"):
         parts += ["", f"*Rates.* {draft['rates_read']}"]

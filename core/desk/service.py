@@ -27,6 +27,7 @@ from core.analysis.move_size import (
 from core.desk import auctions as A
 from core.desk import breaking as B
 from core.desk import calendar as CAL
+from core.desk import evidence as EV
 from core.desk import facts as F
 from core.desk import followup
 from core.desk import headlines as HL
@@ -56,11 +57,17 @@ from core.desk.models import (
     UpcomingItem,
     WatchCard,
 )
-from core.desk.prompts import PROMPT_VERSION, RECENT_LESSONS_VERSIONS, has_profile
+from core.desk.prompts import (
+    PROMPT_VERSION,
+    RECENT_LESSONS_VERSIONS,
+    WHY_VERSIONS,
+    has_profile,
+)
 from core.desk.store import DeskStore
 from core.desk.writer import DeskWriter
 from core.domain.chart import ChartPin
 from core.domain.market_calendar import is_trading_day
+from core.domain.news import ReportBatch
 from core.domain.sessions import (
     SessionPhase,
     active_session,
@@ -69,6 +76,7 @@ from core.domain.sessions import (
     volatility_index_window,
 )
 from core.providers.earnings_nasdaq import EarningsDate, NasdaqEarningsCalendar
+from core.providers.news.evidence import article_allowed, plain_text
 from core.providers.treasury_auctions import Auction, TreasuryAuctions
 
 logger = logging.getLogger(__name__)
@@ -119,6 +127,10 @@ _AUCTION_WORDS = re.compile(r"\b(auction|treasur(y|ies)|bonds?|notes?|yields?|TI
 HEADLINE_CAP = 12
 #: A scheduled event this long before a large move's window still counts as in it.
 MOVE_EVENT_LEAD = timedelta(minutes=15)
+#: Longest a note waits for outside coverage before it is written without it.
+EVIDENCE_TIMEOUT = 15.0
+#: Stored sources that aren't reports on the market.
+_NOT_REPORTS = frozenset({"economic_calendar"})
 
 Notify = Callable[[str, str], Awaitable[None]]
 
@@ -152,6 +164,10 @@ class DeskSources:
     ohlc: Callable[..., Sequence[Any]] | None = None
     #: The economic service's macro series, for the macro trends in notes.
     macro_series: Callable[[], Sequence[Any]] | None = None
+    #: Coverage of one instrument, read when a desk:v10 move or ask note is written.
+    external_reports: Callable[[str], Awaitable[ReportBatch]] | None = None
+    #: An article page's text, for the strongest reports.
+    article_text: Callable[[str], Awaitable[str | None]] | None = None
 
 
 def _volatility_index_within_grace(now: datetime) -> bool:
@@ -853,6 +869,47 @@ class DeskService:
                  "source": n.headline.source, "headline": n.headline.title}
                 for n in lines]
 
+    async def _why_evidence(self, now: datetime, inst: Instrument, direction: int,
+                            ) -> tuple[dict[str, Any], list[EV.Candidate]]:
+        """The ``why_evidence`` fact and the reports behind it, at versions that take
+        it. Outside coverage that can't be read is named, never fatal to the note."""
+        if self.prompt_version not in WHY_VERSIONS:
+            return {}, []
+        candidates = [
+            EV.Candidate(source=HL.SOURCE_LABELS.get(e.source, e.source.replace("_", " ")),
+                         headline=" ".join(e.headline.split())[:300],
+                         published_at=e.published_at, url=e.source_url,
+                         summary=plain_text(getattr(e, "summary", None)))
+            for e in self.sources.news_events()
+            if e.published_at is not None and e.source not in _NOT_REPORTS]
+        unavailable: list[str] = []
+        if self.sources.external_reports is not None:
+            try:
+                async with asyncio.timeout(EVIDENCE_TIMEOUT):
+                    batch = await self.sources.external_reports(inst.symbol)
+                unavailable = list(batch.unavailable)
+                candidates += [EV.Candidate(source=r.source, headline=r.headline[:300],
+                                            published_at=r.published_at, url=r.url,
+                                            summary=r.summary) for r in batch.reports]
+            except Exception as exc:  # noqa: BLE001 - the stored reports still count
+                logger.warning("outside coverage failed for %s: %s", inst.symbol,
+                               type(exc).__name__)
+                unavailable = ["outside coverage"]
+        chosen = EV.rank(candidates, inst.symbol, direction=direction, now=now)
+        fact = await EV.evidence_facts(chosen, symbol=inst.symbol, unavailable=unavailable,
+                                       article_text=self.sources.article_text,
+                                       readable=article_allowed, when=et, now=now)
+        return {"why_evidence": fact}, chosen
+
+    @staticmethod
+    def _today_direction(common: dict[str, Any], inst: Instrument) -> int:
+        """+1 or -1 for the way the instrument is moving today, 0 when not known."""
+        for row in common.get("markets_today") or ():
+            if row.get("market") == inst.label:
+                change = str(row.get("change_today") or "")
+                return 1 if change.startswith("+") else -1 if change.startswith("-") else 0
+        return 0
+
     @staticmethod
     def _upcoming_facts(items: list[UpcomingItem]) -> list[dict[str, Any]]:
         return [
@@ -1046,9 +1103,11 @@ class DeskService:
         recent = [n for n in self.store.recent(5)
                   if n.created_at >= now - timedelta(hours=3) and n.draft is not None]
         direction = "up" if move.change > 0 else "down"
+        evidence, chosen = await self._why_evidence(now, inst, 1 if move.change > 0 else -1)
         facts = {
             **common,
             **(await asyncio.to_thread(self._nq_context, now, inst)),
+            **evidence,
             "the_move": {"market": inst.label, "change": move.text,
                          "from": et(move.start_at), "to": et(move.end_at)},
             "events_in_move_window": F.events_in_window(
@@ -1064,7 +1123,7 @@ class DeskService:
         title = f"{inst.symbol} {direction} {move.text.lstrip('+-')} in the last hour"
         return await self._write(note_id, NoteKind.MOVE, title, now, facts,
                                  event_at=move.start_at, moves=moves, headlines=_titles(news),
-                                 rates=rates, instrument=inst)
+                                 rates=rates, instrument=inst, evidence=chosen)
 
     async def ask(self, inst: Instrument = NQ) -> DeskNote:
         """Explain the market right now, on request. Bounded per New York day
@@ -1100,13 +1159,15 @@ class DeskService:
             symbols=F.with_symbol(F.REACTION_SYMBOLS, inst.symbol),
         )
         news = self.news_lines(now - timedelta(hours=6), now)
+        evidence, chosen = await self._why_evidence(now, inst, self._today_direction(common, inst))
         facts = {**common, **(await asyncio.to_thread(self._nq_context, now, inst)),
+                 **evidence,
                  "last_two_hours": self._moves_facts(moves),
                  "recent_headlines": self._headline_facts(news),
                  "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:5])}
         return await self._write(aid, NoteKind.ASK, "Market right now", now, facts, moves=moves,
                                  headlines=_titles(news), rates=rates, notify=False,
-                                 instrument=inst)
+                                 instrument=inst, evidence=chosen)
 
     # ------------------------------------------------------------------ writing
 
@@ -1151,7 +1212,8 @@ class DeskService:
 
     async def _write(self, note_id: str, kind: NoteKind, title: str, now: datetime,
                      facts: dict[str, Any], *, notify: bool = True,
-                     instrument: Instrument | None = None, **parts: Any) -> DeskNote:
+                     instrument: Instrument | None = None,
+                     evidence: Sequence[EV.Candidate] = (), **parts: Any) -> DeskNote:
         if (kind in ID.INSTRUMENT_KINDS) != (instrument is not None):
             symbol = instrument.symbol if instrument else None
             raise ValueError(f"{kind.value} note {note_id}: instrument {symbol} "
@@ -1164,6 +1226,7 @@ class DeskService:
         note = DeskNote(
             id=note_id, kind=kind, title=title, created_at=self.clock(),
             instrument=instrument.symbol if instrument else None,
+            why_sources=EV.cited(result.draft, evidence),
             draft=result.draft, status="ok" if result.draft else "failed",
             error=result.error, model=f"{result.model} · {self.prompt_version}",
             cost_usd=result.cost_usd,

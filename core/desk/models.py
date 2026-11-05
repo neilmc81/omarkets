@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import (
     AliasChoices,
@@ -18,6 +18,7 @@ from pydantic import (
     Field,
     computed_field,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -173,6 +174,21 @@ class UpcomingItem(BaseModel):
     explainer: str | None = None
 
 
+class WhyRead(BaseModel):
+    """Why the market moved, labelled by how strong the evidence is (desk:v10)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: reported: a cited report says why. likely: the desk's own read of the
+    #: evidence. unknown: the evidence doesn't point to a reason.
+    level: Literal["reported", "likely", "unknown"]
+    text: str = Field(min_length=3, max_length=700)
+    #: Ids of the ``why_evidence`` items it rests on.
+    evidence: list[int] = Field(default_factory=list)
+    #: What the measured facts rule out (e.g. "not rates: yields fell").
+    ruled_out: str | None = Field(default=None, max_length=400)
+
+
 class NoteDraft(BaseModel):
     """What the language model writes. Plain English, no trade advice."""
 
@@ -185,6 +201,8 @@ class NoteDraft(BaseModel):
     #: What bond yields did and why that matters. Optional from desk:v9, where
     #: yields don't matter for the instrument (e.g. crypto).
     rates_read: str | None = Field(default=None, min_length=3, max_length=1800)
+    #: Only on desk:v10 move and ask notes.
+    why: WhyRead | None = None
     watch_next: list[str] = Field(default_factory=list)
     learn: str = Field(min_length=3, max_length=1200)
     #: Stored as ``nq_tone`` so older releases still read new notes; desk:v9
@@ -195,6 +213,14 @@ class NoteDraft(BaseModel):
     @classmethod
     def _at_most_four(cls, value: list[str]) -> list[str]:
         return [item.strip() for item in value if item.strip()][:4]
+
+    @model_serializer(mode="wrap")
+    def _no_empty_why(self, handler: Any) -> dict[str, Any]:
+        # A note without a "why" stays readable by releases from before desk:v10.
+        data = handler(self)
+        if data.get("why") is None:
+            data.pop("why", None)
+        return data
 
 
 FollowUpVerdict = Literal["held", "grew", "faded", "reversed", "quiet"]
@@ -237,6 +263,8 @@ class DeskNote(BaseModel):
     figures: list[Figure] = Field(default_factory=list)
     moves: list[Move] = Field(default_factory=list)
     headlines: list[Headline] = Field(default_factory=list)
+    #: The reports ``draft.why`` cites, resolved by code from their ids.
+    why_sources: list[Headline] = Field(default_factory=list)
     upcoming: list[UpcomingItem] = Field(default_factory=list)
     rates: RatesView | None = None
     draft: NoteDraft | None = None
@@ -251,6 +279,14 @@ class DeskNote(BaseModel):
     #: The instrument a pre-market, move or ask note is about; None for event
     #: notes. Stored in its own column and merged on read, never in the payload.
     instrument: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _no_empty_why_sources(self, handler: Any) -> dict[str, Any]:
+        # A note without them stays readable by releases from before desk:v10.
+        data = handler(self)
+        if not data.get("why_sources"):
+            data.pop("why_sources", None)
+        return data
 
     @model_validator(mode="before")
     @classmethod

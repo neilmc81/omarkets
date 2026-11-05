@@ -15,7 +15,7 @@ import uvicorn
 
 from core.api.app import build_service, create_app
 from core.config.logging import configure_logging
-from core.config.settings import Settings
+from core.config.settings import DESK_MODEL_MAX_OUTPUT, Settings
 from core.domain.economics import EconomicsMode, MacroRegistry
 from core.domain.instruments import PRIMARY_SYMBOL, all_symbols
 from core.domain.news import SourceMetadata, SourceType
@@ -228,7 +228,7 @@ def check_desk_instruments(settings: Settings) -> tuple[str, ...]:
     """The instruments the desk writes for, refused when one has no prompt
     profile at ``desk_prompt_version`` (desk:v8 is NQ's text only, so ES needs
     desk:v9)."""
-    from core.desk.prompts import VERSIONS, has_profile
+    from core.desk.prompts import PROMPT_VERSION, VERSIONS, has_profile
 
     version = settings.desk_prompt_version
     instruments = tuple(settings.desk_instruments)
@@ -237,7 +237,8 @@ def check_desk_instruments(settings: Settings) -> tuple[str, ...]:
         return instruments
     names = ", ".join(missing)
     fits = [v for v in VERSIONS if all(has_profile(s, version=v) for s in instruments)]
-    fix = (f"set OMARKETS_DESK_PROMPT_VERSION={fits[-1]} or remove {names} from "
+    best = PROMPT_VERSION if PROMPT_VERSION in fits else fits[-1] if fits else None
+    fix = (f"set OMARKETS_DESK_PROMPT_VERSION={best} or remove {names} from "
            "OMARKETS_DESK_INSTRUMENTS" if fits
            else f"remove {names} from OMARKETS_DESK_INSTRUMENTS")
     raise DeskConfigError(
@@ -254,6 +255,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
     from core.desk.writer import DeskWriter
     from core.notifications.notifier import NotifySendNotifier
     from core.providers.earnings_nasdaq import NasdaqEarningsCalendar
+    from core.providers.news.evidence import EvidenceFeeds
     from core.providers.treasury_auctions import TreasuryAuctions
 
     def calendar_events(start, end):
@@ -276,12 +278,14 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
     async def notify(summary: str, body: str) -> None:
         await notifier.deliver_text(summary, body)
 
+    evidence_feeds = EvidenceFeeds()
     writer = DeskWriter(
         api_key=_secret(settings.openrouter_api_key),
         models={kind: settings.desk_model_for(kind) for kind in NoteKind},
         fallback_model=settings.desk_fallback_model,
         model_params=settings.resolved_desk_model_params,
         model_rates=settings.resolved_desk_model_rates,
+        model_max_output=DESK_MODEL_MAX_OUTPUT,
         input_rate=settings.desk_input_rate,
         output_rate=settings.desk_output_rate,
         cost_guard=cost_guard,
@@ -295,6 +299,8 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
             news_events=news_events,
             ohlc=market.ohlc,
             macro_series=macro_series,
+            external_reports=evidence_feeds.reports,
+            article_text=evidence_feeds.article_text,
         ),
         store=DeskStore(settings.resolved_desk_db_path),
         writer=writer,

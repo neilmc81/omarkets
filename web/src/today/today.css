@@ -290,6 +290,21 @@
   border-top: 1px solid var(--t-line);
 }
 
+.t-why {
+  margin-top: 12px;
+}
+
+.t-why-level {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--t-muted);
+}
+
+.t-why-sources {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
 .t-note-body h3 {
   font-size: 13px;
   color: var(--t-accent);

@@ -8,6 +8,8 @@ import { fetchNote, type Desk, type Figure, type Note, type Rates, type Upcoming
 import { KeyLevelsCard, NextEventCard, QuoteStrip, RiskBanner, SessionTimeline, TodayChart, useNow } from "./Market";
 import "./today.css";
 
+const WHY_LABEL = { reported: "Reported", likely: "Desk's read", unknown: "Not known yet" } as const;
+
 export const KIND_LABEL: Record<Note["kind"], string> = {
   primer: "Week ahead",
   premarket: "Pre-market",
@@ -111,6 +113,12 @@ function NoteCard({ note, open, onToggle, now, headRef }: { note: Note; open: bo
     {open && <div className="t-note-body">
       <Figures figures={note.figures} />
       <Moves note={note} />
+      {draft.why && <section className={`t-why ${draft.why.level}`}>
+        <h3>Why it moved <span className="t-why-level">{WHY_LABEL[draft.why.level]}</span></h3>
+        <p>{draft.why.text}</p>
+        {draft.why.ruled_out && <p className="t-muted">Ruled out: {draft.why.ruled_out}</p>}
+        {note.why_sources.length > 0 && <ul className="t-why-sources">{note.why_sources.map((h) => <li key={h.title}><span className="t-muted">{etTime(h.published_at)} · {h.source}</span> {h.url ? <a href={h.url} target="_blank" rel="noreferrer">{h.title}</a> : h.title}</li>)}</ul>}
+      </section>}
       <h3>What it means</h3><p>{draft.what_it_means}</p>
       <h3>How markets reacted</h3><p>{draft.market_reaction}</p>
       {draft.rates_read && <><h3>Bonds &amp; rates</h3><p>{draft.rates_read}</p></>}

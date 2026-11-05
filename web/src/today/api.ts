@@ -97,9 +97,17 @@ const upcomingSchema = z.object({
   explainer: z.string().nullable(),
 });
 
+const whySchema = z.object({
+  level: z.enum(["reported", "likely", "unknown"]),
+  text: z.string(),
+  evidence: z.array(z.number()),
+  ruled_out: z.string().nullish(),
+});
+
 const draftSchema = z.object({
   headline: z.string(),
   summary: z.string(),
+  why: whySchema.nullish(),
   what_it_means: z.string(),
   market_reaction: z.string(),
   rates_read: z.string().nullish(),
@@ -117,6 +125,7 @@ export const noteSchema = z.object({
   figures: z.array(figureSchema),
   moves: z.array(moveSchema),
   headlines: z.array(headlineSchema),
+  why_sources: z.array(headlineSchema).default([]),
   upcoming: z.array(upcomingSchema),
   rates: ratesSchema.nullable(),
   draft: draftSchema.nullable(),
