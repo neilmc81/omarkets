@@ -299,13 +299,15 @@ class DeskStore:
             ).fetchone()
         return self._note(*row) if row else None
 
-    def count_since(self, kind: str, since_iso: str, instrument: str | None = None) -> int:
-        """Notes of ``kind`` (any status) since then; for one instrument if given."""
+    def count_since(self, kind: str, since_iso: str, instrument: str | None = None,
+                    *, written_only: bool = False) -> int:
+        """Notes of ``kind`` since then (any status unless ``written_only``);
+        for one instrument if given."""
         with self._lock:
             row = self._db.execute(
                 "SELECT COUNT(*) FROM desk_notes WHERE kind=? AND created_at>=?"
-                " AND (? IS NULL OR instrument=?)",
-                (kind, since_iso, instrument, instrument),
+                " AND (? IS NULL OR instrument=?) AND (? = 0 OR status='ok')",
+                (kind, since_iso, instrument, instrument, int(written_only)),
             ).fetchone()
         return int(row[0])
 

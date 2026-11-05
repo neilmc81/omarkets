@@ -657,7 +657,8 @@ class DeskService:
                 continue
             mid = ID.note_id(NoteKind.MOVE, f"{move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}", inst)
             recent_moves = self.store.count_since(
-                "move", (now - timedelta(hours=3)).isoformat(), instrument=inst.symbol)
+                "move", (now - timedelta(hours=3)).isoformat(), instrument=inst.symbol,
+                written_only=True)  # a failed note must not block its own retries
             if recent_moves == 0 and self._should_try(mid):
                 jobs.append((mid, NoteKind.MOVE,
                              lambda m=move, n=mid, i=inst: self.build_move(n, m, now, i)))
