@@ -42,7 +42,11 @@ DESK_MODEL_DEFAULTS: dict[NoteKind, str] = {
     kind: OPUS if kind in {NoteKind.REVIEW, NoteKind.PREMARKET} else DEEPSEEK
     for kind in NoteKind
 }
-DESK_MODEL_PARAMS: dict[str, dict[str, Any]] = {DEEPSEEK: {"provider": DEEPSEEK_PROVIDER}}
+#: Low reasoning effort: on higher effort DeepSeek could spend the whole
+#: max_tokens on reasoning and return no note (31 times, Oct 31 to Nov 5 2026).
+DESK_MODEL_PARAMS: dict[str, dict[str, Any]] = {
+    DEEPSEEK: {"provider": DEEPSEEK_PROVIDER, "reasoning": {"effort": "low"}},
+}
 #: USD per million (input, output) tokens.
 DESK_MODEL_RATES: dict[str, tuple[float, float]] = {OPUS: (5.0, 25.0), DEEPSEEK: (0.15, 0.60)}
 
@@ -250,8 +254,10 @@ class Settings(BaseSettings):
     desk_models: dict[NoteKind, str] = Field(default_factory=dict)
     desk_model: str | None = None
     #: Writes the note once more when the first model fails (HTTP, invalid
-    #: output, advice filter). Empty disables the retry.
-    desk_fallback_model: str = OPUS
+    #: output, advice filter). Empty (the default) disables the retry: Opus as
+    #: fallback made failed routine notes cost ~40x and used most of a week's
+    #: budget. The desk's own later attempts retry on the note's model.
+    desk_fallback_model: str = ""
     #: Extra OpenRouter request fields per model, merged into the request body.
     #: Entries replace ``DESK_MODEL_PARAMS`` per model; ``{}`` drops a default.
     desk_model_params: dict[str, dict[str, Any]] = Field(default_factory=dict)

@@ -55,7 +55,7 @@ def test_desk_routing_reports_defaults_and_overrides():
     assert routing["premarket"] == OPUS
     assert routing["release"] == DEEPSEEK
     assert routing["move"] == "x/model"
-    assert routing["(fallback)"] == OPUS
+    assert routing["(fallback)"] == "none"
 
 
 def test_desk_instruments_show_as_the_json_to_set_them_with():

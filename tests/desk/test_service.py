@@ -166,6 +166,18 @@ async def test_large_nq_move_gets_one_note_per_three_hours():
     assert NoteKind.MOVE not in await kinds(service, clock["now"])
 
 
+async def test_failed_move_note_is_retried_and_does_not_block_itself():
+    now = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
+    nq = [SimpleNamespace(timestamp=now - timedelta(minutes=80) + timedelta(minutes=i),
+                          value=30000.0 * (1 - 0.0002 * i)) for i in range(80)]
+    writer = FakeWriter([WriteResult(None, "m", error="model output was not valid")])
+    service, clock, _ = make(now, series={"NQ": nq}, writer=writer)
+    await service.tick()
+    assert writer.calls and len(writer.calls) == 1
+    clock["now"] = now + timedelta(minutes=6)
+    assert NoteKind.MOVE in await kinds(service, clock["now"])
+
+
 async def test_small_move_is_ignored():
     now = datetime(2026, 10, 20, 15, 0, tzinfo=UTC)
     nq = [SimpleNamespace(timestamp=now - timedelta(minutes=80) + timedelta(minutes=i),
