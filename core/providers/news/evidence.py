@@ -46,7 +46,17 @@ ARTICLE_MAX_CHARS = 20_000
 _ARTICLE_CACHE_SIZE = 64
 #: Pages whose article text sits in plain ``<p>`` tags. Google News links are
 #: redirects to many sites, so its items stay headline-only.
-ARTICLE_HOSTS = frozenset({"www.cnbc.com", "finance.yahoo.com", "investinglive.com"})
+ARTICLE_HOSTS = frozenset({"www.cnbc.com", "finance.yahoo.com", "investinglive.com",
+                           "www.cbsnews.com", "www.cnn.com", "www.foxbusiness.com",
+                           "www.fool.com"})
+#: Who publishes the sites Yahoo Finance's feeds link to; others show their host name.
+PUBLISHERS: Mapping[str, str] = {
+    "www.cbsnews.com": "CBS News", "www.cnn.com": "CNN", "www.foxbusiness.com": "Fox Business",
+    "www.fool.com": "The Motley Fool", "247wallst.com": "24/7 Wall St.",
+    "www.barchart.com": "Barchart", "www.marketbeat.com": "MarketBeat", "www.etf.com": "ETF.com",
+    "stocktwits.com": "Stocktwits", "financialpost.com": "Financial Post",
+    "finance.yahoo.com": YAHOO_FINANCE,
+}
 
 INVESTINGLIVE_URL = "https://investinglive.com/feed/"
 
@@ -159,6 +169,23 @@ def article_allowed(url: str | None) -> bool:
     return parts.scheme == "https" and parts.hostname in ARTICLE_HOSTS and parts.port is None
 
 
+def _publisher_name(name: str) -> str:
+    """A publisher given as a web address, as its bare site name."""
+    return _clean(name).removeprefix("https://").removeprefix("http://").removeprefix(
+        "www.").rstrip("/")
+
+
+def _yahoo_publisher(url: str | None) -> str:
+    """Who published a Yahoo Finance feed item: the feed carries other sites' articles."""
+    try:
+        host = urlsplit(url or "").hostname
+    except ValueError:
+        host = None
+    if not host:
+        return YAHOO_FINANCE
+    return PUBLISHERS.get(host) or _publisher_name(host)
+
+
 def _report(item: ParsedFeedItem, feed: str) -> ExternalReport | None:
     """One feed item as a report; ``None`` without a publication time (which
     can't show the report came before the note)."""
@@ -171,10 +198,13 @@ def _report(item: ParsedFeedItem, feed: str) -> ExternalReport | None:
         if head and publisher:
             title, source = head, publisher
         summary = None
+    elif feed == YAHOO_FINANCE:
+        source = _yahoo_publisher(item.link)
     if not title.strip():
         return None
-    return ExternalReport(source=_clean(source), feed=feed, headline=_clean(title),
-                          published_at=item.published_at, url=item.link, summary=summary)
+    return ExternalReport(source=_publisher_name(source), feed=feed, headline=_clean(title),
+                          published_at=item.published_at, url=item.link, summary=summary,
+                          time_approximate=feed == GOOGLE_NEWS)
 
 
 class EvidenceFeeds:

@@ -117,7 +117,7 @@ function NoteCard({ note, open, onToggle, now, headRef }: { note: Note; open: bo
         <h3>Why it moved <span className="t-why-level">{WHY_LABEL[draft.why.level]}</span></h3>
         <p>{draft.why.text}</p>
         {draft.why.ruled_out && <p className="t-muted">Ruled out: {draft.why.ruled_out}</p>}
-        {note.why_sources.length > 0 && <ul className="t-why-sources">{note.why_sources.map((h) => <li key={h.title}><span className="t-muted">{etTime(h.published_at)} · {h.source}</span> {h.url ? <a href={h.url} target="_blank" rel="noreferrer">{h.title}</a> : h.title}</li>)}</ul>}
+        {note.why_sources.length > 0 && <ul className="t-why-sources">{note.why_sources.map((h) => <li key={h.title}><span className="t-muted">{h.published_at ? `${etTime(h.published_at)} · ` : ""}{h.source}</span> {h.url ? <a href={h.url} target="_blank" rel="noreferrer">{h.title}</a> : h.title}</li>)}</ul>}
       </section>}
       <h3>What it means</h3><p>{draft.what_it_means}</p>
       <h3>How markets reacted</h3><p>{draft.market_reaction}</p>

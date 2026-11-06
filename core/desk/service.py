@@ -713,6 +713,12 @@ class DeskService:
 
     # ------------------------------------------------------------------ builders
 
+    def _fact_symbols(self) -> tuple[str, ...]:
+        """The markets every note is told about. desk:v10 adds the Dow, so a note can
+        see whether selling is broad or a rotation out of tech."""
+        return (F.with_symbol(F.STRIP_SYMBOLS, "YM") if self.prompt_version in WHY_VERSIONS
+                else F.STRIP_SYMBOLS)
+
     def _common(self, now: datetime, inst: Instrument = NQ) -> tuple[dict[str, Any], Any]:
         """Facts every note shares. ``markets_today`` always has the note's own
         instrument (YM is not on the Today strip)."""
@@ -721,7 +727,7 @@ class DeskService:
         return {
             "now": et(now),
             "session": self.session_text(now),
-            "markets_today": F.market_rows(state, F.with_symbol(F.STRIP_SYMBOLS, inst.symbol)),
+            "markets_today": F.market_rows(state, F.with_symbol(self._fact_symbols(), inst.symbol)),
             "breaking_alerts": [
                 {"what": a.label, "headline": a.headline, "source": a.source,
                  "published": et(a.published_at)}
@@ -890,7 +896,9 @@ class DeskService:
                 unavailable = list(batch.unavailable)
                 candidates += [EV.Candidate(source=r.source, headline=r.headline[:300],
                                             published_at=r.published_at, url=r.url,
-                                            summary=r.summary) for r in batch.reports]
+                                            summary=r.summary,
+                                            time_approximate=r.time_approximate)
+                               for r in batch.reports]
             except Exception as exc:  # noqa: BLE001 - the stored reports still count
                 logger.warning("outside coverage failed for %s: %s", inst.symbol,
                                type(exc).__name__)

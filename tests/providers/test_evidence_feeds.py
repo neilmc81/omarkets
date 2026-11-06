@@ -55,7 +55,8 @@ async def test_reports_name_the_publisher_and_drop_items_without_a_time():
     assert set(by_title) == {"Nasdaq falls at open", "Chips drop", "Fed's Barkin speaks"}
     google = by_title["Nasdaq falls at open"]
     assert (google.source, google.feed, google.summary) == ("Reuters", FE.GOOGLE_NEWS, None)
-    assert by_title["Chips drop"].source == FE.YAHOO_FINANCE
+    assert google.time_approximate and not by_title["Chips drop"].time_approximate
+    assert by_title["Chips drop"].source == "example.com"  # who published it, not the feed
     assert by_title["Chips drop"].summary == "Stocks fell & chips too."
     assert by_title["Fed's Barkin speaks"].source == FE.INVESTINGLIVE
 
@@ -171,3 +172,28 @@ def test_plain_text_strips_markup_and_control_characters():
     assert FE.plain_text("<ul><li>Policy\x07 is</li><li>neutral</li></ul>") == "Policy is neutral"
     assert FE.plain_text("<img src='x'>") is None
     assert FE.plain_text(None) is None
+
+
+@pytest.mark.parametrize(("link", "publisher"), [
+    ("https://www.cbsnews.com/news/stocks", "CBS News"),
+    ("https://finance.yahoo.com/markets/a.html", FE.YAHOO_FINANCE),
+    ("https://www.someblog.example/a", "someblog.example"),
+    ("not a link", FE.YAHOO_FINANCE),
+])
+async def test_a_yahoo_item_is_credited_to_its_publisher(link, publisher):
+    def handler(request):
+        if request.url.host == "feeds.finance.yahoo.com":
+            return httpx.Response(200, text=RSS.format(item("Chips drop", link=link)))
+        return httpx.Response(200, text=RSS.format(""))
+    batch = await feeds(handler).reports("GOLD")
+    assert [r.source for r in batch.reports] == [publisher]
+
+
+async def test_a_publisher_given_as_a_web_address_is_tidied():
+    def handler(request):
+        if request.url.host == "news.google.com":
+            return httpx.Response(200, text=RSS.format(item(
+                "Dollar drops - https://www.businesstimes-bd.com/")))
+        return httpx.Response(200, text=RSS.format(""))
+    batch = await feeds(handler).reports("DXY")
+    assert [r.source for r in batch.reports] == ["businesstimes-bd.com"]

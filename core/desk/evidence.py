@@ -49,6 +49,8 @@ _DOWN = (r"fall(?:s|ing|en)?|fell|drop(?:s|ped|ping)?|slid(?:e|es|ing)?|tumbl(?:
          r"weak(?:er|ens?|ened)|retreat(?:s|ed|ing)?|lower")
 _MOVED_UP = _rx(rf"\b(?:{_UP})\b")
 _MOVED_DOWN = _rx(rf"\b(?:{_DOWN})\b")
+#: Where a headline's main clause ends and its reason begins.
+_CLAUSE_BREAK = _rx(r"\b(?:as|after|amid|on|because|following|due to)\b")
 #: Words that tie a move to a reason, plus "rotation" and similar named causes.
 _BECAUSE = _rx(r"\b(?:as|after|amid|on|because|following|due to|why|behind|driven|led by|"
                r"leading|drag(?:s|ged)?|fuel(?:s|ed)|rotation|weighs?|hit|hits)\b")
@@ -60,13 +62,15 @@ _BOILERPLATE = _rx(r"\b(?:subscribe|sign up|newsletter|click here|read more|cook
 _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[\"'A-Z(])")
 #: Page furniture: live quote widgets ("TSLA -9.50%") are not the article's facts,
 #: and they change after it is published.
-_PAGE_NOISE = re.compile(r"Oops, something went wrong|"
+_PAGE_NOISE = re.compile(r"Oops, something went wrong|Watch CBS News|"
+                         r"Updated on: [^/]{5,30}/[^/]{5,20}/ CBS News|"
                          r"[\^A-Z][A-Z0-9.=^-]{0,7}\s+[+\-−]\d+(?:\.\d+)?%")
 #: Publishers whose reports rank ahead of unknown sites, all else equal.
 KNOWN_PUBLISHERS = frozenset({
     "reuters", "bloomberg", "bloomberg.com", "wsj", "the wall street journal", "cnbc", "ap news",
     "associated press", "financial times", "marketwatch", "barron's", "yahoo finance",
     "investing.com", "seeking alpha", "investinglive", "kitco", "fxstreet", "federal reserve",
+    "cbs news", "cnn", "fox business",
 })
 
 
@@ -127,12 +131,20 @@ class Candidate:
     published_at: datetime
     url: str | None = None
     summary: str | None = None
+    #: The feed can re-date an older story, so ``published_at`` is not exact.
+    time_approximate: bool = False
 
 
 def _direction(text: str) -> int:
-    """+1 for words of rising only, -1 for falling only, 0 for neither or both."""
-    up, down = bool(_MOVED_UP.search(text)), bool(_MOVED_DOWN.search(text))
-    return up - down
+    """+1 for words of rising only, -1 for falling only, 0 for neither or both.
+
+    The main clause decides: in "Gold climbs as falling yields support it", gold
+    climbed. A clause with no such word falls back to the whole text.
+    """
+    def said(part: str) -> int:
+        return bool(_MOVED_UP.search(part)) - bool(_MOVED_DOWN.search(part))
+    main = _CLAUSE_BREAK.split(text, maxsplit=1)[0]
+    return said(main) or said(text)
 
 
 def score(item: Candidate, symbol: str, direction: int, now: datetime) -> int:
@@ -158,7 +170,8 @@ def score(item: Candidate, symbol: str, direction: int, now: datetime) -> int:
     compare = terms.direct.search(title) if terms.direct is not None else named
     if direction and said and compare:
         total += 1 if said == direction else -4
-    if now - item.published_at <= RECENT:
+    # A re-dated story mustn't get credit for looking new.
+    if now - item.published_at <= RECENT and not item.time_approximate:
         total += 1
     if item.source.casefold() in KNOWN_PUBLISHERS:
         total += 2
@@ -248,6 +261,8 @@ async def evidence_facts(chosen: Sequence[Candidate], *, symbol: str, unavailabl
         row: dict[str, Any] = {"id": index + 1, "time": when(item.published_at),
                                "source": item.source, "headline": item.headline}
         summary = _shorten(item.summary, SUMMARY_CHARS)
+        if item.time_approximate:
+            row["time_is_approximate"] = True
         if summary and summary.casefold() != item.headline.casefold():
             row["summary"] = summary
         if passages.get(index):
@@ -262,8 +277,10 @@ def cited(draft: NoteDraft | None, chosen: Sequence[Candidate]) -> list[Headline
     if draft is None or draft.why is None:
         return []
     by_id = {index + 1: item for index, item in enumerate(chosen)}
+    # An approximate time isn't shown as if it were when the report came out.
     return [Headline(source=by_id[i].source, title=by_id[i].headline,
-                     published_at=by_id[i].published_at, url=by_id[i].url)
+                     published_at=None if by_id[i].time_approximate else by_id[i].published_at,
+                     url=by_id[i].url)
             for i in dict.fromkeys(draft.why.evidence) if i in by_id]
 
 

@@ -224,6 +224,8 @@ class ExternalReport(BaseModel):
     published_at: UTCDatetime
     url: str | None = None
     summary: str | None = None
+    #: The feed can re-date an older story (Google News), so this time is not exact.
+    time_approximate: bool = False
 
 
 class ReportBatch(BaseModel):

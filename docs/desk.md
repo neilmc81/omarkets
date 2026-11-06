@@ -384,8 +384,13 @@ a numbered `why_evidence` fact. Pre-market and event notes don't fill it.
   These are read on demand, cached for 2 minutes and left alone for 15 minutes after a
   refusal. They don't enter the event store or the News page; `note_facts` keeps what
   each note was given. Google News and Yahoo RSS are unofficial and may change or stop.
+  A Yahoo item is credited to the site it links to, because the feed carries other
+  publishers' articles. Google News can re-date an older story, so its times are marked
+  `time_is_approximate`: the note doesn't quote them, they earn no credit for looking
+  recent and the Today page doesn't show them.
 - Fixed per-instrument word rules (`TERMS`) keep reports about this market and its
-  drivers, favour ones that say why it moved in the note's direction, and drop how-to
+  drivers, favour ones that say why it moved in the note's direction (read from the
+  headline's main clause, so "Gold climbs as falling yields..." counts as up), and drop how-to
   pages and near-repeats. Only reports published in the 24 hours before the note count,
   and a report with no publication time doesn't count. At most 8 items, 3 per source.
 - The strongest 3 reports whose pages can be read also get a passage from the article.

@@ -163,3 +163,46 @@ def test_cited_resolves_ids_to_the_reports_supplied():
     assert [h.title for h in found] == ["Chips tumble", "Nasdaq drops"]
     assert found[0].source == "WSJ" and found[1].url == "https://a"
     assert EV.cited(note(None), chosen) == [] and EV.cited(None, chosen) == []
+
+
+@pytest.mark.parametrize(("title", "said"), [
+    ("Gold climbs above $4,100 as falling yields support bullion", 1),
+    ("Gold price falls below $4,000 as stock market selloff hits", -1),
+    ("Treasury yields fall after jobs data rises", -1),
+    ("After a sharp sell-off, oil rebounds", 0),  # reason first: no penalty either way
+    ("Central banks meet on Thursday", 0),
+])
+def test_direction_comes_from_the_main_clause(title, said):
+    assert EV._direction(title) == said
+
+
+def test_a_report_of_the_wrong_direction_no_longer_ranks_first():
+    wrong = report("Gold climbs above $4,100 as falling yields support bullion", source="Kitco")
+    right = report("Gold price falls below $4,000 as stock market selloff hits",
+                   source="Equiti Global")
+    assert EV.rank([wrong, right], "GOLD", direction=-1, now=NOW)[0] is right
+
+
+def test_a_re_dated_time_is_marked_earns_no_credit_and_is_not_shown():
+    exact = report("Nasdaq drops as chips tumble")
+    approx = EV.Candidate(source="Reuters", headline="Nasdaq drops as chips tumble",
+                          published_at=exact.published_at, time_approximate=True)
+    assert EV.score(exact, "NQ", -1, NOW) == EV.score(approx, "NQ", -1, NOW) + 1
+    found = EV.cited(note(WhyRead(level="reported", text="Reuters says so.", evidence=[1, 2])),
+                     [approx, exact])
+    assert found[0].published_at is None and found[1].published_at == exact.published_at
+
+
+async def test_facts_mark_an_approximate_time():
+    approx = EV.Candidate(source="Reuters", headline="Nasdaq drops", published_at=NOW,
+                          time_approximate=True)
+    fact = await EV.evidence_facts([approx, report("Chips tumble")], symbol="NQ", unavailable=[],
+                                   article_text=None, when=stamp, now=NOW)
+    assert fact["items"][0]["time_is_approximate"] is True
+    assert "time_is_approximate" not in fact["items"][1]
+
+
+def test_excerpt_drops_a_page_dateline():
+    page = ("Watch CBS News Updated on: November 5, 2026 / 7:53 PM EST / CBS News "
+            "The stock market tanked on Thursday as chip stocks fell.")
+    assert EV.excerpt(page, "NQ") == "The stock market tanked on Thursday as chip stocks fell."
