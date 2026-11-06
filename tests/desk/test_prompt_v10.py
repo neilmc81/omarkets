@@ -320,3 +320,44 @@ async def test_a_fallback_with_a_bad_why_gets_the_same_treatment():
                         client=client)
     result = await writer.write(NoteKind.MOVE, FACTS, instrument=ID.NQ)
     assert result.draft.why == NO_USABLE_WHY and not result.why_invalid
+
+
+@pytest.mark.parametrize("bad", [
+    {"level": "certain", "text": "Chips.", "evidence": [1]},
+    {"level": "reported", "text": "Chips.", "evidence": "one"},
+    {"level": "reported", "text": "x" * 800, "evidence": [1]},
+    "chips fell",
+])
+async def test_a_malformed_why_doesnt_lose_the_note(bad):
+    writer, calls = _writer_replying(bad)
+    result = await writer.write(NoteKind.MOVE, FACTS, instrument=ID.NQ)
+    assert len(calls) == 2 and result.draft.why == NO_USABLE_WHY
+
+
+async def test_a_malformed_note_is_still_rejected():
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(
+            {"headline": "H", "why": {"level": "certain"}})}}], "usage": {}})
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    writer = DeskWriter(api_key="k", model="m", prompt_version=P.V10, client=client)
+    result = await writer.write(NoteKind.MOVE, FACTS, instrument=ID.NQ)
+    assert result.draft is None and result.error == "model output was not valid"
+
+
+async def test_the_number_retry_cant_bring_back_a_bad_citation():
+    first = {"level": "reported", "text": "Reuters says 77% of it.", "evidence": [1]}
+    writer, calls = _writer_replying(first, BAD)
+    result = await writer.write(NoteKind.MOVE, FACTS, instrument=ID.NQ)
+    assert len(calls) == 2 and result.draft.why.evidence == [1] and not result.why_invalid
+    assert result.unverified_numbers == ("77",)
+
+
+async def test_a_bug_in_choosing_evidence_still_writes_the_note(monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+    monkeypatch.setattr("core.desk.evidence.rank", broken)
+    writer = V10Writer()
+    note = await desk(writer).build_move("move:x", nq_move(), NOW)
+    assert note.status == "ok"
+    assert writer.calls[0][1]["why_evidence"]["items"] == []
+    assert "evidence ranking" in writer.calls[0][1]["why_evidence"]["feeds_unavailable"]

@@ -74,6 +74,17 @@ def _json_object(text: str) -> dict[str, Any]:
     return json.loads(text[start:end + 1], strict=False)
 
 
+def _parse_draft(data: dict[str, Any]) -> NoteDraft:
+    """The draft; a ``why`` that alone is malformed is left out, which the caller's
+    checks then handle like a missing one, so it can't lose the rest of the note."""
+    try:
+        return NoteDraft.model_validate(data)
+    except ValidationError as exc:
+        if data.get("why") is None or any(e["loc"][:1] != ("why",) for e in exc.errors()):
+            raise
+    return NoteDraft.model_validate({k: v for k, v in data.items() if k != "why"})
+
+
 def _draft_text(draft: NoteDraft) -> str:
     why = [draft.why.text, draft.why.ruled_out or ""] if draft.why else []
     return " ".join([draft.headline, draft.summary, draft.what_it_means,
@@ -323,7 +334,7 @@ class DeskWriter:
                                result.model, invented)
                 again = await self._call(result.model, prompt)
                 spent.append(again.cost_usd)
-                if again.draft is not None:
+                if again.draft is not None and not again.why_invalid:
                     second = invented_numbers(again.draft, checked)
                     if len(second) <= len(invented):
                         result, invented = again, second
@@ -399,7 +410,7 @@ class DeskWriter:
                 self._guard.settle(token, float(cost))
             try:
                 content = payload["choices"][0]["message"]["content"] or ""
-                draft = NoteDraft.model_validate(_json_object(content))
+                draft = _parse_draft(_json_object(content))
             except ValidationError as exc:
                 fields = sorted({".".join(map(str, e["loc"])) for e in exc.errors()})
                 logger.warning("desk writer output invalid fields=%s", fields)

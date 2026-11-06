@@ -164,9 +164,9 @@ def article_allowed(url: str | None) -> bool:
         return False
     try:
         parts = urlsplit(url)
-    except ValueError:
+        return parts.scheme == "https" and parts.hostname in ARTICLE_HOSTS and parts.port is None
+    except ValueError:  # e.g. a port that isn't a number
         return False
-    return parts.scheme == "https" and parts.hostname in ARTICLE_HOSTS and parts.port is None
 
 
 def _publisher_name(name: str) -> str:

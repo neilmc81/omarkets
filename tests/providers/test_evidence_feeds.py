@@ -126,6 +126,7 @@ async def test_a_refusal_leaves_the_feed_alone_for_a_while(status):
     ("http://www.cnbc.com/a.html", False),
     ("https://www.cnbc.com:8443/a.html", False),
     ("https://cnbc.com.evil.example/a.html", False),
+    ("https://www.cnbc.com:bad/a.html", False),
     ("https://127.0.0.1/a", False),
     ("https://localhost/a", False),
     ("https://news.google.com/rss/articles/x", False),

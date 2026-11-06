@@ -903,10 +903,16 @@ class DeskService:
                 logger.warning("outside coverage failed for %s: %s", inst.symbol,
                                type(exc).__name__)
                 unavailable = ["outside coverage"]
-        chosen = EV.rank(candidates, inst.symbol, direction=direction, now=now)
-        fact = await EV.evidence_facts(chosen, symbol=inst.symbol, unavailable=unavailable,
-                                       article_text=self.sources.article_text,
-                                       readable=article_allowed, when=et, now=now)
+        try:
+            chosen = EV.rank(candidates, inst.symbol, direction=direction, now=now)
+            fact = await EV.evidence_facts(chosen, symbol=inst.symbol, unavailable=unavailable,
+                                           article_text=self.sources.article_text,
+                                           readable=article_allowed, when=et, now=now)
+        except Exception as exc:  # noqa: BLE001 - evidence is never worth losing a note
+            logger.warning("evidence failed for %s: %s", inst.symbol, type(exc).__name__)
+            return {"why_evidence": await EV.evidence_facts(
+                [], symbol=inst.symbol, unavailable=[*unavailable, "evidence ranking"],
+                article_text=None, when=et, now=now)}, []
         return {"why_evidence": fact}, chosen
 
     @staticmethod
