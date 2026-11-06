@@ -626,7 +626,9 @@ _WHY_TASK = (
     "it means without repeating why. Because why carries the cause, keep what_it_means and "
     "market_reaction to 40 words each and rates_read to 30. Never call a stock move broad "
     "from the megacap count alone, which covers eight stocks: check whether S&P 500 and Dow "
-    "futures in markets_today moved the same way.")
+    "futures moved the same way, using their figures over the same window, never a change "
+    "today. Never rule out a release because it landed just before the move: the move may "
+    "be the reaction to it.")
 
 _V10_INSTRUMENT_TASKS: dict[NoteKind, str] = {
     **_V9_INSTRUMENT_TASKS,

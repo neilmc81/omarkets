@@ -410,6 +410,9 @@ note is dropped. Code resolves the ids to `DeskNote.why_sources`, so a citation
 can't be made up, and the number and advice checks cover the `why` text. Notes without a
 `why` store no new fields, so older releases can still read them.
 
+On `desk:v10` every note also sees Dow futures, both today and over a move's own window, so
+it can tell broad selling from a rotation out of tech without mixing windows.
+
 `eval rebuild` doesn't reproduce `why_evidence`, because outside coverage isn't stored; use
 `eval capture` for desk:v10 notes, whose stored facts include it.
 

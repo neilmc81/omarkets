@@ -719,6 +719,13 @@ class DeskService:
         return (F.with_symbol(F.STRIP_SYMBOLS, "YM") if self.prompt_version in WHY_VERSIONS
                 else F.STRIP_SYMBOLS)
 
+    def _window_symbols(self, inst: Instrument) -> tuple[str, ...]:
+        """The markets measured over a move's own window. desk:v10 adds the Dow, so a
+        note compares it over that window and not by its change today."""
+        symbols = (F.with_symbol(F.REACTION_SYMBOLS, "YM") if self.prompt_version in WHY_VERSIONS
+                   else F.REACTION_SYMBOLS)
+        return F.with_symbol(symbols, inst.symbol)
+
     def _common(self, now: datetime, inst: Instrument = NQ) -> tuple[dict[str, Any], Any]:
         """Facts every note shares. ``markets_today`` always has the note's own
         instrument (YM is not on the Today strip)."""
@@ -1111,7 +1118,7 @@ class DeskService:
         common, rates = await asyncio.to_thread(self._common, now, inst)
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history, start=move.start_at, end=move.end_at,
-            delayed=self._delayed(), symbols=F.with_symbol(F.REACTION_SYMBOLS, inst.symbol),
+            delayed=self._delayed(), symbols=self._window_symbols(inst),
         )
         news = self.news_lines(move.start_at - timedelta(minutes=60), now)
         recent = [n for n in self.store.recent(5)
@@ -1170,7 +1177,7 @@ class DeskService:
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history, start=now - timedelta(hours=2), end=now,
             delayed=self._delayed(), min_window=timedelta(minutes=30),
-            symbols=F.with_symbol(F.REACTION_SYMBOLS, inst.symbol),
+            symbols=self._window_symbols(inst),
         )
         news = self.news_lines(now - timedelta(hours=6), now)
         evidence, chosen = await self._why_evidence(now, inst, self._today_direction(common, inst))
