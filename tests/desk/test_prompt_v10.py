@@ -1,8 +1,10 @@
 """desk:v10: every instrument's move and ask notes say why, from supplied evidence."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from core.config.settings import DEEPSEEK, DESK_MODEL_MAX_OUTPUT, OPUS, Settings
@@ -11,7 +13,13 @@ from core.desk import prompts as P
 from core.desk.identity import Instrument
 from core.desk.models import DeskNote, Headline, Move, NoteDraft, NoteKind, WhyRead
 from core.desk.service import DeskService
-from core.desk.writer import DeskWriter, check_draft, invented_numbers
+from core.desk.writer import (
+    NO_USABLE_WHY,
+    WHY_INVALID,
+    DeskWriter,
+    check_draft,
+    invented_numbers,
+)
 from core.domain.news import ExternalReport, ReportBatch
 from tests.desk.test_service import FakeWriter, make
 
@@ -247,3 +255,68 @@ async def test_v10_notes_see_the_dow_and_v9_notes_do_not():
         prompt_version = P.V9
     assert "YM" in desk(V10Writer())._fact_symbols()
     assert "YM" not in desk(V9Writer())._fact_symbols()
+
+
+def _reply(why):
+    fields = {"headline": "Headline", "summary": "Summary.", "what_it_means": "Means.",
+              "market_reaction": "Reaction.", "rates_read": "Yields.", "watch_next": [],
+              "learn": "Lesson.", "tone": "negative", **({"why": why} if why else {})}
+    return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(fields)}}],
+                                     "usage": {"prompt_tokens": 10, "completion_tokens": 10}})
+
+
+def _writer_replying(*whys):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return _reply(whys[min(len(calls) - 1, len(whys) - 1)])
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return DeskWriter(api_key="k", model="m", prompt_version=P.V10, client=client), calls
+
+
+GOOD = {"level": "reported", "text": "Reuters says chips.", "evidence": [1]}
+BAD = {"level": "reported", "text": "Reuters says chips.", "evidence": [9]}
+FACTS = {"why_evidence": {"items": [{"id": 1}]}}
+
+
+async def test_a_bad_why_is_asked_for_once_more():
+    writer, calls = _writer_replying(BAD, GOOD)
+    result = await writer.write(NoteKind.MOVE, FACTS, instrument=ID.NQ)
+    assert len(calls) == 2 and result.draft.why.evidence == [1] and result.error is None
+    assert result.cost_usd is not None
+
+
+@pytest.mark.parametrize("facts", [FACTS, {"why_evidence": {"items": []}}])
+@pytest.mark.parametrize("why", [BAD, None])
+async def test_a_paid_note_is_never_lost_to_a_bad_why(facts, why):
+    """Every feed failing leaves no evidence: the note must still be written."""
+    writer, calls = _writer_replying(why)
+    result = await writer.write(NoteKind.MOVE, facts, instrument=ID.NQ)
+    assert len(calls) == 2
+    assert result.draft.why == NO_USABLE_WHY and result.draft.headline == "Headline"
+
+
+async def test_the_evaluation_counts_a_bad_why_as_a_failure_without_retrying():
+    writer, calls = _writer_replying(BAD)
+    result = await writer.attempt(NoteKind.MOVE, FACTS, instrument=ID.NQ)
+    assert len(calls) == 1 and result.draft is None and result.error == WHY_INVALID
+
+
+async def test_a_volunteered_why_is_dropped_from_other_notes():
+    writer, calls = _writer_replying(GOOD)
+    result = await writer.write(NoteKind.PREMARKET, {}, instrument=ID.NQ)
+    assert len(calls) == 1 and result.draft.why is None
+
+
+async def test_a_fallback_with_a_bad_why_gets_the_same_treatment():
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content)["model"])
+        return httpx.Response(500) if len(calls) == 1 else _reply(BAD)
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    writer = DeskWriter(api_key="k", model="m", fallback_model="f", prompt_version=P.V10,
+                        client=client)
+    result = await writer.write(NoteKind.MOVE, FACTS, instrument=ID.NQ)
+    assert result.draft.why == NO_USABLE_WHY and not result.why_invalid

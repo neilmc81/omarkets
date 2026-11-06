@@ -200,9 +200,10 @@ def _report(item: ParsedFeedItem, feed: str) -> ExternalReport | None:
         summary = None
     elif feed == YAHOO_FINANCE:
         source = _yahoo_publisher(item.link)
-    if not title.strip():
+    if not _clean(title):
         return None
-    return ExternalReport(source=_publisher_name(source), feed=feed, headline=_clean(title),
+    return ExternalReport(source=_publisher_name(source) or feed, feed=feed,
+                          headline=_clean(title),
                           published_at=item.published_at, url=item.link, summary=summary,
                           time_approximate=feed == GOOGLE_NEWS)
 
@@ -290,7 +291,9 @@ class EvidenceFeeds:
             return cached[1]
         try:
             body = await self._get(url, ARTICLE_MAX_BYTES)
-            text = article_paragraphs(body.decode("utf-8", errors="replace"))
+            # A page can be megabytes: don't parse it on the event loop.
+            text = await asyncio.to_thread(article_paragraphs,
+                                           body.decode("utf-8", errors="replace"))
         except (httpx.HTTPError, TimeoutError, ValueError) as exc:
             logger.info("article unavailable (%s): %s", type(exc).__name__, urlsplit(url).hostname)
             text = None

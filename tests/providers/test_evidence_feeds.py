@@ -197,3 +197,13 @@ async def test_a_publisher_given_as_a_web_address_is_tidied():
         return httpx.Response(200, text=RSS.format(""))
     batch = await feeds(handler).reports("DXY")
     assert [r.source for r in batch.reports] == ["businesstimes-bd.com"]
+
+
+async def test_a_publisher_that_cleans_to_nothing_doesnt_lose_the_feed():
+    def handler(request):
+        if request.url.host == "news.google.com":
+            return httpx.Response(200, text=RSS.format(
+                item("Dollar drops - https://www./") + item("Dollar rises - Reuters")))
+        return httpx.Response(200, text=RSS.format(""))
+    batch = await feeds(handler).reports("DXY")
+    assert [r.source for r in batch.reports] == [FE.GOOGLE_NEWS, "Reuters"]

@@ -404,9 +404,14 @@ a numbered `why_evidence` fact. Pre-market and event notes don't fill it.
 says a report is not proof), `likely` (the desk's read of the items and measured facts)
 or `unknown` (the reports don't point to a reason). `ruled_out` names a usual driver the
 measured facts contradict. A `reported` or `likely` answer must cite supplied item ids,
-or the draft is rejected. Code resolves the ids to `DeskNote.why_sources`, so a citation
+or the writer asks once more; a second bad answer keeps the note and labels its reason
+`unknown`, so a paid note is never lost to a bad citation. A `why` volunteered on any other
+note is dropped. Code resolves the ids to `DeskNote.why_sources`, so a citation
 can't be made up, and the number and advice checks cover the `why` text. Notes without a
 `why` store no new fields, so older releases can still read them.
+
+`eval rebuild` doesn't reproduce `why_evidence`, because outside coverage isn't stored; use
+`eval capture` for desk:v10 notes, whose stored facts include it.
 
 To turn it on, set `OMARKETS_DESK_PROMPT_VERSION=desk:v10` in the service's drop-in and
 restart. `desk:v9` never reads the outside feeds.

@@ -14,7 +14,7 @@ import httpx
 from pydantic import ValidationError
 
 from core.desk.identity import Instrument
-from core.desk.models import NoteDraft, NoteKind
+from core.desk.models import NoteDraft, NoteKind, WhyRead
 from core.desk.prompts import (
     PROMPT_VERSION,
     NoPromptProfile,
@@ -59,6 +59,8 @@ class WriteResult:
     unverified_numbers: tuple[str, ...] = ()
     #: The request as sent; ``None`` when none could be built (no prompt profile).
     prompt: Prompt | None = None
+    #: The note is fine but its ``why`` is missing or cites what wasn't supplied.
+    why_invalid: bool = False
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -79,6 +81,13 @@ def _draft_text(draft: NoteDraft) -> str:
                      *draft.watch_next])
 
 
+#: Why a draft's reason can't be used. The rest of the note still can.
+WHY_INVALID = "note's why is missing or cites evidence that was not supplied"
+#: Written when the model gave no usable reason twice: a paid note is never lost to it.
+NO_USABLE_WHY = WhyRead(level="unknown",
+                        text="This note could not tie a reason to the reports it was given.")
+
+
 def check_draft(draft: NoteDraft, *, rates_read_required: bool = True,
                 why_required: bool = False, evidence_ids: Iterable[int] = ()) -> str | None:
     if _ADVICE.search(_draft_text(draft)):
@@ -89,11 +98,10 @@ def check_draft(draft: NoteDraft, *, rates_read_required: bool = True,
         return "model output was not valid"
     if why_required:
         why = draft.why
-        if why is None:
-            return "model output was not valid"
         # A reason has to rest on a report that was really supplied.
-        if set(why.evidence) - set(evidence_ids) or (why.level != "unknown" and not why.evidence):
-            return "note cited evidence that was not supplied"
+        if why is None or set(why.evidence) - set(evidence_ids) or (
+                why.level != "unknown" and not why.evidence):
+            return WHY_INVALID
     return None
 
 
@@ -297,6 +305,16 @@ class DeskWriter:
             spent.append(retry.cost_usd)
             result = retry if retry.draft else WriteResult(
                 None, primary, error=f"{result.error}; fallback {self._fallback}: {retry.error}")
+        if result.why_invalid:
+            logger.warning("desk writer %s gave no usable why; regenerating", result.model)
+            again = await self._call(result.model, prompt)
+            spent.append(again.cost_usd)
+            if again.draft is not None and not again.why_invalid:
+                result = again
+            else:
+                logger.warning("desk note kept without a sourced why")
+                result = replace(result, why_invalid=False, draft=result.draft.model_copy(
+                    update={"why": NO_USABLE_WHY}))
         if result.draft is not None:
             checked = prompt.number_sources
             invented = invented_numbers(result.draft, checked)
@@ -325,6 +343,8 @@ class DeskWriter:
         if isinstance(prompt, WriteResult):
             return prompt
         result = replace(await self._call(model, prompt), prompt=prompt)
+        if result.why_invalid:  # the evaluation counts it as a failure, with no retry
+            return replace(result, draft=None, error=WHY_INVALID, why_invalid=False)
         if result.draft is None:
             return result
         return replace(result, unverified_numbers=tuple(
@@ -396,9 +416,14 @@ class DeskWriter:
                     self._output_limit(model),
                 )
                 return WriteResult(None, model, cost, error="model output was not valid")
+            if not prompt.why_required and draft.why is not None:
+                # Volunteered on a note that takes none: no evidence stands behind it.
+                draft = draft.model_copy(update={"why": None})
             problem = check_draft(draft, rates_read_required=prompt.rates_read_required,
                                   why_required=prompt.why_required,
                                   evidence_ids=prompt.evidence_ids)
+            if problem == WHY_INVALID:
+                return WriteResult(draft, model, cost, why_invalid=True)
             if problem:
                 return WriteResult(None, model, cost, error=problem)
             return WriteResult(draft, model, cost)
