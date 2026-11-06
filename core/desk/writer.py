@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -14,7 +14,7 @@ import httpx
 from pydantic import ValidationError
 
 from core.desk.identity import Instrument
-from core.desk.models import NoteDraft, NoteKind
+from core.desk.models import NoteDraft, NoteKind, WhyRead
 from core.desk.prompts import (
     PROMPT_VERSION,
     NoPromptProfile,
@@ -59,6 +59,8 @@ class WriteResult:
     unverified_numbers: tuple[str, ...] = ()
     #: The request as sent; ``None`` when none could be built (no prompt profile).
     prompt: Prompt | None = None
+    #: The note is fine but its ``why`` is missing or cites what wasn't supplied.
+    why_invalid: bool = False
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -72,18 +74,45 @@ def _json_object(text: str) -> dict[str, Any]:
     return json.loads(text[start:end + 1], strict=False)
 
 
+def _parse_draft(data: dict[str, Any]) -> NoteDraft:
+    """The draft; a ``why`` that alone is malformed is left out, which the caller's
+    checks then handle like a missing one, so it can't lose the rest of the note."""
+    try:
+        return NoteDraft.model_validate(data)
+    except ValidationError as exc:
+        if data.get("why") is None or any(e["loc"][:1] != ("why",) for e in exc.errors()):
+            raise
+    return NoteDraft.model_validate({k: v for k, v in data.items() if k != "why"})
+
+
 def _draft_text(draft: NoteDraft) -> str:
+    why = [draft.why.text, draft.why.ruled_out or ""] if draft.why else []
     return " ".join([draft.headline, draft.summary, draft.what_it_means,
-                     draft.market_reaction, draft.rates_read or "", draft.learn, *draft.watch_next])
+                     draft.market_reaction, draft.rates_read or "", draft.learn, *why,
+                     *draft.watch_next])
 
 
-def check_draft(draft: NoteDraft, *, rates_read_required: bool = True) -> str | None:
+#: Why a draft's reason can't be used. The rest of the note still can.
+WHY_INVALID = "note's why is missing or cites evidence that was not supplied"
+#: Written when the model gave no usable reason twice: a paid note is never lost to it.
+NO_USABLE_WHY = WhyRead(level="unknown",
+                        text="This note could not tie a reason to the reports it was given.")
+
+
+def check_draft(draft: NoteDraft, *, rates_read_required: bool = True,
+                why_required: bool = False, evidence_ids: Iterable[int] = ()) -> str | None:
     if _ADVICE.search(_draft_text(draft)):
         return "draft contained trading advice"
     # The reader accepts a missing rates_read; a prompt that asks for it (every
     # v8 prompt, and v9 wherever yields matter) treats a draft without it as invalid.
     if rates_read_required and draft.rates_read is None:
         return "model output was not valid"
+    if why_required:
+        why = draft.why
+        # A reason has to rest on a report that was really supplied.
+        if why is None or set(why.evidence) - set(evidence_ids) or (
+                why.level != "unknown" and not why.evidence):
+            return WHY_INVALID
     return None
 
 
@@ -152,6 +181,8 @@ class DeskWriter:
         # off after 2,023 characters (finish_reason=length). DeepSeek reasons for
         # ~1.8k tokens per note. Billing is by use.
         max_output_tokens: int = 4000,
+        #: A higher (or lower) ceiling for particular models.
+        model_max_output: Mapping[str, int] | None = None,
         timeout_seconds: float = 90.0,
         client: httpx.AsyncClient | None = None,
         url: str = OPENROUTER_URL,
@@ -172,6 +203,7 @@ class DeskWriter:
         self._default_rates = (input_rate, output_rate)
         self._guard = cost_guard
         self._max_output = max_output_tokens
+        self._model_max_output = dict(model_max_output or {})
         self._timeout = timeout_seconds
         self._client = client
         self._url = url
@@ -216,11 +248,14 @@ class DeskWriter:
             "model": result.model,
             #: Routing of the model that wrote the note (the fallback's, if it did).
             "model_params": self._params.get(result.model, {}),
-            "max_output_tokens": self._max_output,
+            "max_output_tokens": self._output_limit(result.model),
         }
         if instrument is not None:
             envelope["instrument"] = instrument.symbol
         return envelope
+
+    def _output_limit(self, model: str) -> int:
+        return self._model_max_output.get(model, self._max_output)
 
     def _rates_for(self, model: str) -> tuple[float, float]:
         return self._rates.get(model, self._default_rates)
@@ -243,14 +278,15 @@ class DeskWriter:
         prompt = self.prompt(kind, facts, instrument=instrument)
         rate_in, rate_out = self._rates_for(model)
         tokens_in = len((prompt.system + prompt.user).encode()) + 500
-        return (tokens_in * rate_in + self._max_output * rate_out) / 1e6
+        return (tokens_in * rate_in + self._output_limit(model) * rate_out) / 1e6
 
     def _bound(self, model: str, prompt: Prompt) -> float:
         # ~3 characters per token is conservative for English/JSON; plus the
         # model's reservation margin (``reserve_pad``).
         rate_in, rate_out = self._rates_for(model)
         tokens_in = (len(prompt.system) + len(prompt.user)) / 3 + 200
-        return (tokens_in * rate_in + self._max_output * rate_out) / 1e6 * reserve_pad(model)
+        return ((tokens_in * rate_in + self._output_limit(model) * rate_out) / 1e6
+                * reserve_pad(model))
 
     def _prepare(self, kind: NoteKind, facts: dict[str, Any], instrument: Instrument | None,
                  model: str) -> Prompt | WriteResult:
@@ -280,6 +316,16 @@ class DeskWriter:
             spent.append(retry.cost_usd)
             result = retry if retry.draft else WriteResult(
                 None, primary, error=f"{result.error}; fallback {self._fallback}: {retry.error}")
+        if result.why_invalid:
+            logger.warning("desk writer %s gave no usable why; regenerating", result.model)
+            again = await self._call(result.model, prompt)
+            spent.append(again.cost_usd)
+            if again.draft is not None and not again.why_invalid:
+                result = again
+            else:
+                logger.warning("desk note kept without a sourced why")
+                result = replace(result, why_invalid=False, draft=result.draft.model_copy(
+                    update={"why": NO_USABLE_WHY}))
         if result.draft is not None:
             checked = prompt.number_sources
             invented = invented_numbers(result.draft, checked)
@@ -288,7 +334,7 @@ class DeskWriter:
                                result.model, invented)
                 again = await self._call(result.model, prompt)
                 spent.append(again.cost_usd)
-                if again.draft is not None:
+                if again.draft is not None and not again.why_invalid:
                     second = invented_numbers(again.draft, checked)
                     if len(second) <= len(invented):
                         result, invented = again, second
@@ -308,6 +354,8 @@ class DeskWriter:
         if isinstance(prompt, WriteResult):
             return prompt
         result = replace(await self._call(model, prompt), prompt=prompt)
+        if result.why_invalid:  # the evaluation counts it as a failure, with no retry
+            return replace(result, draft=None, error=WHY_INVALID, why_invalid=False)
         if result.draft is None:
             return result
         return replace(result, unverified_numbers=tuple(
@@ -324,7 +372,7 @@ class DeskWriter:
                 return WriteResult(None, model, error=f"AI budget: {exc}")
         body = {
             "model": model,
-            "max_tokens": self._max_output,
+            "max_tokens": self._output_limit(model),
             "temperature": TEMPERATURE,
             "response_format": {"type": "json_object"},
             "usage": {"include": True},
@@ -362,7 +410,7 @@ class DeskWriter:
                 self._guard.settle(token, float(cost))
             try:
                 content = payload["choices"][0]["message"]["content"] or ""
-                draft = NoteDraft.model_validate(_json_object(content))
+                draft = _parse_draft(_json_object(content))
             except ValidationError as exc:
                 fields = sorted({".".join(map(str, e["loc"])) for e in exc.errors()})
                 logger.warning("desk writer output invalid fields=%s", fields)
@@ -376,10 +424,17 @@ class DeskWriter:
                     "completion_tokens=%s reasoning_tokens=%s max_tokens=%d",
                     type(exc).__name__, choice.get("finish_reason"), len(content),
                     usage.get("completion_tokens"), details.get("reasoning_tokens"),
-                    self._max_output,
+                    self._output_limit(model),
                 )
                 return WriteResult(None, model, cost, error="model output was not valid")
-            problem = check_draft(draft, rates_read_required=prompt.rates_read_required)
+            if not prompt.why_required and draft.why is not None:
+                # Volunteered on a note that takes none: no evidence stands behind it.
+                draft = draft.model_copy(update={"why": None})
+            problem = check_draft(draft, rates_read_required=prompt.rates_read_required,
+                                  why_required=prompt.why_required,
+                                  evidence_ids=prompt.evidence_ids)
+            if problem == WHY_INVALID:
+                return WriteResult(draft, model, cost, why_invalid=True)
             if problem:
                 return WriteResult(None, model, cost, error=problem)
             return WriteResult(draft, model, cost)

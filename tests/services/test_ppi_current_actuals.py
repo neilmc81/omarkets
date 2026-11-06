@@ -31,6 +31,12 @@ async def batch(payload=None, now=NOW):
     payload = json.loads(FIXTURE.read_text()) if payload is None else payload
     providers = build_economic_providers("live", clock=lambda: now)
     provider = next(p for p in providers if p.name == "bls")
+
+    async def no_wait(_seconds):
+        # NOW is just after a release, so the provider's bell retries would really wait.
+        return None
+
+    provider.sleep = no_wait
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
     ) as client:

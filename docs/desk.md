@@ -51,7 +51,8 @@ so a restart cannot produce a duplicate note or notification.
   validated (`NoteDraft`) and rejected if it contains trading advice.
 - Prompt versions (`core/desk/prompts.py`): `desk:v9` is what production
   writes by default; `desk:v8` is NQ's older hand-tuned text, NQ only, still
-  selectable. `desk:v9` (Phase 1 slice 5) is one set of shared rules plus an
+  selectable; `desk:v10` is `desk:v9` plus a labelled "why" on move and ask notes
+  (see "Why a market moved"). `desk:v9` (Phase 1 slice 5) is one set of shared rules plus an
   instrument profile on top of its asset class's defaults
   (session hours, what "close" means, the expected delay, how yields matter).
   NQ's wording lives in NQ's profile; ES, YM, GOLD, WTI, DXY, US2Y, US10Y and VIX have
@@ -184,8 +185,8 @@ so a restart cannot produce a duplicate note or notification.
   (the terms the latest five Learn boxes taught, newest first) and are told
   not to teach one again; v8 facts never carry it. v9's stated facts include
   "1 basis point (bp) = 0.01 percentage point", so a note may quote it.
-  `desk_prompt_version` (`OMARKETS_DESK_PROMPT_VERSION`: `desk:v8` or
-  `desk:v9`, default `desk:v9` since the Phase 2 release cut; see
+  `desk_prompt_version` (`OMARKETS_DESK_PROMPT_VERSION`: `desk:v8`, `desk:v9`
+  or `desk:v10`, default `desk:v9` since the Phase 2 release cut; see
   `.env.example`) selects the version. An instrument with no profile at that
   version is refused before anything is reserved or sent, and never borrows
   NQ's prompt. Event notes
@@ -283,7 +284,10 @@ DeepSeek's own provider. The DeepSeek rates are `0.15` / `0.60` and the Opus
 rates are `5` / `25`.
 
 DeepSeek runs at low reasoning effort, because at higher effort it could spend
-all of `max_tokens` reasoning and return no note.
+all of `max_tokens` reasoning and return no note. Even at low effort it could do
+so at 4,000 tokens, so DeepSeek's ceiling is 8,000 (`DESK_MODEL_MAX_OUTPUT`) and
+every other model keeps 4,000. The AI cost guard and the eval bounds use the
+per-model ceiling.
 
 No fallback model is set by default. An Opus fallback made failed routine notes
 cost about 40 times as much and used most of a week's budget (Nov 2026). A failed
@@ -339,7 +343,7 @@ service, and only `eval run --paid` makes paid calls.
   letters shuffled per case and the key in a separate file; `tally OUT` adds up
   the filled-in scores.
 - `render DIR OUT` writes each case's exact prompt and cost bound, offline.
-  `render` and `run` take `--prompt desk:v8|desk:v9` (default: the service's
+  `render` and `run` take `--prompt desk:v8|desk:v9|desk:v10` (default: the service's
   `desk_prompt_version`); the results record the version, and `check` allows
   the stated facts of the version that wrote each draft (for a draft with no
   recorded version, the default, or the newest version with a profile for its
@@ -366,6 +370,51 @@ service, and only `eval run --paid` makes paid calls.
   cost bound can't be set (a model with no price on record or whose routing
   params change the token limit, no shared budget with limits, partial facts)
   or if the worst case doesn't fit the calls and dollars left.
+
+
+## Why a market moved (`desk:v10`)
+
+On `desk:v10`, every instrument's move and ask notes must fill `why`, written from
+a numbered `why_evidence` fact. Pre-market and event notes don't fill it.
+
+**Evidence, no AI** (`core/desk/evidence.py`, `core/providers/news/evidence.py`):
+
+- Stored feeds, plus coverage read when the note is written: a Google News query and
+  Yahoo Finance ticker feeds chosen per instrument (`COVERAGE`), and investingLive.
+  These are read on demand, cached for 2 minutes and left alone for 15 minutes after a
+  refusal. They don't enter the event store or the News page; `note_facts` keeps what
+  each note was given. Google News and Yahoo RSS are unofficial and may change or stop.
+  A Yahoo item is credited to the site it links to, because the feed carries other
+  publishers' articles. Google News can re-date an older story, so its times are marked
+  `time_is_approximate`: the note doesn't quote them, they earn no credit for looking
+  recent and the Today page doesn't show them.
+- Fixed per-instrument word rules (`TERMS`) keep reports about this market and its
+  drivers, favour ones that say why it moved in the note's direction (read from the
+  headline's main clause, so "Gold climbs as falling yields..." counts as up), and drop how-to
+  pages and near-repeats. Only reports published in the 24 hours before the note count,
+  and a report with no publication time doesn't count. At most 8 items, 3 per source.
+- The strongest 3 reports whose pages can be read also get a passage from the article.
+  Pages are read only from `ARTICLE_HOSTS`, over https, without following redirects;
+  quote widgets are stripped because they aren't the article's facts. Google News links
+  stay headline-only.
+- All of this is untrusted text. A feed or page that fails is named in
+  `feeds_unavailable` or skipped; it never stops a note.
+
+**The note** labels its answer: `reported` (an item says why; names who and when, and
+says a report is not proof), `likely` (the desk's read of the items and measured facts)
+or `unknown` (the reports don't point to a reason). `ruled_out` names a usual driver the
+measured facts contradict. A `reported` or `likely` answer must cite supplied item ids,
+or the writer asks once more; a second bad answer keeps the note and labels its reason
+`unknown`, so a paid note is never lost to a bad citation. A `why` volunteered on any other
+note is dropped. Code resolves the ids to `DeskNote.why_sources`, so a citation
+can't be made up, and the number and advice checks cover the `why` text. Notes without a
+`why` store no new fields, so older releases can still read them.
+
+`eval rebuild` doesn't reproduce `why_evidence`, because outside coverage isn't stored; use
+`eval capture` for desk:v10 notes, whose stored facts include it.
+
+To turn it on, set `OMARKETS_DESK_PROMPT_VERSION=desk:v10` in the service's drop-in and
+restart. `desk:v9` never reads the outside feeds.
 
 ## Did it hold? (release, Fed and earnings notes)
 

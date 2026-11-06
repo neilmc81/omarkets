@@ -211,6 +211,32 @@ class SourceItem(BaseModel):
     economic: EconomicCalendarDetail | None = None
 
 
+class ExternalReport(BaseModel):
+    """A market report read when a note is written (not stored as an event)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: Who published it (for a Google News item, the publisher it names).
+    source: NonEmptyString
+    #: The feed it came through.
+    feed: NonEmptyString
+    headline: NonEmptyString
+    published_at: UTCDatetime
+    url: str | None = None
+    summary: str | None = None
+    #: The feed can re-date an older story (Google News), so this time is not exact.
+    time_approximate: bool = False
+
+
+class ReportBatch(BaseModel):
+    """Reports from one read, and the feeds that could not be read for it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reports: list[ExternalReport] = Field(default_factory=list)
+    unavailable: list[str] = Field(default_factory=list)
+
+
 class MarketEvent(BaseModel):
     """Canonical normalized event in the unified market event stream.
 
@@ -321,6 +347,8 @@ __all__ = [
     "KNOWN_EVENT_TYPES",
     "CentralBankMetadata",
     "EconomicCalendarDetail",
+    "ExternalReport",
+    "ReportBatch",
     "EntityKind",
     "EntityRef",
     "IngestionStatus",

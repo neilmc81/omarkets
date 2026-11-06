@@ -24,6 +24,37 @@ describe("Today", () => {
     expect(screen.getByText(/about 10 minutes delayed/)).toBeInTheDocument();
   });
 
+  it("shows why a market moved, how strong the evidence is and who reported it", async () => {
+    const moved = { ...note, id: "move:WTI:1", kind: "move", instrument: "WTI", tone_for: "WTI",
+      why_sources: [{ source: "Reuters", title: "Oil rises on Iran worries",
+        published_at: "2026-10-14T12:40:00Z", url: "https://example.com/oil" }],
+      draft: { ...note.draft, why: { level: "reported", text: "Reuters says Iran worries lifted oil.",
+        evidence: [1], ruled_out: "Not the dollar: it barely moved." } } };
+    vi.stubGlobal("fetch", vi.fn(() => ok({ ...desk, notes: [moved] })));
+    render(<Root />);
+    expect(await screen.findByText("Reuters says Iran worries lifted oil.")).toBeInTheDocument();
+    expect(screen.getByText("Reported")).toBeInTheDocument();
+    expect(screen.getByText(/Not the dollar/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Oil rises on Iran worries" })).toHaveAttribute("href", "https://example.com/oil");
+  });
+
+  it("shows no time for a source whose time isn't exact", async () => {
+    const moved = { ...note, id: "move:WTI:2", kind: "move", instrument: "WTI", tone_for: "WTI",
+      why_sources: [{ source: "Bloomberg", title: "Oil slides", published_at: null, url: null }],
+      draft: { ...note.draft, why: { level: "likely", text: "Oil slid.", evidence: [1] } } };
+    vi.stubGlobal("fetch", vi.fn(() => ok({ ...desk, notes: [moved] })));
+    render(<Root />);
+    expect(await screen.findByText("Bloomberg")).toBeInTheDocument();
+    expect(screen.queryByText(/— · Bloomberg/)).not.toBeInTheDocument();
+  });
+
+  it("shows no why section on a note without one", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => ok(desk)));
+    render(<Root />);
+    await screen.findByText("Inflation ran hotter than expected");
+    expect(screen.queryByText("Why it moved")).not.toBeInTheDocument();
+  });
+
   it("labels each note's tone with the instrument it is about", async () => {
     const es = { ...note, id: "move:ES:1", kind: "move", instrument: "ES", tone_for: "ES",
       draft: { ...note.draft, headline: "S&P futures slide", nq_tone: "supportive" } };

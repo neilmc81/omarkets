@@ -195,9 +195,11 @@ def _normal(number: str) -> str | None:
 
 
 def draft_fields(draft: Mapping[str, Any]) -> list[str]:
+    why = draft.get("why") or {}
     return [draft.get(key) or "" for key in
             ("headline", "summary", "what_it_means", "market_reaction", "rates_read", "learn")
-            ] + list(draft.get("watch_next") or [])
+            ] + [why.get("text") or "", why.get("ruled_out") or ""
+                 ] + list(draft.get("watch_next") or [])
 
 
 def sentences(text: str) -> list[str]:

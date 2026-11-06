@@ -13,6 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from core.config.settings import DESK_MODEL_MAX_OUTPUT
 from core.desk.evaluation import cases as C
 from core.desk.evaluation import checker
 from core.desk.evaluation import compare as R
@@ -87,6 +88,7 @@ def _writer(settings: Any, guard: Any = None, *, api_key: str | None = None,
         api_key=api_key, models={kind: settings.desk_model_for(kind) for kind in NoteKind},
         model_params=settings.resolved_desk_model_params,
         model_rates=settings.resolved_desk_model_rates,
+        model_max_output=DESK_MODEL_MAX_OUTPUT,
         input_rate=settings.desk_input_rate, output_rate=settings.desk_output_rate,
         cost_guard=guard)
 

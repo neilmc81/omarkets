@@ -47,6 +47,10 @@ DESK_MODEL_DEFAULTS: dict[NoteKind, str] = {
 DESK_MODEL_PARAMS: dict[str, dict[str, Any]] = {
     DEEPSEEK: {"provider": DEEPSEEK_PROVIDER, "reasoning": {"effort": "low"}},
 }
+#: Even at low effort DeepSeek could use all of 4,000 tokens reasoning and return no
+#: note (2 of 5 live notes on Nov 5 2026; 5 of 5 succeeded at 8,000 in a replay of a
+#: note that failed 3 of 5). Worst case about $0.005 a call; Opus keeps the default.
+DESK_MODEL_MAX_OUTPUT: dict[str, int] = {DEEPSEEK: 8000}
 #: USD per million (input, output) tokens.
 DESK_MODEL_RATES: dict[str, tuple[float, float]] = {OPUS: (5.0, 25.0), DEEPSEEK: (0.15, 0.60)}
 
@@ -271,7 +275,7 @@ class Settings(BaseSettings):
     desk_db_path: Path | None = None
     #: Prompt version new notes are written with (``core/desk/prompts.py``).
     #: desk:v8 (NQ's text only) can still be selected for an NQ-only desk.
-    desk_prompt_version: Literal["desk:v8", "desk:v9"] = "desk:v9"
+    desk_prompt_version: Literal["desk:v8", "desk:v9", "desk:v10"] = "desk:v9"
     #: Instruments that get their own notes (default NQ, ES, YM, GOLD, WTI, DXY,
     #: US2Y, US10Y and VIX), e.g. ``OMARKETS_DESK_INSTRUMENTS='["NQ"]'``. NQ gets
     #: pre-market, move and ask notes; every other instrument move and ask only.

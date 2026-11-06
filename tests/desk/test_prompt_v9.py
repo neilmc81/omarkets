@@ -90,9 +90,9 @@ def test_the_setting_offers_exactly_the_known_versions():
     assert typing.get_args(field.annotation) == P.VERSIONS
     assert Settings(_env_file=None, desk_prompt_version="desk:v9").desk_prompt_version == P.V9
     with pytest.raises(ValueError):
-        Settings(_env_file=None, desk_prompt_version="desk:v10")
+        Settings(_env_file=None, desk_prompt_version="desk:v99")
     with pytest.raises(ValueError, match="unknown prompt version"):
-        DeskWriter(api_key="k", model=MODEL, prompt_version="desk:v10")
+        DeskWriter(api_key="k", model=MODEL, prompt_version="desk:v99")
 
 
 def test_production_wiring_passes_the_setting_to_the_writer(monkeypatch, tmp_path):
