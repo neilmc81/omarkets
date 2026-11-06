@@ -361,3 +361,18 @@ async def test_a_bug_in_choosing_evidence_still_writes_the_note(monkeypatch):
     assert note.status == "ok"
     assert writer.calls[0][1]["why_evidence"]["items"] == []
     assert "evidence ranking" in writer.calls[0][1]["why_evidence"]["feeds_unavailable"]
+
+
+async def test_v10_notes_measure_the_dow_over_the_same_window():
+    class V9Writer(V10Writer):
+        prompt_version = P.V9
+    assert "YM" in desk(V10Writer())._window_symbols(ID.NQ)
+    assert "YM" not in desk(V9Writer())._window_symbols(ID.NQ)
+    assert "WTI" in desk(V10Writer())._window_symbols(Instrument.of("WTI"))
+
+
+@pytest.mark.parametrize("kind", [NoteKind.MOVE, NoteKind.ASK])
+def test_the_task_keeps_windows_apart_and_doesnt_dismiss_a_release_on_timing(kind):
+    task = P.PROMPTS[P.V10]["ES"].tasks[kind]
+    assert "never a change today" in task
+    assert "Never rule out a release because it landed just before the move" in task
