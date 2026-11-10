@@ -1,4 +1,4 @@
-export const PAGES = ["today", "chart", "calendar", "macro", "news", "playbook", "learn", "watchlists"] as const;
+export const PAGES = ["today", "chart", "calendar", "macro", "news", "playbook", "learn", "watchlists", "scorecard"] as const;
 export type Page = typeof PAGES[number];
 
 export const PAGE_LABEL: Record<Page, string> = {
@@ -10,6 +10,7 @@ export const PAGE_LABEL: Record<Page, string> = {
   playbook: "Playbook",
   learn: "Learn",
   watchlists: "Watchlists",
+  scorecard: "Scorecard",
 };
 
 // Old deep links. The native Omarchy layer still opens `?section=...`, and

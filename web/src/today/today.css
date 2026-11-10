@@ -2155,3 +2155,79 @@ button.shell-feeds[aria-expanded="true"] {
   font-size: 12px;
   color: var(--t-muted);
 }
+
+/* Reader's mark on a note: two small, quiet buttons under the note's head. */
+.t-rate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 8px;
+}
+
+.t-rate button {
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--t-line);
+  background: transparent;
+  color: var(--t-muted);
+  cursor: pointer;
+}
+
+.t-rate button:hover:not(:disabled),
+.t-rate button:focus-visible {
+  color: var(--text);
+  border-color: var(--t-accent);
+}
+
+.t-rate button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.t-rate-error {
+  font-size: 12px;
+  color: var(--t-warn);
+}
+
+/* Scorecard page */
+.t-page.sc-page {
+  max-width: none;
+}
+
+.sc-periods {
+  display: grid;
+  gap: 16px;
+}
+
+.sc-period {
+  overflow-x: auto;
+}
+
+.sc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 8px 0 16px;
+}
+
+.sc-table caption {
+  text-align: left;
+  color: var(--t-muted);
+  padding-bottom: 4px;
+}
+
+.sc-table th,
+.sc-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--t-line);
+  vertical-align: top;
+}
+
+.sc-table thead th {
+  color: var(--t-muted);
+  font-weight: 600;
+}

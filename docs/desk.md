@@ -37,7 +37,7 @@ so a restart cannot produce a duplicate note or notification.
   forecast is *in line*), price and yield moves between observed quote times, the
   quote strip and the bond-market view (2-year, 10-year, 10y–2y curve, day and
   one-week changes). Missing data is omitted or shown as unavailable, never zero.
-- `core/desk/followup.py` measures "did it hold?" (below); `core/desk/review.py`
+- `core/desk/followup.py` measures "did it hold?" (below), `core/desk/scorecard.py` counts the desk's notes (see "Scorecard"); `core/desk/review.py`
   works out the week for the weekly review.
 - `core/desk/writer.py` makes one OpenRouter call per note (up to three: one
   retry on `desk_fallback_model` if one is set, which it is not by default, and one regeneration on the
@@ -477,7 +477,7 @@ To turn it on, set `OMARKETS_DESK_PROMPT_VERSION=desk:v11` in the service's drop
 and restart. Joins are written while the scheduler builds its jobs (`due_jobs`),
 so they happen on the first pass that sees the instrument past its trigger.
 
-## Did it hold? (release, Fed and earnings notes)
+## Did it hold? (release, Fed, earnings and move notes)
 
 No AI call. After a note is written, the desk measures NQ, ES and the 2- and
 10-year yields from the event time to two checkpoints:
@@ -498,6 +498,66 @@ first reaction"; same direction and at least 1.5× is "grew", at least 0.5× is
 "held"; the other direction by 0.10% or more is "reversed"; otherwise "faded".
 Until the close is measured the wording says "so far". Results are stored next
 to the note (`desk_notes.followup`); the written note itself is never changed.
+
+**Move notes** (kind `move`, single-instrument and cross-market event notes) get
+the same follow-up for the note's **own instrument** (an event note's lead, never
+NQ by default), not NQ, ES and the yields:
+
+- it is measured from the move's start (the note's `event_at`) to **one hour
+  after the move's end** and to **the next US cash close after that**, with the
+  same feed catch-up (+11 minutes), 5-minute quote-gap, 2-hour give-up and
+  cash-close rules (early closes and holidays included);
+- the verdict is the same (grew / held / faded / reversed / little first
+  reaction), comparing the later change with the move that triggered the note,
+  but "no real move" is sized per unit: **0.10%** for prices and indexes,
+  **1.0 bp** for yields (change measured in basis points) and **1.0%** for
+  volatility indexes (their moves are a percent of their level). The desk's own
+  triggers are 0.6–1.5%, 4–10 bp and 4–10%, so each is roughly a tenth of one;
+- a market that is shut at a checkpoint records **"not available"** for that
+  checkpoint, never a guess and never zero: a volatility index outside Cboe's hours
+  (no grace after its close), a future in the daily
+  break, over a weekend or a holiday. Such a checkpoint is recorded as soon as it
+  is reached (no quote is waited for);
+- the line reads e.g. *The move over 60 min: Gold +1.00% · after 1 hour: +0.40% ·
+  by the close: +1.50% — the move grew.*
+- ask, pre-market and failed notes get none. Release, Fed and earnings follow-ups
+  are unchanged.
+
+## Scorecard
+
+No AI. Whether the notes are any good, and whether a prompt change helped, is
+counted from what the store already holds (`core/desk/scorecard.py`). Over a range
+(default: the last 7 days and the 7 days before, side by side) it reports, **always
+grouped by note kind and prompt version**:
+
+- notes written and failed (also rolled up by kind and by prompt version);
+- for move and ask notes, how many `why` levels are *reported*, *likely*, *unknown*
+  and *not recorded* (a note written before `desk:v10` has no `why`: that is not
+  "unknown");
+- for notes that get a "did it hold?" follow-up, how many verdicts of each kind,
+  and how many have *no verdict* (not measured yet, or not available);
+- how many notes the reader marked useful, not useful, or left unrated;
+- stored cost **by model and prompt version**: notes, total, and mean over the
+  notes that have a stored cost (a note without one is counted as "unpriced" and a
+  mean with none is `null`, "not available", never $0). Nothing is averaged across
+  prompt versions or models. The prompt version and model come from the note's
+  stored `model` text (`model · desk:vN`); a note without one is `unknown`.
+
+**Reader rating.** The Today note card has two small buttons, *Useful* and *Not
+useful*; pressing the lit one clears the mark. It is stored in its own table
+(`desk_ratings`: note id, rating, `rated_at` UTC), created idempotently like the
+other tables; the written note is never changed. Only a written (not failed) note
+can be rated. `PUT /api/v1/desk/notes/{id}/rating` with `{"rating": "useful" |
+"not_useful"}` sets or changes it, `DELETE` clears it (clearing an unrated note is
+fine); both answer `{note_id, rating, rated_at}` and 404 for an unknown note. The
+note and the note summary carry the current `rating` (and the note `rated_at`).
+
+**Where to read it.** `GET /api/v1/desk/scorecard?from=&to=&compare=` (bounds need
+a UTC offset, half-open `[from, to)`, 422 if `from` is not before `to`;
+`compare=false` leaves out the equally long period before), `omarketsctl scorecard
+[--from … --to … --no-compare]` for a plain text table, and the **Scorecard** page
+(the ninth tab, key 9), a read-only render of exactly what the endpoint returns.
+A new database starts with no marks, so early periods read mostly "unrated".
 
 ## Surprise sizing
 

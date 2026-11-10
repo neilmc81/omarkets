@@ -14,7 +14,15 @@ from typing import Any
 from pydantic import ValidationError
 
 from core.desk.identity import INSTRUMENT_KINDS, instrument_of
-from core.desk.models import BreakingAlert, DeskNote, EventJoin, FollowUp, LearnEntry
+from core.desk.models import (
+    BreakingAlert,
+    DeskNote,
+    EventJoin,
+    FollowUp,
+    LearnEntry,
+    NoteRating,
+    RatingState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +94,15 @@ class DeskStore:
             " captured_at TEXT NOT NULL)"
         )
 
+        # The reader's useful / not useful mark, apart from the note so a written note
+        # is never modified. One row per note; clearing a mark deletes its row.
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS desk_ratings ("
+            " note_id TEXT PRIMARY KEY,"
+            " rating TEXT NOT NULL CHECK (rating IN ('useful', 'not_useful')),"
+            " rated_at TEXT NOT NULL)"
+        )
+
     def _repair_instruments(self) -> None:
         """Fill in the instrument of every pre-market, move and ask row that has
         none, from its id, as ``save`` would. Runs on every open: it also mends
@@ -108,6 +125,59 @@ class DeskStore:
         if followup:
             update["follow_up"] = FollowUp.model_validate_json(followup)
         return note.model_copy(update=update)
+
+    def _attach(self, notes: list[DeskNote]) -> list[DeskNote]:
+        """``notes`` with everything stored apart from them: later joins and the mark."""
+        return self._with_ratings(self._with_joins(notes))
+
+    def _with_ratings(self, notes: list[DeskNote]) -> list[DeskNote]:
+        if not notes:
+            return notes
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT note_id, rating, rated_at FROM desk_ratings"
+                " WHERE note_id IN (SELECT value FROM json_each(?))",
+                (json.dumps([n.id for n in notes]),),
+            ).fetchall()
+        marks = {note_id: (rating, rated_at) for note_id, rating, rated_at in rows}
+        return [n.model_copy(update={"rating": marks[n.id][0],
+                                     "rated_at": datetime.fromisoformat(marks[n.id][1])})
+                if n.id in marks else n for n in notes]
+
+    def set_rating(self, note_id: str, rating: NoteRating, at: datetime) -> RatingState | None:
+        """Mark a written note, replacing any earlier mark. ``None`` when there is no
+        written note with that id (a failed note cannot be rated)."""
+        stamp = at.astimezone(UTC)
+        with self._lock, self._db:
+            cursor = self._db.execute(
+                "INSERT INTO desk_ratings (note_id, rating, rated_at)"
+                " SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM desk_notes WHERE id=? AND status='ok')"
+                " ON CONFLICT(note_id) DO UPDATE SET rating=excluded.rating,"
+                " rated_at=excluded.rated_at",
+                (note_id, rating, stamp.isoformat(), note_id),
+            )
+        if cursor.rowcount != 1:
+            return None
+        return RatingState(note_id=note_id, rating=rating, rated_at=stamp)
+
+    def clear_rating(self, note_id: str) -> bool:
+        """Remove a note's mark. True when the note exists (it may already have been
+        unrated); False when there is no such note."""
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM desk_ratings WHERE note_id=?", (note_id,))
+            row = self._db.execute("SELECT 1 FROM desk_notes WHERE id=?", (note_id,)).fetchone()
+        return row is not None
+
+    def between(self, start: datetime, end: datetime) -> list[DeskNote]:
+        """Every note, written or failed, created in ``[start, end)``, oldest first,
+        with its follow-up and mark. For the scorecard."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT payload, followup, instrument FROM desk_notes"
+                " WHERE created_at>=? AND created_at<? ORDER BY created_at, id",
+                (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat()),
+            ).fetchall()
+        return self._notes(rows)
 
     def _with_joins(self, notes: list[DeskNote]) -> list[DeskNote]:
         """``notes`` with the instruments that joined each one later."""
@@ -168,14 +238,14 @@ class DeskStore:
                 found = re.search(r'"id":\s*"([^"]*)"', payload)
                 logger.error("desk note %s unreadable, skipped: %d errors",
                              found.group(1) if found else "?", exc.error_count())
-        return self._with_joins(notes)
+        return self._attach(notes)
 
     def get(self, note_id: str) -> DeskNote | None:
         with self._lock:
             row = self._db.execute(
                 "SELECT payload, followup, instrument FROM desk_notes WHERE id=?", (note_id,)
             ).fetchone()
-        return self._with_joins([self._note(*row)])[0] if row else None
+        return self._attach([self._note(*row)])[0] if row else None
 
     def attempts(self, note_id: str) -> int:
         with self._lock:
@@ -213,7 +283,7 @@ class DeskStore:
                 " WHERE desk_notes.status != 'ok'",
                 (note.id, note.kind.value, note.status, note.created_at.isoformat(),
                  note.model_dump_json(exclude={"follow_up", "instrument", "tone_for",
-                                               "event_instruments"}),
+                                               "event_instruments", "rating", "rated_at"}),
                  instrument_of(note.id)),
             )
             if cursor.rowcount == 1 and captured is not None:
@@ -363,7 +433,7 @@ class DeskStore:
                 " ORDER BY created_at DESC LIMIT 1",
                 (kind, since_iso, instrument, instrument),
             ).fetchone()
-        return self._with_joins([self._note(*row)])[0] if row else None
+        return self._attach([self._note(*row)])[0] if row else None
 
     def count_since(self, kind: str, since_iso: str, instrument: str | None = None,
                     *, written_only: bool = False, with_members: bool = False) -> int:

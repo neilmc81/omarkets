@@ -5,6 +5,7 @@ import { LearnPage } from "./learn/LearnPage";
 import { MacroPage } from "./macro/MacroPage";
 import { NewsPage } from "./newsboard/NewsPage";
 import { PlaybookPage } from "./playbook/PlaybookPage";
+import { ScorecardPage } from "./scorecard/ScorecardPage";
 import { askDesk } from "./today/api";
 import { Today } from "./today/Today";
 import { NavigateContext } from "./shell/Explain";
@@ -93,6 +94,7 @@ export function Root() {
       {page === "learn" && <LearnPage />}
       {page === "playbook" && <PlaybookPage />}
       {page === "watchlists" && <WatchlistsPage />}
+      {page === "scorecard" && <ScorecardPage />}
       <footer className="t-footer">Education and analysis only · no trading or order execution</footer>
     </div>
   </NavigateContext.Provider>;

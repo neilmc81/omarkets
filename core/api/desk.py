@@ -14,6 +14,7 @@ from core.api.economics import calendar_coverage
 from core.api.focus import read_focus
 from core.desk import calendar as CAL
 from core.desk import lessons as LS
+from core.desk import scorecard as SC
 from core.desk.identity import Instrument
 from core.desk.models import (
     CalendarBoard,
@@ -25,6 +26,8 @@ from core.desk.models import (
     NoteList,
     NoteSummary,
     Playbook,
+    RatingRequest,
+    RatingState,
 )
 from core.desk.service import DeskService
 from core.services.economics import calendar_window
@@ -128,7 +131,8 @@ async def desk_notes(
     found = desk.store.readable(start, end, limit + 1, instrument)
     notes = [NoteSummary(id=n.id, kind=n.kind, at=n.created_at, headline=n.draft.headline,
                          summary=n.draft.summary, tone=n.draft.nq_tone,
-                         tone_for=n.tone_for, event_instruments=n.event_instruments)
+                         tone_for=n.tone_for, event_instruments=n.event_instruments,
+                         rating=n.rating)
              for n in found[:limit] if n.draft is not None]
     return NoteList(start=start, end=end, limit=limit, truncated=len(found) > limit, notes=notes)
 
@@ -139,6 +143,45 @@ async def desk_note(note_id: str, desk: DeskDep) -> DeskNote:
     if note is None:
         raise HTTPException(status_code=404, detail="Note not found")
     return note
+
+
+@router.put("/desk/notes/{note_id}/rating", response_model=RatingState)
+async def desk_rate(note_id: str, body: RatingRequest, desk: DeskDep) -> RatingState:
+    """Mark a written note useful or not useful, replacing any earlier mark. Only the
+    mark is stored; the note is never changed. 404 for an unknown or failed note."""
+    state = desk.store.set_rating(note_id, body.rating, desk.clock())
+    if state is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return state
+
+
+@router.delete("/desk/notes/{note_id}/rating", response_model=RatingState)
+async def desk_unrate(note_id: str, desk: DeskDep) -> RatingState:
+    """Clear a note's mark. Clearing an unrated note is not an error; 404 for no such note."""
+    if not desk.store.clear_rating(note_id):
+        raise HTTPException(status_code=404, detail="Note not found")
+    return RatingState(note_id=note_id)
+
+
+@router.get("/desk/scorecard", response_model=SC.Scorecard)
+async def desk_scorecard(
+    desk: DeskDep,
+    start: Annotated[AwareDatetime | None, Query(alias="from")] = None,
+    end: Annotated[AwareDatetime | None, Query(alias="to")] = None,
+    compare: bool = True,
+) -> SC.Scorecard:
+    """Counts of the desk's notes over ``[from, to)`` (default: the last 7 days), by
+    note kind and prompt version, and stored cost by model and prompt version; with
+    ``compare`` (default) the equally long period before it too. Deterministic: no
+    model call. Bounds need a UTC offset."""
+    now = desk.clock()
+    end = end.astimezone(UTC) if end is not None else now.astimezone(UTC)
+    start = start.astimezone(UTC) if start is not None else end - SC.DEFAULT_WINDOW
+    if start >= end:
+        raise HTTPException(status_code=422, detail="from must be before to; ranges are half-open")
+    earliest = start - (end - start) if compare else start
+    notes = desk.store.between(earliest, end)
+    return SC.build(notes, now=now, start=start, end=end, compare=compare)
 
 
 @router.post("/desk/ask", response_model=DeskNote)

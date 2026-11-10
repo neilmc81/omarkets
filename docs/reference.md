@@ -76,6 +76,9 @@ python3 -m venv .venv
 .venv/bin/omarketsctl config          # add --all for every setting
 # Stored desk-note costs by model and prompt version (read-only)
 .venv/bin/omarketsctl note-costs
+# Desk notes by kind and prompt version, with stored cost by model: the last 7 days
+# beside the 7 days before (reads the running API; --from/--to/--no-compare)
+.venv/bin/omarketsctl scorecard
 
 # 4. Run the backend tests
 .venv/bin/pytest
@@ -699,7 +702,9 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | `/api/v1/chart/focus` | GET, PUT | The Chart page's instrument `{symbol, updated_at, instrument}` (default NQ, `updated_at` null). PUT `{symbol}` saves it (422 if not in the registry; 503 without the workspace store). Writes no note and calls no AI |
 | `/api/v1/watchlist` | GET, PUT | The one watchlist `{name, symbols, updated_at}` (default "Desk strip": the eight Today strip symbols). PUT `{name, symbols}` replaces it; symbols must be registry instruments, no repeats (422 otherwise) |
 | `/api/v1/desk/notes` | GET | Written notes by time: `from`, `to` (UTC offset required; half-open; default the 7 days before now), `limit` (1–500, default 100). Returns `{from, to, limit, truncated, notes: [{id, kind, at, headline, summary, tone, tone_for}]}`, newest first; failed and draftless notes are left out. `tone_for` is the instrument the tone is about: the note's own (pre-market, move, ask) or NQ for a desk-wide event note |
-| `/api/v1/desk/notes/{id}` | GET | One desk note |
+| `/api/v1/desk/notes/{id}` | GET | One desk note, with the reader's `rating` (`useful`, `not_useful` or null) and `rated_at`; note summaries carry `rating` too |
+| `/api/v1/desk/notes/{id}/rating` | PUT, DELETE | PUT `{"rating": "useful"\|"not_useful"}` marks (or re-marks) a written note, DELETE clears the mark; both return `{note_id, rating, rated_at}`; 404 for an unknown or failed note, 422 for any other rating |
+| `/api/v1/desk/scorecard` | GET | The desk scorecard (no AI): `from`, `to` (UTC offset required; default the last 7 days), `compare` (default true: the equally long period before). Returns `{generated_at, current, previous}`; each period has `written`, `failed`, `by_kind`, `by_prompt_version`, `groups` (per kind and prompt version: written, failed, `why` counts, "did it hold?" `verdicts`, `ratings`) and `costs` (per model and prompt version: notes, priced, unpriced, total, mean or null); see "Scorecard" in [desk.md](desk.md) |
 | `/api/v1/desk/calendar` | GET | Calendar page: `week=this\|next` (New York Monday–Monday), `all` (default false: medium importance and up), `tz` (IANA zone the days are grouped in; default the desk's reader zone, 422 if unknown). Returns `{generated_at, week, start, end, tz, all, hidden, days: [{date, label, rows}], stale, coverage}`; see "Calendar page" below. 503 without the desk |
 | `/api/v1/desk/ask` | POST | Write a "Desk Note" (market-now) note for `?instrument=`; omitted, the saved workspace focus (`/api/v1/chart/focus`), and NQ only when no focus is saved or the store can't be read. An instrument (or saved focus) not in `desk_instruments` gets a 400 before any AI call, never an NQ note. The header Desk Note button sends no instrument, after any focus save in flight lands |
 | `/api/v1/desk/playbook` | GET | How NQ reacted to each indicator's beats and misses; each release carries `note_id` (null when no note), `surprise`/`surprise_text` (actual minus forecast at the reporting precision), and each bucket `nq_15m_avg` (average first-15-minute NQ move, null when none measured) |

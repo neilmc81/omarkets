@@ -46,6 +46,13 @@ afterEach(() => {
 });
 
 describe("Today notes list", () => {
+  it("shows the stored mark on the open note's card", async () => {
+    start(null, () => ({ ...desk, notes: [{ ...notes[0], rating: "not_useful" }, ...notes.slice(1)] }));
+    await screen.findByText("What it means");
+    expect(screen.getByRole("button", { name: "Mark this note not useful" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Mark this note useful" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("opens the newest note and lists the rest of today as compact rows", async () => {
     start(null);
     expect(await screen.findByText("What it means")).toBeInTheDocument();
