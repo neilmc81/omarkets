@@ -148,3 +148,101 @@ def test_calendar_projection_is_cached_until_source_data_changes(service, monkey
     service.accept_batch(batch(observations=[observation(period="2026-09")]))
     service.calendar_events()
     assert len(calls) == 3
+
+
+def assert_cache_tracks_fresh(service, clock, moments):
+    """Cached reads must equal a fresh projection as the clock moves both ways."""
+    for moment in [*moments, *reversed(moments)]:
+        clock[0] = moment
+        assert service._project_calendar() == service._build_calendar(moment), moment
+
+
+def test_cache_expires_when_a_schedule_slot_arrives_after_its_issuer_release():
+    from tests.providers.test_economic_adp import MONTHLY, MURL, NOW, parse_release
+
+    issuer = parse_release(MONTHLY, MURL, NOW)
+    received = issuer.released_at + timedelta(seconds=30)
+    issuer = issuer.model_copy(update={"received_at": received})
+    slot = issuer.released_at + timedelta(minutes=1)
+    schedule = event(
+        id="schedule", source_event_id="schedule", provider="consensus",
+        event_code="ADP", name=issuer.name, scheduled_at=slot,
+        received_at=received, unit="value", consensus=20000,
+        previous=22500, status="due",
+    )
+    clock = [received]
+    service = EconomicService(mode="live", clock=lambda: clock[0])
+    service._events = [schedule, issuer]
+    assert len(service._project_calendar()) == 2
+    assert_cache_tracks_fresh(service, clock, [received, slot - timedelta(seconds=1), slot,
+                                               slot + timedelta(hours=1)])
+    clock[0] = slot
+    assert len(service._project_calendar()) == 1
+
+
+def test_cache_expires_when_retained_ism_history_is_received():
+    from datetime import UTC, datetime
+
+    from core.domain.macro_registry import MACRO_DEFINITIONS
+
+    definition = MacroRegistry(definitions=MACRO_DEFINITIONS).get("ISM_MFG")
+    july_slot = datetime(2026, 8, 3, 14, tzinfo=UTC)
+    late = datetime(2026, 10, 5, tzinfo=UTC)
+    now = datetime(2026, 10, 2, tzinfo=UTC)
+
+    def observed(period, slot, received_at, value):
+        return observation(
+            id="ISM_MFG", provider="ism_newswire",
+            source_series_id=definition.source_series_id, period=period,
+            released_at=slot, received_at=received_at, value=value, unit="index points",
+        )
+
+    clock = [now]
+    service = EconomicService(mode="live", clock=lambda: clock[0],
+                              registry=MacroRegistry(definitions=MACRO_DEFINITIONS))
+    service._release_versions = [
+        observed("2026-07", july_slot, late, 49),
+        observed("2026-09", datetime(2026, 10, 1, 14, tzinfo=UTC), now, 52),
+    ]
+    service._events = [event(
+        id="issuer:ISM_MFG:2026-07", source_event_id="ISM_MFG:2026-07",
+        provider="ism_newswire", event_code="ISM_MFG", period="2026-07",
+        name=definition.name, scheduled_at=None, released_at=july_slot,
+        received_at=july_slot + timedelta(minutes=1), unit="index points", actual=49,
+        actual_basis="source_release", status="released",
+    )]
+    service._refresh_releases()
+
+    def aliases():
+        return {alias for row in service._project_calendar() for alias in row.occurrence_aliases}
+
+    assert "observed:ISM_MFG:2026-07" not in aliases()
+    assert_cache_tracks_fresh(service, clock, [now, late - timedelta(seconds=1), late])
+    clock[0] = late
+    assert "observed:ISM_MFG:2026-07" in aliases()
+
+
+def test_cache_from_a_superseded_source_version_is_not_stored(service):
+    service.accept_batch(batch(events=[event()]))
+    real = service._calendar_inputs
+
+    def racing():
+        inputs = real()
+        service._calendar_version += 1  # a batch lands mid-projection
+        return inputs
+
+    service._calendar_cache = None
+    service._calendar_inputs = racing
+    service._project_calendar()
+    assert service._calendar_cache is None
+
+
+def test_callers_cannot_mutate_the_cached_projection(service):
+    service.accept_batch(batch(events=[event(notes=["original"])]))
+    first = service._project_calendar()
+    first[0].notes.append("poison")
+    first[0].occurrence_aliases.append("poison")
+    first.clear()
+    again = service._project_calendar()
+    assert again[0].notes == ["original"]
+    assert "poison" not in again[0].occurrence_aliases
