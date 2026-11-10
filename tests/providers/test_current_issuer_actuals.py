@@ -122,7 +122,7 @@ async def test_provider_unavailable_remains_missing_never_invents_actual():
         batch = await CensusRetailProvider(client, api_key="k", clock=lambda: NOW).fetch()
     # A blocked Census feed is reported plainly (and the fallback tried), never an invented actual.
     assert batch.status == "degraded" and batch.events == []
-    assert "upstream blocked (HTTP 403)" in "; ".join(batch.issues)
+    assert "Census blocked (HTTP 403)" in "; ".join(batch.issues)
 
 
 async def test_current_release_provider_fetch():
