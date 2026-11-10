@@ -18,6 +18,15 @@ from zoneinfo import ZoneInfo
 from core.domain.economics import EconomicEvent
 from core.providers.economic_base import EconomicBatch
 from core.providers.economic_calendars import stable_id
+from core.providers.economic_census_fallback import (
+    FRED_FALLBACK_NOTE,
+    FRED_NOT_CONFIGURED,
+    FredLag,
+    blocked_detail,
+    fred_params,
+    parse_fred,
+)
+from core.providers.economic_fred import FRED_URL
 from core.providers.economic_http import HttpEconomicProvider, sensitive_http_logs
 
 API_URL = "https://api.census.gov/data/timeseries/eits/{dataset}"
@@ -115,6 +124,18 @@ def parse_series(series: Series, body: bytes, now: datetime) -> EconomicEvent:
     if len(ordered) < 2:
         raise ValueError("Census API history too short")
     period, actual = ordered[-1], rows[ordered[-1]]
+    return build_event(series, period, actual, rows[ordered[-2]], now)
+
+
+def build_event(
+    series: Series,
+    period: str,
+    actual: float,
+    previous: float,
+    now: datetime,
+    *,
+    fred: bool = False,
+) -> EconomicEvent:
     identity = f"{period}:{series.code}"
     return EconomicEvent(
         id=stable_id(PROVIDER, identity),
@@ -127,7 +148,7 @@ def parse_series(series: Series, body: bytes, now: datetime) -> EconomicEvent:
         period=period,
         status="released",
         actual=actual,
-        previous=rows[ordered[-2]],
+        previous=previous,
         actual_basis="source_release",
         provider=PROVIDER,
         source_event_id=identity,
@@ -136,8 +157,13 @@ def parse_series(series: Series, body: bytes, now: datetime) -> EconomicEvent:
         source_revision=hashlib.sha256(f"{identity}:{actual!r}".encode()).hexdigest(),
         mode="live",
         notes=[
-            f"Census API time series eits/{series.dataset} "
-            f"({', '.join(f'{k}={v}' for k, v in series.filters.items())}, SA).",
+            (
+                "Computed from the FRED series (Census was blocked; source: fred)."
+                if fred
+                else f"Census API time series eits/{series.dataset} "
+                f"({', '.join(f'{k}={v}' for k, v in series.filters.items())}, SA; "
+                "source: census)."
+            ),
             "Census API publishes no release timestamp; publication time unavailable.",
         ],
     )
@@ -146,9 +172,12 @@ def parse_series(series: Series, body: bytes, now: datetime) -> EconomicEvent:
 class CensusReleasesProvider(HttpEconomicProvider):
     provider_name = PROVIDER
 
-    def __init__(self, *args, api_key: str | None = None, **kwargs):
+    def __init__(
+        self, *args, api_key: str | None = None, fred_api_key: str | None = None, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self._api_key = api_key
+        self._fred_key = fred_api_key
 
     async def request(self, method: str, url: str, **kwargs) -> bytes:
         with sensitive_http_logs():  # the key travels in the query string
@@ -169,6 +198,7 @@ class CensusReleasesProvider(HttpEconomicProvider):
                 ],
             )
         events, issues = [], []
+        fallback_used = False
         for series in SERIES:
             try:
                 body = await self.request(
@@ -177,12 +207,42 @@ class CensusReleasesProvider(HttpEconomicProvider):
                     params={**query(series, now), "key": self._api_key},
                 )
                 events.append(parse_series(series, body, now))
-            except Exception:
-                issues.append(f"{series.code}: request or validation failed")
+                continue
+            except Exception as exc:
+                reason = blocked_detail(exc)
+            issue = await self._fallback(series, now, reason, events)
+            fallback_used = fallback_used or issue is None
+            if issue:
+                issues.append(issue)
+        if fallback_used:
+            issues.append(f"Census: {FRED_FALLBACK_NOTE}")
         return EconomicBatch(
             provider=self.name,
             checked_at=now,
             events=events,
             issues=issues,
-            status="degraded" if issues else "healthy",
+            status="degraded" if any(not i.startswith("Census:") for i in issues) else "healthy",
         )
+
+    async def _fallback(
+        self, series: Series, now: datetime, reason: str, events: list
+    ) -> str | None:
+        """Append the FRED event; return a problem line, or None when FRED supplied it.
+
+        A pending release comes back as a ``pending:`` line, which is not a fault.
+        """
+        if not self._fred_key:
+            return f"{series.code}: {reason}; {FRED_NOT_CONFIGURED}"
+        try:
+            body = await self.request(
+                "GET", FRED_URL, params=fred_params(series.code, self._fred_key)
+            )
+            period, actual, previous = parse_fred(series.code, body, now)
+        except FredLag as lag:
+            if lag.pending:
+                return f"Census: {series.code} pending ({reason}; FRED not yet updated)"
+            return f"{series.code}: {reason}; FRED has not published the latest release"
+        except Exception:
+            return f"{series.code}: {reason}; FRED fallback failed"
+        events.append(build_event(series, period, actual, previous, now, fred=True))
+        return None

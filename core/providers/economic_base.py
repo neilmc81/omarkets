@@ -46,10 +46,11 @@ class EconomicProvider(ABC):
 
 
 class EconomicProviderError(RuntimeError):
-    def __init__(self, provider: str, detail: str) -> None:
+    def __init__(self, provider: str, detail: str, status_code: int | None = None) -> None:
         super().__init__(f"{provider}: {detail}")
         self.provider = provider
         self.detail = detail
+        self.status_code = status_code
 
 
 class ReleasePending(ValueError):

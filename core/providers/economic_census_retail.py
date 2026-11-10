@@ -19,6 +19,15 @@ from zoneinfo import ZoneInfo
 from core.domain.economics import EconomicEvent
 from core.providers.economic_base import EconomicBatch
 from core.providers.economic_calendars import stable_id
+from core.providers.economic_census_fallback import (
+    FRED_FALLBACK_NOTE,
+    FRED_NOT_CONFIGURED,
+    FredLag,
+    blocked_detail,
+    fred_params,
+    parse_fred,
+)
+from core.providers.economic_fred import FRED_URL
 from core.providers.economic_http import HttpEconomicProvider, sensitive_http_logs
 
 API_URL = "https://api.census.gov/data/timeseries/eits/marts"
@@ -69,7 +78,10 @@ def parse_series(body: bytes, now: datetime) -> EconomicEvent:
             raise ValueError("Census API value not finite")
         rows[period] = value
     period = max(rows)
-    actual = rows[period]
+    return build_event(period, rows[period], now)
+
+
+def build_event(period: str, actual: float, now: datetime, *, fred: bool = False) -> EconomicEvent:
     identity = f"{period}:RETAIL_SALES"
     return EconomicEvent(
         id=stable_id("census_retail", identity),
@@ -91,7 +103,11 @@ def parse_series(body: bytes, now: datetime) -> EconomicEvent:
         mode="live",
         notes=[
             "Census national seasonally adjusted retail and food services monthly change "
-            "(Census API, time series eits/marts, category 44X72).",
+            + (
+                "computed from FRED RSAFS levels (Census was blocked; source: fred)."
+                if fred
+                else "(Census API, time series eits/marts, category 44X72; source: census)."
+            ),
             "Census API publishes no release timestamp; publication time unavailable.",
             "Current issuer value; original advance-release vintage is not guaranteed.",
             "Core/ex-auto retail sales is a distinct metric, never supplied by this headline.",
@@ -102,9 +118,12 @@ def parse_series(body: bytes, now: datetime) -> EconomicEvent:
 class CensusRetailProvider(HttpEconomicProvider):
     provider_name = "census_retail"
 
-    def __init__(self, *args, api_key: str | None = None, **kwargs):
+    def __init__(
+        self, *args, api_key: str | None = None, fred_api_key: str | None = None, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self._api_key = api_key
+        self._fred_key = fred_api_key
 
     async def request(self, method: str, url: str, **kwargs) -> bytes:
         with sensitive_http_logs():  # the key travels in the query string
@@ -124,6 +143,34 @@ class CensusRetailProvider(HttpEconomicProvider):
                     "Census API key not configured (OMARKETS_CENSUS_API_KEY); no request sent."
                 ],
             )
-        body = await self.request("GET", API_URL, params={**query(now), "key": self._api_key})
-        event = parse_series(body, now)
+        try:
+            body = await self.request("GET", API_URL, params={**query(now), "key": self._api_key})
+            event = parse_series(body, now)
+        except Exception as exc:
+            return await self._fallback(now, blocked_detail(exc))
         return EconomicBatch(provider=self.name, checked_at=now, events=[event], status="healthy")
+
+    async def _fallback(self, now: datetime, reason: str) -> EconomicBatch:
+        def batch(status, issue, events=()):
+            return EconomicBatch(
+                provider=self.name,
+                checked_at=now,
+                events=list(events),
+                issues=[f"{reason}; {issue}"],
+                status=status,
+            )
+
+        if not self._fred_key:
+            return batch("degraded", FRED_NOT_CONFIGURED)
+        try:
+            body = await self.request(
+                "GET", FRED_URL, params=fred_params("RETAIL_SALES", self._fred_key)
+            )
+            period, actual, _ = parse_fred("RETAIL_SALES", body, now)
+        except FredLag as lag:
+            if lag.pending:
+                return batch("healthy", "FRED not yet updated, release pending")
+            return batch("degraded", "FRED has not published the latest release")
+        except Exception:
+            return batch("degraded", "FRED fallback failed")
+        return batch("healthy", FRED_FALLBACK_NOTE, [build_event(period, actual, now, fred=True)])

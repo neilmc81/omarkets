@@ -50,8 +50,8 @@ def build_economic_providers(
         ISMNewswireProvider(clock=clock),
         ADPReleasesProvider(clock=clock),
         NARReleasesProvider(clock=clock),
-        CensusRetailProvider(api_key=census_api_key, clock=clock),
-        CensusReleasesProvider(api_key=census_api_key, clock=clock),
+        CensusRetailProvider(api_key=census_api_key, fred_api_key=fred_api_key, clock=clock),
+        CensusReleasesProvider(api_key=census_api_key, fred_api_key=fred_api_key, clock=clock),
         FedG17Provider(clock=clock),
         ConferenceBoardProvider(clock=clock),
     ]
