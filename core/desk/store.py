@@ -110,11 +110,16 @@ class DeskStore:
         return note.model_copy(update=update)
 
     def _with_joins(self, notes: list[DeskNote]) -> list[DeskNote]:
-        """``notes`` with the instruments that joined each one later. The table is
-        small (a few rows per event), so it is read whole."""
+        """``notes`` with the instruments that joined each one later."""
+        ids = [n.id for n in notes if n.kind.value == "move"]
+        if not ids:
+            return notes
         with self._lock:
             rows = self._db.execute(
                 "SELECT note_id, instrument, joined_at, move_json FROM desk_event_joins"
+                " WHERE note_id IN (SELECT value FROM json_each(?))"
+                " ORDER BY joined_at, instrument",
+                (json.dumps(ids),),
             ).fetchall()
         if not rows:
             return notes
