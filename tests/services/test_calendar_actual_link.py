@@ -10,6 +10,12 @@ NOW = SLOT + timedelta(days=2)
 BLS_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 
 
+def set_events(service, events):
+    """Replace source events the way a batch does, invalidating the projection cache."""
+    service._events = events
+    service._calendar_version += 1
+
+
 def schedule(provider: str = "fred_release_calendar") -> EconomicEvent:
     return EconomicEvent(
         id=f"{provider}:jolts-2026-09-29",
@@ -144,14 +150,14 @@ def test_ism_issuer_release_joins_only_exact_calendar_slot_and_period(code, day)
         {"country": "CA"},
         {"mode": "demo"},
     ]:
-        service._events = [scheduled, issued.model_copy(update=change)]
+        set_events(service, [scheduled, issued.model_copy(update=change)])
         assert service.calendar_event_state(scheduled).actual is None, change
         projected = service.calendar_events(start=slot, end=now)
         assert next(row for row in projected if row.provider == "consensus").actual is None
     future_schedule = scheduled.model_copy(update={"received_at": now + timedelta(seconds=1)})
-    service._events = [future_schedule, issued]
+    set_events(service, [future_schedule, issued])
     assert service.calendar_event_state(future_schedule).actual is None
-    service._events = [scheduled, issued.model_copy(update={"period": "2026-08"})]
+    set_events(service, [scheduled, issued.model_copy(update={"period": "2026-08"})])
     assert service.calendar_event_state(scheduled).actual is None
 
 
@@ -218,7 +224,7 @@ def test_jobs_consensus_joins_verified_current_vintage_with_compatible_units(cod
 def test_jobs_join_fails_closed_on_unverified_slot_period_series_or_units(mutation):
     service, scheduled = jobs_service("AHE")
     if mutation == "no_official":
-        service._events = [scheduled]
+        set_events(service, [scheduled])
     elif mutation == "slot":
         scheduled = scheduled.model_copy(update={"scheduled_at": JOBS_SLOT + timedelta(minutes=1)})
     elif mutation == "period":
@@ -246,5 +252,6 @@ def test_current_actual_is_not_overwritten_and_conflicting_same_revision_is_reje
 
 def test_jobs_requires_reference_period_on_matching_official_schedule_if_supplied():
     service, scheduled = jobs_service("UNEMPLOYMENT")
-    service._events[0] = service._events[0].model_copy(update={"period": "2026-08"})
+    set_events(service, [service._events[0].model_copy(update={"period": "2026-08"}),
+                         *service._events[1:]])
     assert service.calendar_event_state(scheduled).actual is None

@@ -146,6 +146,18 @@ def calendar_window(now: datetime, scope: str, days: int = 30) -> tuple[datetime
     return start.astimezone(UTC), end.astimezone(UTC)
 
 
+def _detached(item: EconomicEvent) -> EconomicEvent:
+    """Copy of a cached event whose list fields callers may mutate freely."""
+    return item.model_copy(update={
+        "notes": list(item.notes),
+        "occurrence_aliases": list(item.occurrence_aliases),
+        "occurrence_sources": [
+            source.model_copy(update={"notes": list(source.notes)})
+            for source in item.occurrence_sources
+        ],
+    })
+
+
 class EconomicService:
     def __init__(
         self,
@@ -185,6 +197,10 @@ class EconomicService:
         self._started = False
         self._closed = False
         self._cache_seeded = False
+        # Bumped whenever _events/_releases change; keys the calendar projection cache.
+        self._calendar_version = 0
+        self._calendar_cache: tuple[int, datetime, datetime | None,
+                                    list[EconomicEvent]] | None = None
 
     @property
     def subscriber_count(self) -> int:
@@ -231,15 +247,50 @@ class EconomicService:
             mode=self.mode,
             now=self.clock(),
         )
+        self._calendar_version += 1
 
     def _project_calendar(self) -> list[EconomicEvent]:
+        """The projected calendar, recomputed only when source data changes.
+
+        The projection is CPU-heavy and runs on the event loop for every tick and
+        calendar request. Its only time dependence is ``received_at``,
+        ``released_at`` and ``scheduled_at`` compared against ``now``, so a result
+        stays valid until the clock reaches the next such boundary among its inputs
+        (or moves backwards). It may also run in worker threads, so the source
+        version is captured before reading and a result is stored only under it.
+        """
+        now = self.clock()
+        cached = self._calendar_cache
+        if (cached is not None and cached[0] == self._calendar_version
+                and cached[1] <= now and (cached[2] is None or now < cached[2])):
+            return [_detached(item) for item in cached[3]]
+        version = self._calendar_version
+        inputs = self._calendar_inputs()
+        projected = project_calendar(inputs, now=now)
+        upcoming = [
+            moment
+            for item in inputs
+            for source in (item, *item.occurrence_sources)
+            for moment in (source.received_at, source.released_at, source.scheduled_at)
+            if moment is not None and moment > now
+        ]
+        if self._calendar_version == version:
+            self._calendar_cache = (version, now, min(upcoming, default=None), projected)
+        return [_detached(item) for item in projected]
+
+    def _build_calendar(self, now: datetime) -> list[EconomicEvent]:
+        """Uncached projection at ``now``."""
+        return project_calendar(self._calendar_inputs(), now=now)
+
+    def _calendar_inputs(self) -> list[EconomicEvent]:
+        events = list(self._events)
         releases = list(self._releases)
         retained = {item.id for item in releases}
         # The public observed feed selects only the newest period. Older issuer
         # occurrences still need their observed member for durable aliases and
         # revision signatures. Rebuild it solely from retained observations so
         # restarts produce the same projection without writing source history.
-        for item in self._events:
+        for item in events:
             if item.provider != "ism_newswire" or item.period is None:
                 continue
             alias = f"observed:{item.event_code}:{item.period}"
@@ -254,7 +305,7 @@ class EconomicService:
             if history:
                 releases.append(history[-1])
                 retained.add(alias)
-        return project_calendar(list((*self._events, *releases)), now=self.clock())
+        return [*events, *releases]
 
     async def start(self) -> None:
         if self._started:
@@ -447,6 +498,7 @@ class EconomicService:
                 latest_events.pop(key, None)
                 latest_events[key] = item
             self._events = list(latest_events.values())
+            self._calendar_version += 1
         # Provider/series checks can change on identical or empty batches. These
         # bounded latest checks remain sourced from the committed repository.
         self._checks = {check.name: check for check in self.repository.checks()}
