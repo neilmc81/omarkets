@@ -337,6 +337,20 @@ def _cmd_note_costs() -> int:
     return 0
 
 
+def _cmd_scorecard(settings: Settings, start: str | None, end: str | None,
+                   compare: bool) -> int:
+    """Print the desk scorecard (counts by kind and prompt version, cost by model)."""
+    from urllib.parse import urlencode
+
+    from core.desk.scorecard import Scorecard, format_text
+
+    query = {k: v for k, v in (("from", start), ("to", end)) if v}
+    query["compare"] = "true" if compare else "false"
+    card = Scorecard.model_validate(_get(settings, f"/api/v1/desk/scorecard?{urlencode(query)}"))
+    print(format_text(card), end="")
+    return 0
+
+
 def _cmd_desk_backup(target: str | None) -> int:
     """Copy the desk DB with SQLite's backup API: consistent while the service runs."""
     import sqlite3
@@ -412,6 +426,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     config.add_argument("--all", action="store_true", help="include settings left at defaults")
     sub.add_parser("note-costs", help="show stored desk-note costs by model and prompt version")
+    scorecard = sub.add_parser(
+        "scorecard", help="show desk notes by kind and prompt version, with stored cost by model")
+    scorecard.add_argument("--from", dest="start", help="period start, ISO time with UTC offset")
+    scorecard.add_argument("--to", dest="end", help="period end (default now), with UTC offset")
+    scorecard.add_argument("--no-compare", action="store_true",
+                           help="leave out the equally long period before")
     backup = sub.add_parser("desk-backup", help="copy the desk database safely (SQLite backup)")
     backup.add_argument("target", nargs="?", help="output file (default: next to the database)")
     evaluation.add_parser(sub)
@@ -436,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
         "levels": lambda: _cmd_levels(settings, args.symbol, args.date),
         "config": lambda: _cmd_config(args.all),
         "note-costs": _cmd_note_costs,
+        "scorecard": lambda: _cmd_scorecard(settings, args.start, args.end, not args.no_compare),
         "desk-backup": lambda: _cmd_desk_backup(args.target),
         "eval": lambda: evaluation.main(args, _eval_settings),
     }
