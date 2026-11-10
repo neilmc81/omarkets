@@ -249,6 +249,28 @@ class FollowUp(BaseModel):
     text: str
 
 
+NoteRating = Literal["useful", "not_useful"]
+
+
+class RatingRequest(BaseModel):
+    """The reader's mark on a note."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rating: NoteRating
+
+
+class RatingState(BaseModel):
+    """A note's current mark; both ``None`` when it is unrated."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    note_id: str
+    rating: NoteRating | None = None
+    #: When the mark was set (UTC).
+    rated_at: AwareDatetime | None = None
+
+
 class DeskNote(BaseModel):
     """A stored note: deterministic facts plus the written explanation."""
 
@@ -276,6 +298,9 @@ class DeskNote(BaseModel):
     unverified_numbers: list[str] = Field(default_factory=list)
     #: Added after the note is written; stored separately, never part of the draft.
     follow_up: FollowUp | None = None
+    #: The reader's mark. Stored in its own table and merged on read, never in the payload.
+    rating: NoteRating | None = None
+    rated_at: AwareDatetime | None = None
     #: The instrument a pre-market, move or ask note is about; None for event
     #: notes. Stored in its own column and merged on read, never in the payload.
     instrument: str | None = None
@@ -374,6 +399,8 @@ class NoteSummary(BaseModel):
     tone_for: str
     #: Every instrument in a cross-market move note, its lead first; empty for any other.
     event_instruments: list[NoteInstrument] = Field(default_factory=list)
+    #: The reader's mark, if any.
+    rating: NoteRating | None = None
 
 
 class NoteList(BaseModel):
