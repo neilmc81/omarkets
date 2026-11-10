@@ -19,6 +19,12 @@ from zoneinfo import ZoneInfo
 from core.domain.economics import EconomicEvent
 from core.providers.economic_base import EconomicBatch
 from core.providers.economic_calendars import stable_id
+from core.providers.economic_census_fallback import (
+    CENSUS_KEY_MISSING,
+    FallbackResult,
+    FredFallback,
+    blocked_detail,
+)
 from core.providers.economic_http import HttpEconomicProvider, sensitive_http_logs
 
 API_URL = "https://api.census.gov/data/timeseries/eits/marts"
@@ -69,8 +75,22 @@ def parse_series(body: bytes, now: datetime) -> EconomicEvent:
             raise ValueError("Census API value not finite")
         rows[period] = value
     period = max(rows)
-    actual = rows[period]
+    return build_event(period, rows[period], now)
+
+
+def build_event(
+    period: str, actual: float, now: datetime, fallback: FallbackResult | None = None
+) -> EconomicEvent:
     identity = f"{period}:RETAIL_SALES"
+    if fallback:
+        source = (
+            "computed from FRED RSAFS levels in the ALFRED first-release vintage of "
+            f"{fallback.vintage} ({fallback.reason}; source: fred)."
+        )
+        vintage = "Advance-release vintage (ALFRED first release), not later revisions."
+    else:
+        source = "(Census API, time series eits/marts, category 44X72; source: census)."
+        vintage = "Current issuer value; original advance-release vintage is not guaranteed."
     return EconomicEvent(
         id=stable_id("census_retail", identity),
         event_code="RETAIL_SALES",
@@ -85,15 +105,14 @@ def parse_series(body: bytes, now: datetime) -> EconomicEvent:
         actual_basis="source_release",
         provider="census_retail",
         source_event_id=identity,
-        source_url=SOURCE_URL,
+        source_url=fallback.source_url if fallback else SOURCE_URL,
         received_at=now,
         source_revision=hashlib.sha256(f"{identity}:{actual!r}".encode()).hexdigest(),
         mode="live",
         notes=[
-            "Census national seasonally adjusted retail and food services monthly change "
-            "(Census API, time series eits/marts, category 44X72).",
+            "Census national seasonally adjusted retail and food services monthly change " + source,
             "Census API publishes no release timestamp; publication time unavailable.",
-            "Current issuer value; original advance-release vintage is not guaranteed.",
+            vintage,
             "Core/ex-auto retail sales is a distinct metric, never supplied by this headline.",
         ],
     )
@@ -102,9 +121,12 @@ def parse_series(body: bytes, now: datetime) -> EconomicEvent:
 class CensusRetailProvider(HttpEconomicProvider):
     provider_name = "census_retail"
 
-    def __init__(self, *args, api_key: str | None = None, **kwargs):
+    def __init__(
+        self, *args, api_key: str | None = None, fred_api_key: str | None = None, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self._api_key = api_key
+        self._fred = FredFallback(fred_api_key)
 
     async def request(self, method: str, url: str, **kwargs) -> bytes:
         with sensitive_http_logs():  # the key travels in the query string
@@ -115,15 +137,31 @@ class CensusRetailProvider(HttpEconomicProvider):
             await super().aclose()
 
     async def collect(self, now: datetime) -> EconomicBatch:
-        if not self._api_key:
+        if not self._api_key and not self._fred.key:
             return EconomicBatch(
                 provider=self.name,
                 checked_at=now,
                 status="not_configured",
-                issues=[
-                    "Census API key not configured (OMARKETS_CENSUS_API_KEY); no request sent."
-                ],
+                issues=[f"{CENSUS_KEY_MISSING}; no request sent."],
             )
-        body = await self.request("GET", API_URL, params={**query(now), "key": self._api_key})
-        event = parse_series(body, now)
-        return EconomicBatch(provider=self.name, checked_at=now, events=[event], status="healthy")
+        reason = CENSUS_KEY_MISSING
+        if self._api_key:
+            try:
+                body = await self.request(
+                    "GET", API_URL, params={**query(now), "key": self._api_key}
+                )
+                event = parse_series(body, now)
+                return EconomicBatch(
+                    provider=self.name, checked_at=now, events=[event], status="healthy"
+                )
+            except Exception as exc:
+                reason = blocked_detail(exc)
+        result = await self._fred.fetch(self.request, "RETAIL_SALES", now, reason)
+        events = [build_event(result.period, result.actual, now, result)] if result.used else []
+        return EconomicBatch(
+            provider=self.name,
+            checked_at=now,
+            events=events,
+            issues=[f"{reason}; {result.detail()}"],
+            status="degraded" if result.degraded else "healthy",
+        )

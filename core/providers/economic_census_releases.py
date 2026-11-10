@@ -18,6 +18,13 @@ from zoneinfo import ZoneInfo
 from core.domain.economics import EconomicEvent
 from core.providers.economic_base import EconomicBatch
 from core.providers.economic_calendars import stable_id
+from core.providers.economic_census_fallback import (
+    CENSUS_KEY_MISSING,
+    FRED_FALLBACK_NOTE,
+    FallbackResult,
+    FredFallback,
+    blocked_detail,
+)
 from core.providers.economic_http import HttpEconomicProvider, sensitive_http_logs
 
 API_URL = "https://api.census.gov/data/timeseries/eits/{dataset}"
@@ -115,6 +122,17 @@ def parse_series(series: Series, body: bytes, now: datetime) -> EconomicEvent:
     if len(ordered) < 2:
         raise ValueError("Census API history too short")
     period, actual = ordered[-1], rows[ordered[-1]]
+    return build_event(series, period, actual, rows[ordered[-2]], now)
+
+
+def build_event(
+    series: Series,
+    period: str,
+    actual: float,
+    previous: float,
+    now: datetime,
+    fallback: FallbackResult | None = None,
+) -> EconomicEvent:
     identity = f"{period}:{series.code}"
     return EconomicEvent(
         id=stable_id(PROVIDER, identity),
@@ -127,17 +145,23 @@ def parse_series(series: Series, body: bytes, now: datetime) -> EconomicEvent:
         period=period,
         status="released",
         actual=actual,
-        previous=rows[ordered[-2]],
+        previous=previous,
         actual_basis="source_release",
         provider=PROVIDER,
         source_event_id=identity,
-        source_url=series.source_url,
+        source_url=fallback.source_url if fallback else series.source_url,
         received_at=now,
         source_revision=hashlib.sha256(f"{identity}:{actual!r}".encode()).hexdigest(),
         mode="live",
         notes=[
-            f"Census API time series eits/{series.dataset} "
-            f"({', '.join(f'{k}={v}' for k, v in series.filters.items())}, SA).",
+            (
+                f"Computed from FRED levels in the ALFRED first-release (advance) vintage of "
+                f"{fallback.vintage} ({fallback.reason}; source: fred)."
+                if fallback
+                else f"Census API time series eits/{series.dataset} "
+                f"({', '.join(f'{k}={v}' for k, v in series.filters.items())}, SA; "
+                "source: census)."
+            ),
             "Census API publishes no release timestamp; publication time unavailable.",
         ],
     )
@@ -146,9 +170,12 @@ def parse_series(series: Series, body: bytes, now: datetime) -> EconomicEvent:
 class CensusReleasesProvider(HttpEconomicProvider):
     provider_name = PROVIDER
 
-    def __init__(self, *args, api_key: str | None = None, **kwargs):
+    def __init__(
+        self, *args, api_key: str | None = None, fred_api_key: str | None = None, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self._api_key = api_key
+        self._fred = FredFallback(fred_api_key)
 
     async def request(self, method: str, url: str, **kwargs) -> bytes:
         with sensitive_http_logs():  # the key travels in the query string
@@ -159,30 +186,53 @@ class CensusReleasesProvider(HttpEconomicProvider):
             await super().aclose()
 
     async def collect(self, now: datetime) -> EconomicBatch:
-        if not self._api_key:
+        if not self._api_key and not self._fred.key:
             return EconomicBatch(
                 provider=self.name,
                 checked_at=now,
                 status="not_configured",
-                issues=[
-                    "Census API key not configured (OMARKETS_CENSUS_API_KEY); no request sent."
-                ],
+                issues=[f"{CENSUS_KEY_MISSING}; no request sent."],
             )
-        events, issues = [], []
+        events, results = [], []
         for series in SERIES:
-            try:
-                body = await self.request(
-                    "GET",
-                    API_URL.format(dataset=series.dataset),
-                    params={**query(series, now), "key": self._api_key},
+            reason = CENSUS_KEY_MISSING
+            if self._api_key:
+                try:
+                    body = await self.request(
+                        "GET",
+                        API_URL.format(dataset=series.dataset),
+                        params={**query(series, now), "key": self._api_key},
+                    )
+                    events.append(parse_series(series, body, now))
+                    continue
+                except Exception as exc:
+                    reason = blocked_detail(exc)
+            result = await self._fred.fetch(self.request, series.code, now, reason)
+            results.append((series.code, result))
+            if result.used:
+                events.append(
+                    build_event(series, result.period, result.actual, result.previous, now, result)
                 )
-                events.append(parse_series(series, body, now))
-            except Exception:
-                issues.append(f"{series.code}: request or validation failed")
         return EconomicBatch(
             provider=self.name,
             checked_at=now,
             events=events,
-            issues=issues,
-            status="degraded" if issues else "healthy",
+            issues=fallback_issues(results),
+            status="degraded" if any(r.degraded for _, r in results) else "healthy",
         )
+
+
+def fallback_issues(results: list[tuple[str, FallbackResult]]) -> list[str]:
+    """One '<reason>; using FRED fallback' line per Census reason (as census_retail
+    reports it), then a coded line for each series that is pending, late or failed."""
+    issues = list(dict.fromkeys(f"{r.reason}; {FRED_FALLBACK_NOTE}" for _, r in results if r.used))
+    for code, result in results:
+        if result.outcome == "current":
+            continue
+        detail = result.detail()
+        if result.used:  # drop the shared 'using FRED fallback' prefix
+            detail = detail.removeprefix(f"{FRED_FALLBACK_NOTE}; ")
+        else:
+            detail = f"{result.reason}; {detail}"
+        issues.append(f"{code}: {detail}")
+    return issues

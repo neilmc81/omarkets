@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Retail sales, durable goods and new home sales keep working while Census
+  is blocked.** Census's API has answered every request with a Cloudflare
+  block (HTTP 403 or an HTML page) since Nov 2. When that happens, or no
+  Census key is set, the numbers now come from FRED's ALFRED copy of the
+  first published (advance) figures, so they match the headline Census put
+  out and do not change when it is revised later (September durable goods:
+  1.8%, not the revised 1.9%). The health line keeps the reason, e.g.
+  "Census blocked (HTTP 403); using FRED fallback", and each value links to
+  its ALFRED page. A month FRED has not posted yet counts as pending until
+  two hours after its scheduled release (FRED's release calendar; 08:30 ET
+  for retail and durables, 10:00 ET for new home sales), then as an issue.
+  A month that is already overdue stays an issue when the calendar month
+  changes.
+
 - **The Sponsor button is at the top of the README.** A GitHub Sponsors
   badge sits under the opening description, linking to
   [github.com/sponsors/neilmc81](https://github.com/sponsors/neilmc81). The

@@ -122,7 +122,9 @@ class HttpEconomicProvider(EconomicProvider):
                             if attempt:
                                 raise EconomicProviderError(self.name, "transient failure")
                         elif response.status_code != 200:
-                            raise EconomicProviderError(self.name, "HTTP request rejected")
+                            raise EconomicProviderError(
+                                self.name, "HTTP request rejected", response.status_code
+                            )
                         else:
                             length = response.headers.get("Content-Length")
                             if length and int(length) > self.max_bytes:
