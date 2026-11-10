@@ -51,9 +51,6 @@ FLAT_BP = 1.0
 #: The same, for a volatility index, whose moves are a percent of its level
 #: (triggers are 4-10%).
 FLAT_VOL_PCT = 1.0
-#: A volatility index still counts as open this long after Cboe's close, as the move
-#: trigger treats it (``core.desk.service.VOL_INDEX_CLOSE_GRACE``).
-VOL_INDEX_CLOSE_GRACE = timedelta(minutes=10)
 LABELS = {"1h": "after 1 hour", "close": "by the close"}
 
 
@@ -96,15 +93,15 @@ def first_reaction(note: DeskNote) -> Move | None:
 
 
 def market_open(symbol: str, moment: datetime) -> bool:
-    """Whether ``symbol``'s market is measured at ``moment``, as the move trigger
-    decides it: a volatility index in Cboe's hours (or just after), anything else
-    while its futures session is in its regular or overnight phase."""
+    """Whether ``symbol``'s market is trading at ``moment``: a volatility index in
+    Cboe's hours (no grace: a checkpoint after the close has no quote of its own),
+    anything else while its futures session is in its regular or overnight phase."""
     if volatility_index(symbol):
         day = moment.astimezone(NEW_YORK).date()
         if not is_trading_day(day):
             return False
         opens, closes = volatility_index_window(day)
-        return opens <= moment <= closes + VOL_INDEX_CLOSE_GRACE
+        return opens <= moment <= closes
     return session_phase(moment) in (SessionPhase.RTH, SessionPhase.OVERNIGHT)
 
 
@@ -226,7 +223,12 @@ def update(
     move note a checkpoint at which the market is shut is recorded, empty, as soon as
     it is reached.
     """
-    if note.event_at is None or now - note.event_at > FOLLOWUP_HORIZON:
+    if note.event_at is None:
+        return None
+    is_move = note.kind is NoteKind.MOVE
+    # A move note's close checkpoint can fall after a long weekend, more than the
+    # horizon from the move's start, so it expires from its last checkpoint instead.
+    if not is_move and now - note.event_at > FOLLOWUP_HORIZON:
         return None
     plans = planned_checkpoints(note)
     if not plans or (existing is not None and existing.final):
@@ -234,7 +236,8 @@ def update(
     done = {point.label: point for point in (existing.checkpoints if existing else [])}
     changed = False
     symbol = subject_symbol(note)
-    is_move = note.kind is NoteKind.MOVE
+    if is_move and now - plans[-1][1] > FOLLOWUP_HORIZON:
+        return None
     for label, at in plans:
         if label in done:
             continue

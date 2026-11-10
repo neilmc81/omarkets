@@ -136,9 +136,32 @@ def test_volatility_index_after_cboe_hours_is_not_available_for_the_hour_mark():
     assert follow.verdict is None
 
 
-def test_volatility_index_just_inside_the_close_grace_is_still_measured():
-    assert FU.market_open("VIX", datetime(2026, 10, 20, 20, 25, tzinfo=UTC))  # 16:25 ET
-    assert not FU.market_open("VIX", datetime(2026, 10, 20, 20, 25, 1, tzinfo=UTC))
+def test_volatility_index_is_shut_from_cboes_close_with_no_grace():
+    assert FU.market_open("VIX", datetime(2026, 10, 20, 20, 15, tzinfo=UTC))  # 16:15 ET
+    assert not FU.market_open("VIX", datetime(2026, 10, 20, 20, 15, 1, tzinfo=UTC))
+    # A move ending 15:20 ET: its hour mark, 16:20, is after the close, so the 16:15
+    # closing quote must not be read as that checkpoint.
+    start = datetime(2026, 10, 20, 18, 20, tzinfo=UTC)
+    note = move_note("VIX", 6.0, start=start)
+    mark = start + timedelta(hours=2)
+    points = {"VIX": [obs(start - timedelta(seconds=30), 20.0),
+                      obs(datetime(2026, 10, 20, 20, 15, tzinfo=UTC), 23.0)]}
+    follow = FU.update(note, None, history_for(points), now=mark + timedelta(minutes=12))
+    assert follow.checkpoints[0].moves == [] and follow.verdict is None
+
+
+def test_a_close_after_a_long_weekend_is_still_measured():
+    # Thursday Apr 2 2026, 15:30-16:30 ET; Good Friday is a holiday, so the close is
+    # Monday Apr 6 16:00 ET, more than four days after the move began.
+    start = datetime(2026, 4, 2, 19, 30, tzinfo=UTC)
+    note = move_note("ES", 0.9, start=start)
+    close = datetime(2026, 4, 6, 20, 0, tzinfo=UTC)
+    assert FU.planned_checkpoints(note)[-1] == ("close", close)
+    points = quotes("ES", 100.0, (close, 101.0), start=start)
+    follow = FU.update(note, None, history_for(points), now=close + timedelta(minutes=12))
+    assert follow is not None and follow.final and follow.verdict == "held"
+    # And it does stop: long after the last checkpoint nothing is measured.
+    assert FU.update(note, None, history_for(points), now=close + timedelta(days=5)) is None
     assert not FU.market_open("VIX", datetime(2026, 10, 24, 15, 0, tzinfo=UTC))  # Saturday
 
 

@@ -515,7 +515,7 @@ NQ by default), not NQ, ES and the yields:
   triggers are 0.6–1.5%, 4–10 bp and 4–10%, so each is roughly a tenth of one;
 - a market that is shut at a checkpoint records **"not available"** for that
   checkpoint, never a guess and never zero: a volatility index outside Cboe's hours
-  (plus the 10-minute close grace the move trigger uses), a future in the daily
+  (no grace after its close), a future in the daily
   break, over a weekend or a holiday. Such a checkpoint is recorded as soon as it
   is reached (no quote is waited for);
 - the line reads e.g. *The move over 60 min: Gold +1.00% · after 1 hour: +0.40% ·
