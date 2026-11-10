@@ -565,8 +565,10 @@ class DeskService:
     async def update_follow_ups(self, now: datetime) -> int:
         """Measure any "did it hold?" checkpoint that is now due. No model call."""
         updated = 0
-        for note in self.store.recent(40):
-            if note.kind not in followup.FOLLOWUP_KINDS:
+        # Move notes are frequent (one per instrument), so look further back than
+        # the few dozen newest notes or a release's close checkpoint would be missed.
+        for note in self.store.recent(150):
+            if not followup.follows_up(note):
                 continue
             try:
                 result = await asyncio.to_thread(
