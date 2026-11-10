@@ -4,6 +4,7 @@ import { usePoll } from "../chart/usePoll";
 import { NQ_FALLBACK, type FocusState } from "../shell/focus";
 import { useShortcuts } from "../shell/useShortcuts";
 import { GROUP_LABEL, groupNotes, newSince, useLastSeen, type DayGroup } from "./notesList";
+import { RateNote } from "./RateNote";
 import { fetchNote, type Desk, type Figure, type Note, type Rates, type Upcoming, type WatchCard } from "./api";
 import { KeyLevelsCard, NextEventCard, QuoteStrip, RiskBanner, SessionTimeline, TodayChart, useNow } from "./Market";
 import "./today.css";
@@ -117,6 +118,7 @@ function NoteCard({ note, open, onToggle, now, headRef }: { note: Note; open: bo
       </p>}
       <span className={`t-tone ${draft.nq_tone}`}>{toneLabel(note)}</span>
     </button>
+    <RateNote noteId={note.id} rating={note.rating ?? null} />
     {open && <div className="t-note-body">
       <Figures figures={note.figures} />
       <Moves note={note} />

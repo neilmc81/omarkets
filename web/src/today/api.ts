@@ -116,6 +116,8 @@ const draftSchema = z.object({
   nq_tone: z.enum(["supportive", "negative", "mixed", "neutral"]),
 });
 
+const ratingSchema = z.enum(["useful", "not_useful"]);
+
 export const noteSchema = z.object({
   id: z.string(),
   kind: z.enum(["primer", "premarket", "release", "fed", "earnings", "move", "ask", "review", "auction"]),
@@ -134,6 +136,9 @@ export const noteSchema = z.object({
   model: z.string().nullable(),
   cost_usd: z.number().nullable(),
   follow_up: followUpSchema.nullable().optional(),
+  // The reader's mark, stored by the core apart from the note; an older core sends none.
+  rating: ratingSchema.nullish(),
+  rated_at: z.string().nullish(),
   // The note's own instrument (null for desk-wide event notes) and the one its
   // tone is about; an older core sends neither.
   instrument: z.string().nullish(),
@@ -269,7 +274,53 @@ export const playbookSchema = z.object({
   indicators: z.array(playbookIndicatorSchema),
 });
 
+export const ratingStateSchema = z.object({
+  note_id: z.string(),
+  rating: ratingSchema.nullable(),
+  rated_at: z.string().nullable(),
+});
+
+const scorecardGroupSchema = z.object({
+  kind: noteSchema.shape.kind,
+  prompt_version: z.string(),
+  written: z.number(),
+  failed: z.number(),
+  why: z.object({ reported: z.number(), likely: z.number(), unknown: z.number(), not_recorded: z.number() }).nullable(),
+  verdicts: z.object({
+    grew: z.number(), held: z.number(), faded: z.number(), reversed: z.number(), quiet: z.number(), no_verdict: z.number(),
+  }).nullable(),
+  ratings: z.object({ useful: z.number(), not_useful: z.number(), unrated: z.number() }),
+});
+
+const scorecardPeriodSchema = z.object({
+  start: z.string(),
+  end: z.string(),
+  written: z.number(),
+  failed: z.number(),
+  by_kind: z.array(z.object({ kind: noteSchema.shape.kind, written: z.number(), failed: z.number() })),
+  by_prompt_version: z.array(z.object({ prompt_version: z.string(), written: z.number(), failed: z.number() })),
+  groups: z.array(scorecardGroupSchema),
+  costs: z.array(z.object({
+    model: z.string(),
+    prompt_version: z.string(),
+    notes: z.number(),
+    priced: z.number(),
+    unpriced: z.number(),
+    total_usd: z.number(),
+    mean_usd: z.number().nullable(),
+  })),
+});
+
+export const scorecardSchema = z.object({
+  generated_at: z.string(),
+  current: scorecardPeriodSchema,
+  previous: scorecardPeriodSchema.nullable(),
+});
+
 export type Desk = z.infer<typeof deskSchema>;
+export type Rating = z.infer<typeof ratingSchema>;
+export type Scorecard = z.infer<typeof scorecardSchema>;
+export type ScorecardPeriod = z.infer<typeof scorecardPeriodSchema>;
 export type Playbook = z.infer<typeof playbookSchema>;
 export type WatchCard = z.infer<typeof watchCardSchema>;
 export type PlaybookRelease = z.infer<typeof playbookReleaseSchema>;
@@ -324,4 +375,19 @@ export async function fetchPlaybook(signal?: AbortSignal): Promise<Playbook> {
 export async function askDesk(): Promise<Note> {
   const response = await fetch("/api/v1/desk/ask", { method: "POST", cache: "no-store" });
   return noteSchema.parse(await readJson(response));
+}
+
+// Mark a note useful or not useful, or clear the mark. The core stores it and
+// answers with the stored state; the page shows exactly that.
+export async function rateNote(id: string, rating: Rating | null): Promise<z.infer<typeof ratingStateSchema>> {
+  const url = `/api/v1/desk/notes/${encodeURIComponent(id)}/rating`;
+  const response = rating === null
+    ? await fetch(url, { method: "DELETE", cache: "no-store" })
+    : await fetch(url, { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rating }) });
+  return ratingStateSchema.parse(await readJson(response));
+}
+
+export async function fetchScorecard(signal?: AbortSignal): Promise<Scorecard> {
+  const response = await fetch("/api/v1/desk/scorecard", { signal, cache: "no-store" });
+  return scorecardSchema.parse(await readJson(response));
 }

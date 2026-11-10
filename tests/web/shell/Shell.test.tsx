@@ -86,7 +86,7 @@ describe("shared shell", () => {
     serve();
     render(<Root />);
     const tabs = screen.getByRole("navigation", { name: "Pages" });
-    expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Today", "Chart", "Calendar", "Macro", "News", "Playbook", "Learn", "Watchlists"]);
+    expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Today", "Chart", "Calendar", "Macro", "News", "Playbook", "Learn", "Watchlists", "Scorecard"]);
     expect(screen.getByRole("link", { name: "Omarkets home" })).toBeInTheDocument();
     expect(await screen.findByText("All feeds OK")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Desk Note (E)" })).toBeEnabled();
