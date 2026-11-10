@@ -279,22 +279,39 @@ class DeskNote(BaseModel):
     #: The instrument a pre-market, move or ask note is about; None for event
     #: notes. Stored in its own column and merged on read, never in the payload.
     instrument: str | None = None
+    #: The other instruments in a cross-market move note (desk:v11), in order; the
+    #: note is filed under its lead (``instrument``). Empty for every other note.
+    event_members: list[str] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
-    def _no_empty_why_sources(self, handler: Any) -> dict[str, Any]:
-        # A note without them stays readable by releases from before desk:v10.
+    def _no_empty_optional_lists(self, handler: Any) -> dict[str, Any]:
+        # A note without them stays readable by releases from before desk:v10 / v11.
         data = handler(self)
-        if not data.get("why_sources"):
-            data.pop("why_sources", None)
+        for key in ("why_sources", "event_members", "event_instruments"):
+            if key in data and not data[key]:
+                data.pop(key)
         return data
 
     @model_validator(mode="before")
     @classmethod
-    def _drop_tone_for(cls, data: object) -> object:
-        # ``tone_for`` is derived; a payload that carries it (a full dump) still loads.
-        if isinstance(data, dict) and "tone_for" in data:
-            data = {k: v for k, v in data.items() if k != "tone_for"}
+    def _drop_derived(cls, data: object) -> object:
+        # ``tone_for`` and ``event_instruments`` are derived; a payload that carries
+        # them (a full dump) still loads.
+        if isinstance(data, dict):
+            data = {k: v for k, v in data.items() if k not in ("tone_for", "event_instruments")}
         return data
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def event_instruments(self) -> list[NoteInstrument]:
+        """Every instrument in a cross-market move note, lead first, labelled by
+        core; empty for any other note. Sent, never stored."""
+        if not self.event_members or self.instrument is None:
+            return []
+        from core.desk.facts import LABELS
+
+        return [NoteInstrument(symbol=s, label=LABELS.get(s, s))
+                for s in (self.instrument, *self.event_members)]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -304,6 +321,15 @@ class DeskNote(BaseModel):
         from core.desk.identity import LEGACY
 
         return self.instrument or LEGACY
+
+
+class NoteInstrument(BaseModel):
+    """One instrument a note is about, with its display label (from core)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    symbol: str
+    label: str
 
 
 class NoteSummary(BaseModel):
@@ -320,6 +346,8 @@ class NoteSummary(BaseModel):
     tone: Tone
     #: The instrument ``tone`` is about (``DeskNote.tone_for``).
     tone_for: str
+    #: Every instrument in a cross-market move note, its lead first; empty for any other.
+    event_instruments: list[NoteInstrument] = Field(default_factory=list)
 
 
 class NoteList(BaseModel):

@@ -28,6 +28,7 @@ from core.domain.instruments import AssetClass
 V8 = "desk:v8"
 V9 = "desk:v9"
 V10 = "desk:v10"
+V11 = "desk:v11"
 #: The version production writes by default (``desk_prompt_version`` overrides;
 #: desk:v8 stays selectable for NQ-only desks and replays; desk:v10 adds a labelled
 #: "why" to move and ask notes, written from ``why_evidence``).
@@ -197,6 +198,9 @@ class Profile:
     rates_read_required: bool = True
     #: The note kinds that must fill ``why`` (desk:v10's move and ask).
     why_kinds: frozenset[NoteKind] = frozenset()
+    #: The task for one move note about several markets that moved in the same
+    #: hour (desk:v11); ``None`` where the version has no such note.
+    event_task: str | None = None
 
 
 # --------------------------------------------------------------------------- desk:v9
@@ -397,13 +401,17 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
 BASIS_POINT = "1 basis point (bp) = 0.01 percentage point."
 #: Versions whose facts carry ``recent_lessons`` (the Learn boxes of the latest
 #: notes) so a note doesn't teach the same lesson again. desk:v8 never did.
-RECENT_LESSONS_VERSIONS = frozenset({V9, V10})
+RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11})
 #: Versions whose move and ask notes must say why, from ``why_evidence``.
-WHY_VERSIONS = frozenset({V10})
+WHY_VERSIONS = frozenset({V10, V11})
+#: Versions that write one note for several instruments moving in the same hour
+#: (``DeskService.due_jobs``). Earlier versions write one move note per instrument.
+EVENT_VERSIONS = frozenset({V11})
 #: Facts only some prompt versions are written from → those versions; every
 #: other fact is shared. The one place a version's fact contract differs.
 VERSION_FACTS: Mapping[str, frozenset[str]] = {"recent_lessons": RECENT_LESSONS_VERSIONS,
-                                               "why_evidence": WHY_VERSIONS}
+                                               "why_evidence": WHY_VERSIONS,
+                                               "the_event": EVENT_VERSIONS}
 
 
 def facts_at(version: str | None, facts: Mapping[str, Any]) -> dict[str, Any]:
@@ -647,6 +655,27 @@ _V10_INSTRUMENT_TASKS: dict[NoteKind, str] = {
 }
 
 
+#: desk:v11 is desk:v10 plus one task for a move several markets made together.
+#: The grouping, the lead market and every number in ``the_event`` come from code.
+_EVENT_TASK = (
+    "Several markets made a LARGE MOVE in the same hour, and the_event lists them. Write ONE "
+    "note about this one event, led by {symbol}, instead of one note per market. "
+    "markets_that_moved gives each market's own change over its own window (from and to), how "
+    "many times its large-move trigger it moved (times_its_trigger) and, where measured, where "
+    "it sits against its key levels; markets_that_did_not_pass_trigger lists desk markets that "
+    "did not move enough. Name every market in markets_that_moved. Never merge or compare "
+    "numbers from different markets' windows as if they were one move. Say what the markets "
+    "did together and which way, and only as far as the facts show, whether one cause could "
+    "explain them all. If the_event's scope is \"rates\", only Treasury yields moved: write "
+    "about rates and what they mean for {symbol}, and do not call it a cross-market move. "
+    "Otherwise say plainly that it is a cross-market move. Use other_markets_same_window for "
+    "what else moved over {symbol}'s window and normal_move_size for how unusual {symbol}'s "
+    "move is. " + _WHY_TASK +
+    " If the calendar shows no event in the window (events_in_move_window), say 'no event "
+    "is on the supplied calendar', not that there was no event. Length: 160-200 words across "
+    "all fields.")
+
+
 def _v9(spec: InstrumentSpec) -> Profile:
     """An instrument's desk:v9 profile: the shared rules filled from its spec and
     its asset class's defaults."""
@@ -659,8 +688,15 @@ def _v10(spec: InstrumentSpec) -> Profile:
                     why_kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}))
 
 
+def _v11(spec: InstrumentSpec) -> Profile:
+    """desk:v10's profile plus the event task, written for the event's lead market."""
+    return _profile(spec, _V10_SYSTEM, _V10_INSTRUMENT_TASKS,
+                    why_kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}), event_task=_EVENT_TASK)
+
+
 def _profile(spec: InstrumentSpec, system_text: str, instrument_tasks: Mapping[NoteKind, str],
-             *, why_kinds: frozenset[NoteKind] = frozenset()) -> Profile:
+             *, why_kinds: frozenset[NoteKind] = frozenset(),
+             event_task: str | None = None) -> Profile:
     """The shared rules at one version, filled from an instrument's spec and its
     asset class's defaults."""
     defaults = ASSET_DEFAULTS[spec.asset]
@@ -691,7 +727,8 @@ def _profile(spec: InstrumentSpec, system_text: str, instrument_tasks: Mapping[N
                  **(_V9_EVENT_TASKS if spec.events else {})}
     return Profile(system, {kind: text.format(**fields) for kind, text in templates.items()},
                    f"{defaults.about} {BASIS_POINT}",
-                   rates_read_required=yields is not None, why_kinds=why_kinds)
+                   rates_read_required=yields is not None, why_kinds=why_kinds,
+                   event_task=event_task.format(**fields) if event_task else None)
 
 
 #: What the two Treasury yields share in desk:v9 (each is its own profile).
@@ -1113,6 +1150,7 @@ PROMPTS: Mapping[str, Mapping[str, Profile]] = {
     V8: {LEGACY: Profile(SYSTEM, TASKS, STATED_FACTS)},
     V9: {symbol: _v9(spec) for symbol, spec in SPECS.items()},
     V10: {symbol: _v10(spec) for symbol, spec in SPECS.items()},
+    V11: {symbol: _v11(spec) for symbol, spec in SPECS.items()},
 }
 VERSIONS = tuple(PROMPTS)
 
@@ -1207,6 +1245,9 @@ def render(kind: NoteKind, instrument: Instrument | None, facts: dict[str, Any],
             raise ValueError(f"{kind.value} notes are desk-wide and carry no instrument")
         profile = profiles[LEGACY]
     task = profile.tasks.get(kind)
+    if task is not None and kind is NoteKind.MOVE and facts.get("the_event"):
+        # One note for several markets that moved together: only where the version has one.
+        task = profile.event_task
     if task is None:
         raise NoPromptProfile(instrument.symbol if instrument else LEGACY, version, kind)
     text = facts_text(facts)

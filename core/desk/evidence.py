@@ -212,6 +212,38 @@ def rank(candidates: Iterable[Candidate], symbol: str, *, direction: int, now: d
     return chosen
 
 
+def rank_event(candidates: Iterable[Candidate], markets: Sequence[tuple[str, int]], *,
+               now: datetime, limit: int = MAX_ITEMS) -> list[Candidate]:
+    """Reports for one note about several markets moving together.
+
+    ``markets`` is ``(symbol, direction)`` with the lead market first. Each
+    market's own ranking is taken in turn, one report from each per round, the
+    lead's first, skipping repeats, so the lead keeps the strongest report and
+    the others can add theirs. A market with no report adds nothing.
+    """
+    items = list(candidates)
+    pools = [rank(items, symbol, direction=direction, now=now) for symbol, direction in markets]
+    chosen: list[Candidate] = []
+    seen: list[set[str]] = []
+    per_source: dict[str, int] = {}
+    depth = 0
+    while len(chosen) < limit and any(depth < len(pool) for pool in pools):
+        for pool in pools:
+            if depth >= len(pool) or len(chosen) == limit:
+                continue
+            item = pool[depth]
+            words = _words(item.headline)
+            if any(_same_report(words, other) for other in seen):
+                continue
+            if per_source.get(item.source, 0) >= MAX_PER_SOURCE:
+                continue
+            seen.append(words)
+            per_source[item.source] = per_source.get(item.source, 0) + 1
+            chosen.append(item)
+        depth += 1
+    return chosen
+
+
 def excerpt(text: str | None, symbol: str, *, limit: int = EXCERPT_CHARS) -> str | None:
     """Sentences from an article about this market or its drivers and how they
     moved, in article order; ``None`` when none qualify."""
@@ -285,4 +317,4 @@ def cited(draft: NoteDraft | None, chosen: Sequence[Candidate]) -> list[Headline
 
 
 __all__ = ["Candidate", "KNOWN_PUBLISHERS", "LOOKBACK", "TERMS", "cited", "evidence_facts",
-           "excerpt", "rank", "score"]
+           "excerpt", "rank", "rank_event", "score"]

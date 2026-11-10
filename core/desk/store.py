@@ -157,7 +157,8 @@ class DeskStore:
                 " attempts=desk_notes.attempts+1"
                 " WHERE desk_notes.status != 'ok'",
                 (note.id, note.kind.value, note.status, note.created_at.isoformat(),
-                 note.model_dump_json(exclude={"follow_up", "instrument", "tone_for"}),
+                 note.model_dump_json(exclude={"follow_up", "instrument", "tone_for",
+                                               "event_instruments"}),
                  instrument_of(note.id)),
             )
             if cursor.rowcount == 1 and captured is not None:
@@ -242,15 +243,23 @@ class DeskStore:
             ).fetchall()
         return self._notes(rows)
 
-    def readable(self, start: datetime, end: datetime, limit: int) -> list[DeskNote]:
-        """Written notes (status ok, with a draft) created in ``[start, end)``, newest first."""
+    def readable(self, start: datetime, end: datetime, limit: int,
+                 instrument: str | None = None) -> list[DeskNote]:
+        """Written notes (status ok, with a draft) created in ``[start, end)``, newest first.
+
+        With ``instrument``: that instrument's own notes, the cross-market move
+        notes that list it among their members, and the desk-wide notes."""
         # created_at is stored as UTC ISO text, so UTC bounds compare as text.
         with self._lock:
             rows = self._db.execute(
                 "SELECT payload, followup, instrument FROM desk_notes WHERE status='ok'"
                 " AND json_valid(payload) AND json_extract(payload, '$.draft') IS NOT NULL"
-                " AND created_at>=? AND created_at<? ORDER BY created_at DESC, id LIMIT ?",
-                (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat(), limit),
+                " AND created_at>=? AND created_at<?"
+                " AND (? IS NULL OR instrument IS NULL OR instrument=? OR EXISTS ("
+                "SELECT 1 FROM json_each(desk_notes.payload, '$.event_members') WHERE value=?))"
+                " ORDER BY created_at DESC, id LIMIT ?",
+                (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat(),
+                 instrument, instrument, instrument, limit),
             ).fetchall()
         return self._notes(rows)
 
@@ -300,14 +309,18 @@ class DeskStore:
         return self._note(*row) if row else None
 
     def count_since(self, kind: str, since_iso: str, instrument: str | None = None,
-                    *, written_only: bool = False) -> int:
+                    *, written_only: bool = False, with_members: bool = False) -> int:
         """Notes of ``kind`` since then (any status unless ``written_only``);
-        for one instrument if given."""
+        for one instrument if given. ``with_members`` also counts a cross-market
+        move note that lists the instrument among its ``event_members``."""
         with self._lock:
             row = self._db.execute(
                 "SELECT COUNT(*) FROM desk_notes WHERE kind=? AND created_at>=?"
-                " AND (? IS NULL OR instrument=?) AND (? = 0 OR status='ok')",
-                (kind, since_iso, instrument, instrument, int(written_only)),
+                " AND (? IS NULL OR instrument=? OR (? = 1 AND json_valid(payload) AND EXISTS ("
+                "SELECT 1 FROM json_each(desk_notes.payload, '$.event_members') WHERE value=?)))"
+                " AND (? = 0 OR status='ok')",
+                (kind, since_iso, instrument, instrument, int(with_members), instrument,
+                 int(written_only)),
             ).fetchone()
         return int(row[0])
 

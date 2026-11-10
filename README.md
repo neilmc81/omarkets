@@ -124,7 +124,7 @@ Settings live in `.env` (see [`.env.example`](.env.example)). The main ones:
 | `OMARKETS_DESK_LOCAL_TIMEZONE` | Your time zone, for the daily plan. Auto-detected from the system (`TZ`, then `/etc/localtime`, else UTC); set to override. Market hours stay in New York time. |
 | `OMARKETS_DESK_MODELS` | Pick the OpenRouter model per note type. |
 | `OMARKETS_DESK_INSTRUMENTS` | Which instruments get desk notes (default `["NQ", "ES", "YM", "GOLD", "WTI", "DXY", "US2Y", "US10Y", "VIX"]`; NQ is always on). |
-| `OMARKETS_DESK_PROMPT_VERSION` | Prompt version for new notes (default `desk:v9`; `desk:v8` is NQ only; `desk:v10` adds a sourced "why" to move and ask notes). |
+| `OMARKETS_DESK_PROMPT_VERSION` | Prompt version for new notes (default `desk:v9`; `desk:v8` is NQ only; `desk:v10` adds a sourced "why" to move and ask notes; `desk:v11` also writes one note when several instruments move together). |
 | `OMARKETS_DESK_NOTIFY` | Desktop notifications on or off. |
 
 Old `MARKETOS_*` names still work. If both are set, `OMARKETS_*` wins. Run

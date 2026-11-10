@@ -362,6 +362,19 @@
   color: var(--t-muted);
 }
 
+.t-instruments {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.t-instrument {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
 .t-moves {
   display: flex;
   flex-wrap: wrap;

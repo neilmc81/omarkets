@@ -15,7 +15,7 @@ Nasdaq 100 futures (NQ).
 | Economic release | 26 min after every medium/high/critical release with figures: 15 min of reaction + 10-min feed delay + 1 min margin; waits up to 45 min for a missing actual | `release:<time>:<codes>` |
 | Fed | FOMC decision / minutes +26 min, press conference +71 min (60-min window + feed delay) | `release:<time>:<codes>` |
 | Mega-cap earnings | once results headlines appear, 30 min–4 h after the report | `earnings:<symbol>:<day>` |
-| Big move | NQ moves at least the scaled trigger (see "Normal move size") over about an hour; at most one per 3 hours | `move:<hour>` |
+| Big move | NQ moves at least the scaled trigger (see "Normal move size") over about an hour; at most one per 3 hours; on `desk:v11`, instruments moving together are one note (see "One note per event") | `move:<hour>` |
 | Market now | on request (the header "Desk Note" button); at most 5 per day; a note from the last 15 minutes is shown again instead of writing a new one | `ask:<time>` |
 | Treasury auction | 26 min after a notably strong or weak 2/5/7/10/20/30-year or TIPS auction (rule below) | `auction:<date>:<cusip>` |
 | Week in review | after the week's last cash close + 15 min (Friday 16:15, or Thursday in a holiday-shortened week), for up to two days | `review:<monday>` |
@@ -185,8 +185,8 @@ so a restart cannot produce a duplicate note or notification.
   (the terms the latest five Learn boxes taught, newest first) and are told
   not to teach one again; v8 facts never carry it. v9's stated facts include
   "1 basis point (bp) = 0.01 percentage point", so a note may quote it.
-  `desk_prompt_version` (`OMARKETS_DESK_PROMPT_VERSION`: `desk:v8`, `desk:v9`
-  or `desk:v10`, default `desk:v9` since the Phase 2 release cut; see
+  `desk_prompt_version` (`OMARKETS_DESK_PROMPT_VERSION`: `desk:v8`, `desk:v9`,
+  `desk:v10` or `desk:v11`, default `desk:v9` since the Phase 2 release cut; see
   `.env.example`) selects the version. An instrument with no profile at that
   version is refused before anything is reserved or sent, and never borrows
   NQ's prompt. Event notes
@@ -418,6 +418,42 @@ it can tell broad selling from a rotation out of tech without mixing windows.
 
 To turn it on, set `OMARKETS_DESK_PROMPT_VERSION=desk:v10` in the service's drop-in and
 restart. `desk:v9` never reads the outside feeds.
+
+## One note per event (`desk:v11`)
+
+One market event used to give one big-move note, and one desktop notification, per
+instrument. On `desk:v11` (`desk:v10` plus an event task; the code default is still
+`desk:v9`), instruments that pass their own move trigger in the same scheduler pass
+are one event and get one note and one notification. An instrument moving alone gets
+its own note exactly as before. On `desk:v10` and earlier nothing changes.
+
+Code decides everything except the words (`core/desk/event.py`, tested):
+
+- **Group.** Two or more instruments past their trigger, and not blocked by their
+  3-hour limit, in one pass. US2Y and US10Y alone are still one event; its facts say
+  `scope: "rates"` and the note is about rates, not "cross-market".
+- **Lead.** NQ whenever it is in the group; otherwise the instrument that moved the
+  most times its own trigger, ties by `desk_instruments` order. The note is filed
+  under the lead with the usual id (`move:<LEAD>:<hour>`), so there is no id
+  migration, and lists the others in `event_members`.
+- **Facts.** `the_event` holds each market's own move and window, how many times its
+  trigger it moved, its price location where measured, and the desk instruments that
+  did not pass their trigger. All of it is formatted text, so the invented-number
+  check treats it like any other fact. `why` evidence is ranked for the lead first,
+  then the other members' reports are added in turn (`evidence.rank_event`).
+- **Limit.** The event counts against the 3-hour limit of every instrument in it. A
+  member that triggers again inside those 3 hours writes nothing and never reopens or
+  rewrites the event; an instrument that was not in it still gets its own note. A
+  failed note does not count, so it keeps its retries (one retry of the whole event,
+  never single notes in its place).
+
+The Today list shows the event once, with a tag per instrument (labels come from the
+core), and `GET /desk/notes?instrument=ES` returns it for any member, along with that
+instrument's own notes and the desk-wide ones.
+
+To turn it on, set `OMARKETS_DESK_PROMPT_VERSION=desk:v11` in the service's drop-in
+and restart. A late joiner is not merged: an instrument that crosses its trigger a
+pass or more after the group formed writes its own note.
 
 ## Did it hold? (release, Fed and earnings notes)
 

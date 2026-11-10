@@ -100,6 +100,9 @@ function NoteCard({ note, open, onToggle, now, headRef }: { note: Note; open: bo
     <button ref={headRef} className="t-note-head" aria-expanded={open} onClick={onToggle}>
       <span className="t-note-meta">
         <span className="t-kind">{KIND_LABEL[note.kind]}</span>
+        {note.event_instruments.length > 0 && <span className="t-instruments" aria-label="Markets in this event">
+          {note.event_instruments.map((i) => <span key={i.symbol} className="t-instrument" title={i.label}>{i.symbol}</span>)}
+        </span>}
         <span>{note.title}</span>
         <span className="t-muted">{etTime(note.created_at)} · {relative(note.created_at, now)}</span>
       </span>
@@ -208,7 +211,9 @@ function NoteRow({ note, group, isNew, onOpen }: { note: Note; group: DayGroup; 
   const when = new Date(note.created_at);
   return <button className={`t-row ${isNew ? "is-new" : ""}`} aria-expanded={false} onClick={onOpen}>
     <span className="t-row-time">{group === "earlier" && <>{etDate.format(when)} · </>}{etClock.format(when)} ET</span>
-    <span className="t-row-kind">{KIND_LABEL[note.kind]}</span>
+    <span className="t-row-kind" title={note.event_instruments.map((i) => i.label).join(", ") || undefined}>
+      {KIND_LABEL[note.kind]}{note.event_instruments.length > 0 && ` · ${note.event_instruments.map((i) => i.symbol).join(" ")}`}
+    </span>
     <span className="t-row-headline">{draft.headline}</span>
     <span className={`t-tone ${draft.nq_tone}`} title={toneLabel(note)}>{TONE_SHORT[draft.nq_tone]}</span>
   </button>;

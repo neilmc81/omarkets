@@ -64,6 +64,25 @@ describe("Today", () => {
     expect(screen.queryByText(/for NQ/, { selector: ".t-tone" })).not.toBeInTheDocument();
   });
 
+  it("shows every instrument in a cross-market move note, labelled by the core", async () => {
+    const event = { ...note, id: "move:1", kind: "move", instrument: "NQ", tone_for: "NQ",
+      title: "NQ, ES and GOLD moved together in the last hour", event_members: ["ES", "GOLD"],
+      event_instruments: [{ symbol: "NQ", label: "Nasdaq 100 futures" },
+        { symbol: "ES", label: "S&P 500 futures" }, { symbol: "GOLD", label: "Gold" }] };
+    vi.stubGlobal("fetch", vi.fn(() => ok({ ...desk, notes: [event] })));
+    render(<Root />);
+    const tags = await screen.findByLabelText("Markets in this event");
+    expect(tags).toHaveTextContent("NQESGOLD");
+    expect(screen.getByText("GOLD", { selector: ".t-instrument" })).toHaveAttribute("title", "Gold");
+  });
+
+  it("shows no instrument tags on a single-instrument note", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => ok(desk)));
+    render(<Root />);
+    await screen.findByText("Inflation ran hotter than expected");
+    expect(screen.queryByLabelText("Markets in this event")).not.toBeInTheDocument();
+  });
+
   it("names no instrument when an older core sends none", async () => {
     const old: Record<string, unknown> = { ...note };
     delete old.tone_for;
