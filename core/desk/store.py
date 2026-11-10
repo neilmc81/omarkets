@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from core.desk.identity import INSTRUMENT_KINDS, instrument_of
-from core.desk.models import BreakingAlert, DeskNote, FollowUp, LearnEntry
+from core.desk.models import BreakingAlert, DeskNote, EventJoin, FollowUp, LearnEntry
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,13 @@ class DeskStore:
             # Which instrument a note is about (None for desk-wide event notes).
             self._db.execute("ALTER TABLE desk_notes ADD COLUMN instrument TEXT")
         self._repair_instruments()
+        # Instruments that joined a written move note later (desk:v11). Apart from the
+        # note so a written note is never modified; one row per (note, instrument).
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS desk_event_joins ("
+            " note_id TEXT NOT NULL, instrument TEXT NOT NULL, joined_at TEXT NOT NULL,"
+            " move_json TEXT NOT NULL, PRIMARY KEY (note_id, instrument))"
+        )
         # The exact facts a note was written from, and how it was requested.
         # Kept out of the note payload so older releases still read the notes.
         self._db.execute(
@@ -102,6 +109,54 @@ class DeskStore:
             update["follow_up"] = FollowUp.model_validate_json(followup)
         return note.model_copy(update=update)
 
+    def _with_joins(self, notes: list[DeskNote]) -> list[DeskNote]:
+        """``notes`` with the instruments that joined each one later."""
+        ids = [n.id for n in notes if n.kind.value == "move"]
+        if not ids:
+            return notes
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT note_id, instrument, joined_at, move_json FROM desk_event_joins"
+                " WHERE note_id IN (SELECT value FROM json_each(?))"
+                " ORDER BY joined_at, instrument",
+                (json.dumps(ids),),
+            ).fetchall()
+        if not rows:
+            return notes
+        joins: dict[str, list[EventJoin]] = {}
+        for note_id, instrument, joined_at, move_json in rows:
+            try:
+                joins.setdefault(note_id, []).append(EventJoin.model_validate(
+                    {"note_id": note_id, "instrument": instrument, "joined_at": joined_at,
+                     "move": json.loads(move_json)}))
+            except (ValidationError, ValueError):
+                logger.error("desk join %s/%s unreadable, skipped", note_id, instrument)
+        return [n.model_copy(update={"event_joins": joins[n.id]}) if n.id in joins else n
+                for n in notes]
+
+    def add_join(self, join: EventJoin) -> bool:
+        """Record that an instrument joined a written move note. False if it already
+        had (one row per note and instrument), or the note is not a written one."""
+        with self._lock, self._db:
+            cursor = self._db.execute(
+                "INSERT OR IGNORE INTO desk_event_joins (note_id, instrument, joined_at,"
+                " move_json) SELECT ?,?,?,? WHERE EXISTS ("
+                "SELECT 1 FROM desk_notes WHERE id=? AND status='ok')",
+                (join.note_id, join.instrument, join.joined_at.isoformat(),
+                 join.move.model_dump_json(), join.note_id),
+            )
+        return cursor.rowcount == 1
+
+    def moves_since(self, since_iso: str) -> list[DeskNote]:
+        """Written move notes created since then, newest first."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT payload, followup, instrument FROM desk_notes WHERE kind='move'"
+                " AND status='ok' AND created_at>=? ORDER BY created_at DESC, id",
+                (since_iso,),
+            ).fetchall()
+        return self._notes(rows)
+
     def _notes(self, rows: list[tuple[str, str | None, str | None]]) -> list[DeskNote]:
         """Readable notes from ``rows``; one unreadable payload is logged and skipped,
         so it can never blank a whole list."""
@@ -113,14 +168,14 @@ class DeskStore:
                 found = re.search(r'"id":\s*"([^"]*)"', payload)
                 logger.error("desk note %s unreadable, skipped: %d errors",
                              found.group(1) if found else "?", exc.error_count())
-        return notes
+        return self._with_joins(notes)
 
     def get(self, note_id: str) -> DeskNote | None:
         with self._lock:
             row = self._db.execute(
                 "SELECT payload, followup, instrument FROM desk_notes WHERE id=?", (note_id,)
             ).fetchone()
-        return self._note(*row) if row else None
+        return self._with_joins([self._note(*row)])[0] if row else None
 
     def attempts(self, note_id: str) -> int:
         with self._lock:
@@ -157,7 +212,8 @@ class DeskStore:
                 " attempts=desk_notes.attempts+1"
                 " WHERE desk_notes.status != 'ok'",
                 (note.id, note.kind.value, note.status, note.created_at.isoformat(),
-                 note.model_dump_json(exclude={"follow_up", "instrument", "tone_for"}),
+                 note.model_dump_json(exclude={"follow_up", "instrument", "tone_for",
+                                               "event_instruments"}),
                  instrument_of(note.id)),
             )
             if cursor.rowcount == 1 and captured is not None:
@@ -242,15 +298,25 @@ class DeskStore:
             ).fetchall()
         return self._notes(rows)
 
-    def readable(self, start: datetime, end: datetime, limit: int) -> list[DeskNote]:
-        """Written notes (status ok, with a draft) created in ``[start, end)``, newest first."""
+    def readable(self, start: datetime, end: datetime, limit: int,
+                 instrument: str | None = None) -> list[DeskNote]:
+        """Written notes (status ok, with a draft) created in ``[start, end)``, newest first.
+
+        With ``instrument``: that instrument's own notes, the cross-market move
+        notes that list it among their members, and the desk-wide notes."""
         # created_at is stored as UTC ISO text, so UTC bounds compare as text.
         with self._lock:
             rows = self._db.execute(
                 "SELECT payload, followup, instrument FROM desk_notes WHERE status='ok'"
                 " AND json_valid(payload) AND json_extract(payload, '$.draft') IS NOT NULL"
-                " AND created_at>=? AND created_at<? ORDER BY created_at DESC, id LIMIT ?",
-                (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat(), limit),
+                " AND created_at>=? AND created_at<?"
+                " AND (? IS NULL OR instrument IS NULL OR instrument=? OR EXISTS ("
+                "SELECT 1 FROM json_each(desk_notes.payload, '$.event_members') WHERE value=?)"
+                " OR EXISTS (SELECT 1 FROM desk_event_joins j WHERE j.note_id=desk_notes.id"
+                " AND j.instrument=?))"
+                " ORDER BY created_at DESC, id LIMIT ?",
+                (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat(),
+                 instrument, instrument, instrument, instrument, limit),
             ).fetchall()
         return self._notes(rows)
 
@@ -297,19 +363,29 @@ class DeskStore:
                 " ORDER BY created_at DESC LIMIT 1",
                 (kind, since_iso, instrument, instrument),
             ).fetchone()
-        return self._note(*row) if row else None
+        return self._with_joins([self._note(*row)])[0] if row else None
 
     def count_since(self, kind: str, since_iso: str, instrument: str | None = None,
-                    *, written_only: bool = False) -> int:
+                    *, written_only: bool = False, with_members: bool = False) -> int:
         """Notes of ``kind`` since then (any status unless ``written_only``);
-        for one instrument if given."""
+        for one instrument if given. ``with_members`` also counts a cross-market
+        move note that lists the instrument among its ``event_members``."""
         with self._lock:
             row = self._db.execute(
                 "SELECT COUNT(*) FROM desk_notes WHERE kind=? AND created_at>=?"
-                " AND (? IS NULL OR instrument=?) AND (? = 0 OR status='ok')",
-                (kind, since_iso, instrument, instrument, int(written_only)),
+                " AND (? IS NULL OR instrument=? OR (? = 1 AND json_valid(payload) AND EXISTS ("
+                "SELECT 1 FROM json_each(desk_notes.payload, '$.event_members') WHERE value=?)))"
+                " AND (? = 0 OR status='ok')",
+                (kind, since_iso, instrument, instrument, int(with_members), instrument,
+                 int(written_only)),
             ).fetchone()
-        return int(row[0])
+            joined = self._db.execute(
+                "SELECT COUNT(*) FROM desk_event_joins j JOIN desk_notes n ON n.id=j.note_id"
+                " WHERE ? = 1 AND ? IS NOT NULL AND j.instrument=? AND j.joined_at>=?"
+                " AND n.kind=?",
+                (int(with_members), instrument, instrument, since_iso, kind),
+            ).fetchone()
+        return int(row[0]) + int(joined[0])
 
     def close(self) -> None:
         with self._lock:

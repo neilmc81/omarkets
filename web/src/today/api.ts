@@ -138,6 +138,18 @@ export const noteSchema = z.object({
   // tone is about; an older core sends neither.
   instrument: z.string().nullish(),
   tone_for: z.string().optional(),
+  // A cross-market move note: the other instruments in it, and every instrument
+  // (lead first) with its label from the core. Absent on any other note.
+  event_members: z.array(z.string()).default([]),
+  // A joined instrument passed its trigger after the note was written: its own move
+  // and when it joined come from the core.
+  event_instruments: z.array(z.object({
+    symbol: z.string(),
+    label: z.string(),
+    joined: z.boolean().default(false),
+    move_text: z.string().nullish(),
+    joined_at: z.string().nullish(),
+  })).default([]),
 });
 
 const watchCardSchema = z.object({

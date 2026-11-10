@@ -64,6 +64,40 @@ describe("Today", () => {
     expect(screen.queryByText(/for NQ/, { selector: ".t-tone" })).not.toBeInTheDocument();
   });
 
+  it("shows every instrument in a cross-market move note, labelled by the core", async () => {
+    const event = { ...note, id: "move:1", kind: "move", instrument: "NQ", tone_for: "NQ",
+      title: "NQ, ES and GOLD moved together in the last hour", event_members: ["ES", "GOLD"],
+      event_instruments: [{ symbol: "NQ", label: "Nasdaq 100 futures" },
+        { symbol: "ES", label: "S&P 500 futures" }, { symbol: "GOLD", label: "Gold" }] };
+    vi.stubGlobal("fetch", vi.fn(() => ok({ ...desk, notes: [event] })));
+    render(<Root />);
+    const tags = await screen.findByLabelText("Markets in this event");
+    expect(tags).toHaveTextContent("NQESGOLD");
+    expect(screen.getByText("GOLD", { selector: ".t-instrument" })).toHaveAttribute("title", "Gold");
+  });
+
+  it("flags an instrument that joined a note later, with its own move and time from the core", async () => {
+    const event = { ...note, id: "move:VIX:1", kind: "move", instrument: "VIX", tone_for: "VIX",
+      title: "VIX up 6.00% in the last hour", event_members: [],
+      event_instruments: [{ symbol: "VIX", label: "VIX fear gauge" },
+        { symbol: "US2Y", label: "2-year yield", joined: true, move_text: "-8.0bp",
+          joined_at: "2026-11-05T14:42:00Z" }] };
+    vi.stubGlobal("fetch", vi.fn(() => ok({ ...desk, notes: [event] })));
+    render(<Root />);
+    const tags = await screen.findByLabelText("Markets in this event");
+    expect(tags).toHaveTextContent("VIXUS2Y -8.0bp joined later");
+    const joined = screen.getByText("US2Y", { selector: ".t-instrument.joined" });
+    expect(joined).toHaveAttribute("title", expect.stringContaining("joined later"));
+    expect(screen.getByText("VIX", { selector: ".t-instrument" })).not.toHaveClass("joined");
+  });
+
+  it("shows no instrument tags on a single-instrument note", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => ok(desk)));
+    render(<Root />);
+    await screen.findByText("Inflation ran hotter than expected");
+    expect(screen.queryByLabelText("Markets in this event")).not.toBeInTheDocument();
+  });
+
   it("names no instrument when an older core sends none", async () => {
     const old: Record<string, unknown> = { ...note };
     delete old.tone_for;

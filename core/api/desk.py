@@ -110,18 +110,25 @@ async def desk_notes(
     start: Annotated[AwareDatetime | None, Query(alias="from")] = None,
     end: Annotated[AwareDatetime | None, Query(alias="to")] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    instrument: Annotated[str | None, Query(max_length=10)] = None,
 ) -> NoteList:
     """Written notes created in ``[from, to)``, newest first. Failed and draftless notes
     are left out. Bounds need a UTC offset; ``to`` defaults to now, ``from`` to 7 days
-    before ``to``."""
+    before ``to``. With ``instrument``: its own notes, the cross-market move notes that
+    include it, and the desk-wide notes."""
+    if instrument is not None:
+        try:
+            instrument = Instrument.of(instrument).symbol
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Unknown instrument") from exc
     end = (end if end is not None else desk.clock()).astimezone(UTC)
     start = start.astimezone(UTC) if start is not None else end - NOTES_WINDOW
     if start >= end:
         raise HTTPException(status_code=422, detail="from must be before to; ranges are half-open")
-    found = desk.store.readable(start, end, limit + 1)
+    found = desk.store.readable(start, end, limit + 1, instrument)
     notes = [NoteSummary(id=n.id, kind=n.kind, at=n.created_at, headline=n.draft.headline,
                          summary=n.draft.summary, tone=n.draft.nq_tone,
-                         tone_for=n.tone_for)
+                         tone_for=n.tone_for, event_instruments=n.event_instruments)
              for n in found[:limit] if n.draft is not None]
     return NoteList(start=start, end=end, limit=limit, truncated=len(found) > limit, notes=notes)
 

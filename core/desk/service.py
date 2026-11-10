@@ -27,6 +27,7 @@ from core.analysis.move_size import (
 from core.desk import auctions as A
 from core.desk import breaking as B
 from core.desk import calendar as CAL
+from core.desk import event as EVT
 from core.desk import evidence as EV
 from core.desk import facts as F
 from core.desk import followup
@@ -46,6 +47,7 @@ from core.desk.models import (
     CalendarRow,
     DeskNote,
     DeskView,
+    EventJoin,
     Figure,
     Headline,
     MacroBoard,
@@ -58,6 +60,7 @@ from core.desk.models import (
     WatchCard,
 )
 from core.desk.prompts import (
+    EVENT_VERSIONS,
     PROMPT_VERSION,
     RECENT_LESSONS_VERSIONS,
     WHY_VERSIONS,
@@ -666,21 +669,96 @@ class DeskService:
                                  lambda a=auction, r=read, n=note_id:
                                  self.build_auction(n, a, r, now)))
 
-        # Large moves: at most one note per instrument every 3 hours.
-        for inst in self.instruments:
+        # Large moves: at most one note per instrument every 3 hours. Where the
+        # prompt version has an event note, instruments that pass their trigger in
+        # this pass are written as one event, and that note counts against every
+        # instrument in it.
+        movers: list[EVT.Mover] = []
+        since = (now - timedelta(hours=3)).isoformat()
+        events = self.prompt_version in EVENT_VERSIONS
+        for order, inst in enumerate(self.instruments):
             move = await self._large_move(now, inst)
             if move is None:
                 continue
-            mid = ID.note_id(NoteKind.MOVE, f"{move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}", inst)
+            # An instrument whose own note has failed every attempt must not lead
+            # (and so sink) an event: the others are routed without it.
+            own = ID.note_id(NoteKind.MOVE, f"{move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}", inst)
+            if events and not self.store.has_ok(own) \
+                    and self.store.attempts(own) >= MAX_ATTEMPTS:
+                continue
             recent_moves = self.store.count_since(
-                "move", (now - timedelta(hours=3)).isoformat(), instrument=inst.symbol,
-                written_only=True)  # a failed note must not block its own retries
-            if recent_moves == 0 and self._should_try(mid):
+                "move", since, instrument=inst.symbol,
+                written_only=True,  # a failed note must not block its own retries
+                # Event membership and joins limit an instrument only where events
+                # are written, so an earlier version keeps its own limit exactly.
+                with_members=events)
+            if recent_moves == 0:
+                trigger, _ = await asyncio.to_thread(self._move_trigger, now, inst)
+                movers.append(EVT.Mover(inst, move, trigger, order))
+        grouped: Sequence[EVT.Mover] = movers
+        if events and movers:
+            recent = self.store.moves_since((now - EVT.JOIN_WINDOW).isoformat())
+            anchor = recent[0] if recent else None
+            routing = EVT.route(movers, None if anchor is None else {
+                anchor.instrument or "", *anchor.event_members,
+                *(j.instrument for j in anchor.event_joins)})
+            self._join(anchor, routing.joins, now)
+            grouped = routing.grouped
+            if routing.escalate:
+                grouped = [*grouped, *await self._earlier_movers(recent, grouped, now)]
+        for group in EVT.group_moves(grouped, events=events):
+            lead = group.lead
+            mid = ID.note_id(NoteKind.MOVE,
+                             f"{lead.move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}",
+                             lead.instrument)
+            if self._should_try(mid):
                 jobs.append((mid, NoteKind.MOVE,
-                             lambda m=move, n=mid, i=inst: self.build_move(n, m, now, i)))
+                             lambda g=group, n=mid: self.build_move(
+                                 n, g.lead.move, now, g.lead.instrument,
+                                 event=g if g.is_event else None)))
         return jobs
 
-    async def _large_move(self, now: datetime, inst: Instrument = NQ) -> Move | None:
+    def _join(self, note: DeskNote | None, movers: Sequence[EVT.Mover], now: datetime) -> None:
+        """Record each mover as a silent joiner of ``note``: no model call, no
+        notification, and the written note is not touched. Counts against the
+        mover's own 3-hour limit from ``now``."""
+        for mover in movers:
+            if note is not None and self.store.add_join(EventJoin(
+                    note_id=note.id, instrument=mover.instrument.symbol, joined_at=now,
+                    move=mover.move)):
+                logger.info("%s joined desk note %s", mover.instrument.symbol, note.id)
+
+    async def _earlier_movers(self, notes: Sequence[DeskNote], now_movers: Sequence[EVT.Mover],
+                              now: datetime) -> list[EVT.Mover]:
+        """The markets of the move notes in the join window that are not moving in
+        this pass (they are inside their own 3-hour limit), measured again now the
+        way a large move is, with no threshold, and marked with when each first
+        triggered. A market that cannot be measured now is left out."""
+        skip = {m.instrument.symbol for m in now_movers}
+        first: dict[str, datetime] = {}
+        for note in notes:
+            seen = {m.symbol: m.end_at for m in note.moves}
+            symbols = [(note.instrument, seen.get(note.instrument or "", note.created_at)),
+                       *((s, seen.get(s, note.created_at)) for s in note.event_members),
+                       *((j.instrument, j.move.end_at) for j in note.event_joins)]
+            for symbol, at in symbols:
+                if symbol and symbol not in skip and (symbol not in first or at < first[symbol]):
+                    first[symbol] = at
+        out: list[EVT.Mover] = []
+        for order, inst in enumerate(self.instruments):
+            if inst.symbol not in first:
+                continue
+            move = await self._remeasure(now, inst)
+            if move is None:
+                continue
+            trigger, _ = await asyncio.to_thread(self._move_trigger, now, inst)
+            out.append(EVT.Mover(inst, move, trigger, order, earlier_at=first[inst.symbol]))
+        return out
+
+    async def _measured(self, now: datetime, inst: Instrument) -> list[Move] | None:
+        """The instrument's move over the last hour of observed quote time, or ``None``
+        when it is not measured now (a volatility index outside Cboe's hours, or a
+        future outside its session)."""
         # A volatility index trades in Cboe's hours, not the futures': its note
         # says "in the last hour", so it is written only while Cboe calculates
         # it (or just after its close) and only from a quote that recent.
@@ -691,11 +769,25 @@ class DeskService:
         elif session_phase(now) not in {SessionPhase.RTH, SessionPhase.OVERNIGHT}:
             return None
         # Quotes are delayed; measure the last hour of observed quote time.
-        moves = await asyncio.to_thread(
+        return await asyncio.to_thread(
             F.measure_moves, self.sources.history,
             start=now - timedelta(minutes=75), end=now, symbols=(inst.symbol,),
             min_window=timedelta(minutes=30),
         )
+
+    async def _remeasure(self, now: datetime, inst: Instrument) -> Move | None:
+        """The same measurement :meth:`_large_move` makes, with no threshold applied."""
+        moves = await self._measured(now, inst)
+        if not moves or (volatility_index(inst.symbol)
+                         and now - moves[0].end_at > VOL_INDEX_CLOSE_GRACE):
+            return None
+        return moves[0]
+
+    async def _large_move(self, now: datetime, inst: Instrument = NQ) -> Move | None:
+        moves = await self._measured(now, inst)
+        if moves is None:
+            return None
+        vol = volatility_index(inst.symbol)
         threshold, _ = await asyncio.to_thread(self._move_trigger, now, inst)
         if not moves or (vol and now - moves[0].end_at > VOL_INDEX_CLOSE_GRACE):
             return None
@@ -882,10 +974,13 @@ class DeskService:
                  "source": n.headline.source, "headline": n.headline.title}
                 for n in lines]
 
-    async def _why_evidence(self, now: datetime, inst: Instrument, direction: int,
+    async def _why_evidence(self, now: datetime, inst: Instrument, direction: int, *,
+                            also: Sequence[tuple[Instrument, int]] = (),
                             ) -> tuple[dict[str, Any], list[EV.Candidate]]:
         """The ``why_evidence`` fact and the reports behind it, at versions that take
-        it. Outside coverage that can't be read is named, never fatal to the note."""
+        it. Outside coverage that can't be read is named, never fatal to the note.
+        ``also`` are the other markets of an event note (instrument, direction): their
+        reports are read and ranked after the lead's."""
         if self.prompt_version not in WHY_VERSIONS:
             return {}, []
         candidates = [
@@ -911,7 +1006,9 @@ class DeskService:
                                type(exc).__name__)
                 unavailable = ["outside coverage"]
         try:
-            chosen = EV.rank(candidates, inst.symbol, direction=direction, now=now)
+            chosen = (EV.rank_event(candidates, [(inst.symbol, direction),
+                                                 *((i.symbol, d) for i, d in also)], now=now)
+                      if also else EV.rank(candidates, inst.symbol, direction=direction, now=now))
             fact = await EV.evidence_facts(chosen, symbol=inst.symbol, unavailable=unavailable,
                                            article_text=self.sources.article_text,
                                            readable=article_allowed, when=et, now=now)
@@ -1114,23 +1211,37 @@ class DeskService:
                                  headlines=_titles(news), rates=rates)
 
     async def build_move(self, note_id: str, move: Move, now: datetime,
-                         inst: Instrument = NQ) -> DeskNote:
+                         inst: Instrument = NQ, *, event: EVT.MoveGroup | None = None,
+                         ) -> DeskNote:
+        """The move note for ``inst``; with ``event``, the one note for every
+        instrument in that group (``inst`` is its lead)."""
         common, rates = await asyncio.to_thread(self._common, now, inst)
+        window_symbols = self._window_symbols(inst)
+        if event is not None:
+            for member in event.members:
+                window_symbols = F.with_symbol(window_symbols, member.instrument.symbol)
         moves = await asyncio.to_thread(
             F.measure_moves, self.sources.history, start=move.start_at, end=move.end_at,
-            delayed=self._delayed(), symbols=self._window_symbols(inst),
+            delayed=self._delayed(), symbols=window_symbols,
         )
         news = self.news_lines(move.start_at - timedelta(minutes=60), now)
         recent = [n for n in self.store.recent(5)
                   if n.created_at >= now - timedelta(hours=3) and n.draft is not None]
         direction = "up" if move.change > 0 else "down"
-        evidence, chosen = await self._why_evidence(now, inst, 1 if move.change > 0 else -1)
+        if event is None:
+            evidence, chosen = await self._why_evidence(now, inst, 1 if move.change > 0 else -1)
+        else:
+            evidence, chosen = await self._why_evidence(
+                now, inst, 1 if move.change > 0 else -1,
+                also=[(m.instrument, 1 if m.move.change > 0 else -1)
+                      for m in event.members[1:]])
         facts = {
             **common,
             **(await asyncio.to_thread(self._nq_context, now, inst)),
             **evidence,
-            "the_move": {"market": inst.label, "change": move.text,
-                         "from": et(move.start_at), "to": et(move.end_at)},
+            **({"the_move": {"market": inst.label, "change": move.text,
+                             "from": et(move.start_at), "to": et(move.end_at)}}
+               if event is None else {}),
             "events_in_move_window": F.events_in_window(
                 self.sources.calendar_events(move.start_at - MOVE_EVENT_LEAD - timedelta(hours=1),
                                              move.end_at),
@@ -1141,10 +1252,26 @@ class DeskService:
                                       for n in recent],
             "next_events": self._upcoming_facts((await self.upcoming(now, days=2))[:4]),
         }
-        title = f"{inst.symbol} {direction} {move.text.lstrip('+-')} in the last hour"
-        return await self._write(note_id, NoteKind.MOVE, title, now, facts,
-                                 event_at=move.start_at, moves=moves, headlines=_titles(news),
-                                 rates=rates, instrument=inst, evidence=chosen)
+        if event is None:
+            title = f"{inst.symbol} {direction} {move.text.lstrip('+-')} in the last hour"
+            return await self._write(note_id, NoteKind.MOVE, title, now, facts,
+                                     event_at=move.start_at, moves=moves,
+                                     headlines=_titles(news), rates=rates, instrument=inst,
+                                     evidence=chosen)
+        locations = {}
+        for member in event.members[1:]:
+            location = await asyncio.to_thread(self._location, now, member.instrument)
+            locations.update({member.instrument.symbol: location})
+        facts["the_event"] = EVT.event_facts(event, self.instruments, when=et,
+                                             locations=locations)
+        # The members' own moves first (the Today list shows them), then what else moved.
+        member_moves = [m.move for m in event.members]
+        own = {m.symbol for m in member_moves}
+        return await self._write(
+            note_id, NoteKind.MOVE, EVT.event_title(event), now, facts, event_at=move.start_at,
+            moves=[*member_moves, *(m for m in moves if m.symbol not in own)],
+            headlines=_titles(news), rates=rates, instrument=inst, evidence=chosen,
+            event_members=[m.instrument.symbol for m in event.members[1:]])
 
     async def ask(self, inst: Instrument = NQ) -> DeskNote:
         """Explain the market right now, on request. Bounded per New York day
