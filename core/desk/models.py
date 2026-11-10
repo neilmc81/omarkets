@@ -282,12 +282,15 @@ class DeskNote(BaseModel):
     #: The other instruments in a cross-market move note (desk:v11), in order; the
     #: note is filed under its lead (``instrument``). Empty for every other note.
     event_members: list[str] = Field(default_factory=list)
+    #: Instruments that joined this note later. Stored in their own table and merged
+    #: on read, never in the payload.
+    event_joins: list[EventJoin] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def _no_empty_optional_lists(self, handler: Any) -> dict[str, Any]:
         # A note without them stays readable by releases from before desk:v10 / v11.
         data = handler(self)
-        for key in ("why_sources", "event_members", "event_instruments"):
+        for key in ("why_sources", "event_members", "event_joins", "event_instruments"):
             if key in data and not data[key]:
                 data.pop(key)
         return data
@@ -306,12 +309,16 @@ class DeskNote(BaseModel):
     def event_instruments(self) -> list[NoteInstrument]:
         """Every instrument in a cross-market move note, lead first, labelled by
         core; empty for any other note. Sent, never stored."""
-        if not self.event_members or self.instrument is None:
+        if (not self.event_members and not self.event_joins) or self.instrument is None:
             return []
         from core.desk.facts import LABELS
 
-        return [NoteInstrument(symbol=s, label=LABELS.get(s, s))
-                for s in (self.instrument, *self.event_members)]
+        written = [NoteInstrument(symbol=s, label=LABELS.get(s, s))
+                   for s in (self.instrument, *self.event_members)]
+        joined = [NoteInstrument(symbol=j.instrument, label=LABELS.get(j.instrument, j.instrument),
+                                 joined=True, move_text=j.move.text, joined_at=j.joined_at)
+                  for j in sorted(self.event_joins, key=lambda j: (j.joined_at, j.instrument))]
+        return [*written, *joined]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -323,6 +330,20 @@ class DeskNote(BaseModel):
         return self.instrument or LEGACY
 
 
+class EventJoin(BaseModel):
+    """An instrument that passed its move trigger after a move note was written and
+    joined it silently: no new note, no notification, and the note itself is never
+    rewritten. Kept in its own table and merged onto the note on read."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    note_id: str
+    instrument: str
+    joined_at: AwareDatetime
+    #: The instrument's own move when it joined.
+    move: Move
+
+
 class NoteInstrument(BaseModel):
     """One instrument a note is about, with its display label (from core)."""
 
@@ -330,6 +351,11 @@ class NoteInstrument(BaseModel):
 
     symbol: str
     label: str
+    #: True for an instrument that joined the note after it was written.
+    joined: bool = False
+    #: A joined instrument's own move ("-1.20%") and when it joined (UTC).
+    move_text: str | None = None
+    joined_at: AwareDatetime | None = None
 
 
 class NoteSummary(BaseModel):

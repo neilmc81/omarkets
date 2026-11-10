@@ -47,6 +47,7 @@ from core.desk.models import (
     CalendarRow,
     DeskNote,
     DeskView,
+    EventJoin,
     Figure,
     Headline,
     MacroBoard,
@@ -685,7 +686,19 @@ class DeskService:
             if recent_moves == 0:
                 trigger, _ = await asyncio.to_thread(self._move_trigger, now, inst)
                 movers.append(EVT.Mover(inst, move, trigger, order))
-        for group in EVT.group_moves(movers, events=self.prompt_version in EVENT_VERSIONS):
+        events = self.prompt_version in EVENT_VERSIONS
+        grouped: Sequence[EVT.Mover] = movers
+        if events and movers:
+            recent = self.store.moves_since((now - EVT.JOIN_WINDOW).isoformat())
+            anchor = recent[0] if recent else None
+            routing = EVT.route(movers, None if anchor is None else {
+                anchor.instrument or "", *anchor.event_members,
+                *(j.instrument for j in anchor.event_joins)})
+            self._join(anchor, routing.joins, now)
+            grouped = routing.grouped
+            if routing.escalate:
+                grouped = [*grouped, *await self._earlier_movers(recent, grouped, now)]
+        for group in EVT.group_moves(grouped, events=events):
             lead = group.lead
             mid = ID.note_id(NoteKind.MOVE,
                              f"{lead.move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}",
@@ -697,7 +710,47 @@ class DeskService:
                                  event=g if g.is_event else None)))
         return jobs
 
-    async def _large_move(self, now: datetime, inst: Instrument = NQ) -> Move | None:
+    def _join(self, note: DeskNote | None, movers: Sequence[EVT.Mover], now: datetime) -> None:
+        """Record each mover as a silent joiner of ``note``: no model call, no
+        notification, and the written note is not touched. Counts against the
+        mover's own 3-hour limit from ``now``."""
+        for mover in movers:
+            if note is not None and self.store.add_join(EventJoin(
+                    note_id=note.id, instrument=mover.instrument.symbol, joined_at=now,
+                    move=mover.move)):
+                logger.info("%s joined desk note %s", mover.instrument.symbol, note.id)
+
+    async def _earlier_movers(self, notes: Sequence[DeskNote], now_movers: Sequence[EVT.Mover],
+                              now: datetime) -> list[EVT.Mover]:
+        """The markets of the move notes in the join window that are not moving in
+        this pass (they are inside their own 3-hour limit), measured again now the
+        way a large move is, with no threshold, and marked with when each first
+        triggered. A market that cannot be measured now is left out."""
+        skip = {m.instrument.symbol for m in now_movers}
+        first: dict[str, datetime] = {}
+        for note in notes:
+            seen = {m.symbol: m.end_at for m in note.moves}
+            symbols = [(note.instrument, seen.get(note.instrument or "", note.created_at)),
+                       *((s, seen.get(s, note.created_at)) for s in note.event_members),
+                       *((j.instrument, j.move.end_at) for j in note.event_joins)]
+            for symbol, at in symbols:
+                if symbol and symbol not in skip and (symbol not in first or at < first[symbol]):
+                    first[symbol] = at
+        out: list[EVT.Mover] = []
+        for order, inst in enumerate(self.instruments):
+            if inst.symbol not in first:
+                continue
+            move = await self._remeasure(now, inst)
+            if move is None:
+                continue
+            trigger, _ = await asyncio.to_thread(self._move_trigger, now, inst)
+            out.append(EVT.Mover(inst, move, trigger, order, earlier_at=first[inst.symbol]))
+        return out
+
+    async def _measured(self, now: datetime, inst: Instrument) -> list[Move] | None:
+        """The instrument's move over the last hour of observed quote time, or ``None``
+        when it is not measured now (a volatility index outside Cboe's hours, or a
+        future outside its session)."""
         # A volatility index trades in Cboe's hours, not the futures': its note
         # says "in the last hour", so it is written only while Cboe calculates
         # it (or just after its close) and only from a quote that recent.
@@ -708,11 +761,25 @@ class DeskService:
         elif session_phase(now) not in {SessionPhase.RTH, SessionPhase.OVERNIGHT}:
             return None
         # Quotes are delayed; measure the last hour of observed quote time.
-        moves = await asyncio.to_thread(
+        return await asyncio.to_thread(
             F.measure_moves, self.sources.history,
             start=now - timedelta(minutes=75), end=now, symbols=(inst.symbol,),
             min_window=timedelta(minutes=30),
         )
+
+    async def _remeasure(self, now: datetime, inst: Instrument) -> Move | None:
+        """The same measurement :meth:`_large_move` makes, with no threshold applied."""
+        moves = await self._measured(now, inst)
+        if not moves or (volatility_index(inst.symbol)
+                         and now - moves[0].end_at > VOL_INDEX_CLOSE_GRACE):
+            return None
+        return moves[0]
+
+    async def _large_move(self, now: datetime, inst: Instrument = NQ) -> Move | None:
+        moves = await self._measured(now, inst)
+        if moves is None:
+            return None
+        vol = volatility_index(inst.symbol)
         threshold, _ = await asyncio.to_thread(self._move_trigger, now, inst)
         if not moves or (vol and now - moves[0].end_at > VOL_INDEX_CLOSE_GRACE):
             return None

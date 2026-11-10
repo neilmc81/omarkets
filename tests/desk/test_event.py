@@ -29,6 +29,11 @@ class V10Writer(FakeWriter):
     prompt_version = P.V10
 
 
+def raw_payload(service, note_id):
+    return service.store._db.execute(
+        "SELECT payload FROM desk_notes WHERE id=?", (note_id,)).fetchone()[0]
+
+
 def inst(symbol):
     return Instrument.of(symbol)
 
@@ -191,10 +196,10 @@ async def test_the_event_counts_against_every_members_three_hours():
     series.update(NQ=flat(30000.0, later), ES=falling(6000.0, later), GOLD=flat(4000.0, later))
     clock["now"] = later
     assert await service.due_jobs(later) == []
-    # GOLD was never in the event, so it still gets its own note.
+    # GOLD was never in the event: inside the join window it joins it, silently.
     series["GOLD"] = falling(4000.0, later)
-    [job] = await service.due_jobs(later)
-    assert job[0] == "move:GOLD:20261020T11"
+    assert await service.due_jobs(later) == []
+    assert [j.instrument for j in service.store.get(event.id).event_joins] == ["GOLD"]
     # After three hours the members are free again.
     last = MOVE_AT + timedelta(hours=3, minutes=5)
     series.update(NQ=falling(30000.0, last), ES=falling(6000.0, last), GOLD=flat(4000.0, last))
@@ -207,15 +212,15 @@ async def test_a_late_joiner_does_not_reopen_or_rewrite_the_event():
     series = {"NQ": falling(30000.0), "ES": falling(6000.0), "GOLD": flat(4000.0)}
     service, clock, sent = desk(series)
     [event] = await service.tick()
-    before = service.store.get(event.id).model_dump_json()
+    before = raw_payload(service, event.id)
     later = MOVE_AT + timedelta(minutes=2)
     series.update(NQ=falling(30000.0, later), ES=falling(6000.0, later),
                   GOLD=falling(4000.0, later))
     clock["now"] = later
-    produced = await service.tick()
-    assert [n.id for n in produced] == ["move:GOLD:20261020T11"]  # alone, its own note
-    assert service.store.get(event.id).model_dump_json() == before
-    assert len(sent) == 2 and len(service.writer.calls) == 2
+    assert await service.tick() == []  # GOLD joins silently: no note, no model call
+    assert raw_payload(service, event.id) == before  # the written note is never modified
+    assert [j.instrument for j in service.store.get(event.id).event_joins] == ["GOLD"]
+    assert len(sent) == 1 and len(service.writer.calls) == 1
 
 
 async def test_a_failed_event_note_does_not_block_its_own_retry():
@@ -364,10 +369,9 @@ def test_notes_filtered_by_any_member_instrument_return_the_event_once():
     assert [n["id"] for n in everything] == ["move:20261020T10", "move:YM:20261020T08",
                                              "release:x"]
     event = everything[0]
-    assert event["event_instruments"] == [
-        {"symbol": "NQ", "label": "Nasdaq 100 futures"},
-        {"symbol": "ES", "label": "S&P 500 futures"},
-        {"symbol": "GOLD", "label": "Gold"}]
+    assert [(i["symbol"], i["label"], i["joined"]) for i in event["event_instruments"]] == [
+        ("NQ", "Nasdaq 100 futures", False), ("ES", "S&P 500 futures", False),
+        ("GOLD", "Gold", False)]
     assert everything[1]["event_instruments"] == []
     for symbol in ("NQ", "ES", "GOLD"):
         ids = [n["id"] for n in client.get(

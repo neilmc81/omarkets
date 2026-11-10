@@ -101,7 +101,11 @@ function NoteCard({ note, open, onToggle, now, headRef }: { note: Note; open: bo
       <span className="t-note-meta">
         <span className="t-kind">{KIND_LABEL[note.kind]}</span>
         {note.event_instruments.length > 0 && <span className="t-instruments" aria-label="Markets in this event">
-          {note.event_instruments.map((i) => <span key={i.symbol} className="t-instrument" title={i.label}>{i.symbol}</span>)}
+          {note.event_instruments.map((i) => i.joined
+            ? <span key={i.symbol} className="t-instrument joined" title={`${i.label}: joined later${i.joined_at ? `, ${etTime(i.joined_at)}` : ""}`}>
+              {i.symbol}{i.move_text && <b> {i.move_text}</b>}<span className="t-instrument-flag"> joined later</span>
+            </span>
+            : <span key={i.symbol} className="t-instrument" title={i.label}>{i.symbol}</span>)}
         </span>}
         <span>{note.title}</span>
         <span className="t-muted">{etTime(note.created_at)} · {relative(note.created_at, now)}</span>

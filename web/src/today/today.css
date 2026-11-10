@@ -375,6 +375,14 @@
   background: var(--surface-2);
 }
 
+.t-instrument.joined {
+  border: 1px dashed var(--t-muted);
+}
+
+.t-instrument-flag {
+  color: var(--t-muted);
+}
+
 .t-moves {
   display: flex;
   flex-wrap: wrap;

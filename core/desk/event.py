@@ -9,13 +9,18 @@ prompt versions that take an event task (``prompts.EVENT_VERSIONS``).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from core.desk.facts import LABELS, YIELD_SYMBOLS
 from core.desk.identity import LEGACY, Instrument
 from core.desk.models import Move
+
+#: A move note this recent, once written, is joined by instruments that pass their
+#: trigger afterwards (silently), instead of each writing a note of its own.
+JOIN_WINDOW = timedelta(minutes=60)
 
 #: ``the_event.scope`` when only Treasury yields moved, and otherwise.
 RATES = "rates"
@@ -32,6 +37,9 @@ class Mover:
     trigger: float
     #: Position in ``desk_instruments``; breaks ties.
     order: int
+    #: Set for a market that passed its trigger before this event note, in a note
+    #: already written: when. Its ``move`` is then measured again, now.
+    earlier_at: datetime | None = None
 
     @property
     def times_trigger(self) -> float:
@@ -84,9 +92,38 @@ def group_moves(movers: Sequence[Mover], *, events: bool) -> list[MoveGroup]:
     return [MoveGroup((lead, *rest))]
 
 
+@dataclass(frozen=True)
+class Routing:
+    """What to do with this pass's movers when a move note may already be in the
+    join window: ``joins`` join it silently; ``grouped`` are written as notes
+    (:func:`group_moves`); ``escalate`` means an NQ-led event that also takes in the
+    markets of the notes already in the window."""
+
+    joins: tuple[Mover, ...] = ()
+    grouped: tuple[Mover, ...] = ()
+    escalate: bool = False
+
+
+def route(movers: Sequence[Mover], anchor: Collection[str] | None) -> Routing:
+    """Where this pass's movers go. ``anchor`` is every symbol (lead, members and
+    later joiners) of the most recent written move note inside :data:`JOIN_WINDOW`,
+    or ``None`` when there is no such note: then they are grouped as always.
+    Otherwise they all join it, unless NQ is among them and the note does not
+    already include NQ: then they, with the earlier markets, are one NQ-led event."""
+    if not movers:
+        return Routing()
+    if anchor is None:
+        return Routing(grouped=tuple(movers))
+    if any(m.instrument.symbol == LEGACY for m in movers) and LEGACY not in anchor:
+        return Routing(grouped=tuple(movers), escalate=True)
+    return Routing(joins=tuple(movers))
+
+
 def event_title(group: MoveGroup) -> str:
     symbols = [m.instrument.symbol for m in group.members]
     names = ", ".join(symbols[:-1]) + f" and {symbols[-1]}"
+    if any(m.earlier_at is not None for m in group.members):
+        return f"{names} moved in the same event"
     return (f"{names} yields moved together in the last hour" if group.scope == RATES
             else f"{names} moved together in the last hour")
 
@@ -113,6 +150,8 @@ def event_facts(group: MoveGroup, desk: Sequence[Instrument], *,
             "its_trigger": _trigger_text(mover),
             "delayed_feed": mover.move.delayed,
         }
+        if mover.earlier_at is not None:
+            row["triggered_earlier_at"] = when(mover.earlier_at)
         if symbol in locations:
             row.update(locations[symbol])
         rows.append(row)

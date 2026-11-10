@@ -15,7 +15,7 @@ Nasdaq 100 futures (NQ).
 | Economic release | 26 min after every medium/high/critical release with figures: 15 min of reaction + 10-min feed delay + 1 min margin; waits up to 45 min for a missing actual | `release:<time>:<codes>` |
 | Fed | FOMC decision / minutes +26 min, press conference +71 min (60-min window + feed delay) | `release:<time>:<codes>` |
 | Mega-cap earnings | once results headlines appear, 30 min–4 h after the report | `earnings:<symbol>:<day>` |
-| Big move | NQ moves at least the scaled trigger (see "Normal move size") over about an hour; at most one per 3 hours; on `desk:v11`, instruments moving together are one note (see "One note per event") | `move:<hour>` |
+| Big move | NQ moves at least the scaled trigger (see "Normal move size") over about an hour; at most one per 3 hours; on `desk:v11`, instruments moving within an hour of each other share one note (see "One note per event") | `move:<hour>` |
 | Market now | on request (the header "Desk Note" button); at most 5 per day; a note from the last 15 minutes is shown again instead of writing a new one | `ask:<time>` |
 | Treasury auction | 26 min after a notably strong or weak 2/5/7/10/20/30-year or TIPS auction (rule below) | `auction:<date>:<cusip>` |
 | Week in review | after the week's last cash close + 15 min (Friday 16:15, or Thursday in a holiday-shortened week), for up to two days | `review:<monday>` |
@@ -422,38 +422,60 @@ restart. `desk:v9` never reads the outside feeds.
 ## One note per event (`desk:v11`)
 
 One market event used to give one big-move note, and one desktop notification, per
-instrument. On `desk:v11` (`desk:v10` plus an event task; the code default is still
-`desk:v9`), instruments that pass their own move trigger in the same scheduler pass
-are one event and get one note and one notification. An instrument moving alone gets
-its own note exactly as before. On `desk:v10` and earlier nothing changes.
+instrument. The markets of one event cross their triggers minutes apart (on Nov 5
+2026: VIX 14:25, US2Y 14:42, YM 14:44, US10Y 14:46, NQ and ES 14:53 UTC), so on
+`desk:v11` (`desk:v10` plus an event task; the code default is still `desk:v9`) the
+desk joins them up over a 60-minute window. On `desk:v10` and earlier nothing changes:
+one note per instrument.
 
 Code decides everything except the words (`core/desk/event.py`, tested):
 
-- **Group.** Two or more instruments past their trigger, and not blocked by their
-  3-hour limit, in one pass. US2Y and US10Y alone are still one event; its facts say
-  `scope: "rates"` and the note is about rates, not "cross-market".
+- **Same pass.** Two or more instruments past their trigger in one scheduler pass,
+  and not blocked by their 3-hour limit, with no written move note in the last 60
+  minutes, are one event and get one note and one notification. US2Y and US10Y alone
+  are still one event; its facts say `scope: "rates"` and the note is about rates.
 - **Lead.** NQ whenever it is in the group; otherwise the instrument that moved the
   most times its own trigger, ties by `desk_instruments` order. The note is filed
   under the lead with the usual id (`move:<LEAD>:<hour>`), so there is no id
   migration, and lists the others in `event_members`.
+- **Join window: 60 minutes (`JOIN_WINDOW`).** When an instrument passes its trigger
+  (and is not blocked by its 3-hour limit) and a *written* move note, single or
+  event, any instrument, was created in the last 60 minutes, it **joins that
+  note silently**: no model call, no notification, and the stored note is never
+  modified. The join is a row in `desk_event_joins` (one per note and instrument),
+  merged onto the note when it is read. The joined instrument shows in the note's
+  `event_instruments` after the written members, flagged `joined`, with its own move
+  text and join time; it counts against its own 3-hour limit from the join; and the
+  note comes back when notes are filtered by it. A failed note is never joined.
+- **NQ escalation.** If the instrument is NQ and the newest note in the window is
+  not NQ-led and has no NQ as member or joiner, NQ does not join: the desk writes
+  **one new NQ-led event** whose members are the same-pass movers plus every
+  instrument that led, was a member of, or joined a move note in the window. Those
+  earlier markets are measured again now, the way a large move is measured, with no
+  threshold, and carry `triggered_earlier_at` (their first trigger time) in
+  `the_event`; the writer is told their change is over their own latest window. After
+  an escalation later movers join the newest note, so one event is at most two notes:
+  the first mover's, and an NQ-led one if NQ comes in later. An escalation counts
+  against the 3-hour limit of every instrument in it, from its own time.
 - **Facts.** `the_event` holds each market's own move and window, how many times its
   trigger it moved, its price location where measured, and the desk instruments that
-  did not pass their trigger. All of it is formatted text, so the invented-number
-  check treats it like any other fact. `why` evidence is ranked for the lead first,
-  then the other members' reports are added in turn (`evidence.rank_event`).
-- **Limit.** The event counts against the 3-hour limit of every instrument in it. A
-  member that triggers again inside those 3 hours writes nothing and never reopens or
-  rewrites the event; an instrument that was not in it still gets its own note. A
-  failed note does not count, so it keeps its retries (one retry of the whole event,
-  never single notes in its place).
+  did not pass their trigger; all formatted text, so the invented-number check treats
+  it like any other fact. `why` evidence is ranked for the lead first, then the other
+  members' reports are added in turn (`evidence.rank_event`).
+- **Limit.** A written event note, and each join, counts against the 3-hour limit of
+  every instrument in it, so none fires a single note right after, and one that
+  triggers again never reopens or rewrites the event. A failed note counts for nothing,
+  so it keeps its retries (one retry of the whole event, never single notes in its place).
+- A note older than 60 minutes attracts no joiners: the next instrument to trigger
+  starts a note of its own.
 
-The Today list shows the event once, with a tag per instrument (labels come from the
-core), and `GET /desk/notes?instrument=ES` returns it for any member, along with that
-instrument's own notes and the desk-wide ones.
+The Today list shows the event once, with a tag per instrument (labels, move text and
+join flags come from the core), and `GET /desk/notes?instrument=ES` returns it for any
+member or joiner, along with that instrument's own notes and the desk-wide ones.
 
 To turn it on, set `OMARKETS_DESK_PROMPT_VERSION=desk:v11` in the service's drop-in
-and restart. A late joiner is not merged: an instrument that crosses its trigger a
-pass or more after the group formed writes its own note.
+and restart. Joins are written while the scheduler builds its jobs (`due_jobs`),
+so they happen on the first pass that sees the instrument past its trigger.
 
 ## Did it hold? (release, Fed and earnings notes)
 
