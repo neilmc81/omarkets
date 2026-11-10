@@ -120,3 +120,31 @@ def test_failed_persistence_does_not_apply_uncommitted_cache_delta(service, monk
         service.accept_batch(batch(observations=[observation(value=0)]))
     assert service._observations == old_observations
     assert service._release_versions == old_versions
+
+
+def test_calendar_projection_is_cached_until_source_data_changes(service, monkeypatch):
+    """Repeated calendar reads and ticks must not re-project unchanged data on the loop."""
+    import core.services.economics as module
+
+    calls = []
+    real = module.project_calendar
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(module, "project_calendar", counting)
+    service.accept_batch(batch(events=[event()]))  # its tick projects once
+    first = service.calendar_events()
+    for _ in range(5):
+        assert service.calendar_events() == first
+        service.tick()
+    assert len(calls) == 1
+
+    service.accept_batch(batch(events=[event(id="other", source_event_id="other")]))
+    assert len(service.calendar_events()) == len(first) + 1
+    assert len(calls) == 2
+
+    service.accept_batch(batch(observations=[observation(period="2026-09")]))
+    service.calendar_events()
+    assert len(calls) == 3
