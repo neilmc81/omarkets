@@ -195,6 +195,33 @@ async def test_a_failed_note_is_never_joined_and_blocks_nothing():
     assert service.store._db.execute("SELECT COUNT(*) FROM desk_event_joins").fetchone()[0] == 0
 
 
+async def test_a_lead_that_failed_every_attempt_does_not_sink_other_movers():
+    series = {"NQ": series_for("NQ", [utc(5, 14, 23)], utc(5, 11, 0), utc(5, 15, 0)),
+              "GOLD": series_for("GOLD", [utc(5, 14, 38)], utc(5, 11, 0), utc(5, 15, 0))}
+    writer = KindWriter(P.V11)
+    writer.results = [WriteResult(None, "m", error="model output was not valid")] * 3
+    service, clock, _ = make(utc(5, 14, 25), series=series, writer=writer, instruments=ALL)
+    statuses = []
+    now = utc(5, 14, 25)
+    while now <= utc(5, 14, 42):
+        clock["now"] = now
+        statuses += [(n.id, n.status) for n in await service.tick() if n.kind is NoteKind.MOVE]
+        now += timedelta(minutes=1)
+    # NQ used up its three attempts; GOLD, crossing afterwards while NQ still
+    # qualifies, is written on its own instead of being led by NQ's dead note.
+    assert statuses == [("move:20261105T09", "failed")] * 3 + [("move:GOLD:20261105T09", "ok")]
+
+
+async def test_going_back_to_v10_ignores_event_membership_for_the_limit():
+    service, moves, _, _ = await replay(P.V11, utc(5, 14, 50), utc(5, 14, 55),
+                                        {"NQ": [utc(5, 14, 53)], "ES": [utc(5, 14, 53)]})
+    assert [(n.id, n.event_members) for _, n in moves] == [("move:20261105T09", ["ES"])]
+    # The same store on desk:v10: ES is limited only by notes of its own, as before v11.
+    service.prompt_version = service.writer.prompt_version = P.V10
+    produced = [n for n in await service.tick() if n.kind is NoteKind.MOVE]
+    assert [n.id for n in produced] == ["move:ES:20261105T09"]
+
+
 # ------------------------------------------------------------------ routing, pure
 
 

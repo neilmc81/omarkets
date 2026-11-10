@@ -675,18 +675,26 @@ class DeskService:
         # instrument in it.
         movers: list[EVT.Mover] = []
         since = (now - timedelta(hours=3)).isoformat()
+        events = self.prompt_version in EVENT_VERSIONS
         for order, inst in enumerate(self.instruments):
             move = await self._large_move(now, inst)
             if move is None:
                 continue
+            # An instrument whose own note has failed every attempt must not lead
+            # (and so sink) an event: the others are routed without it.
+            own = ID.note_id(NoteKind.MOVE, f"{move.end_at.astimezone(NEW_YORK):%Y%m%dT%H}", inst)
+            if events and not self.store.has_ok(own) \
+                    and self.store.attempts(own) >= MAX_ATTEMPTS:
+                continue
             recent_moves = self.store.count_since(
                 "move", since, instrument=inst.symbol,
                 written_only=True,  # a failed note must not block its own retries
-                with_members=True)
+                # Event membership and joins limit an instrument only where events
+                # are written, so an earlier version keeps its own limit exactly.
+                with_members=events)
             if recent_moves == 0:
                 trigger, _ = await asyncio.to_thread(self._move_trigger, now, inst)
                 movers.append(EVT.Mover(inst, move, trigger, order))
-        events = self.prompt_version in EVENT_VERSIONS
         grouped: Sequence[EVT.Mover] = movers
         if events and movers:
             recent = self.store.moves_since((now - EVT.JOIN_WINDOW).isoformat())
