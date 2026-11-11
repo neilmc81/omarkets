@@ -61,6 +61,7 @@ from core.desk.models import (
 )
 from core.desk.prompts import (
     EVENT_VERSIONS,
+    FRESH_VERSIONS,
     PROMPT_VERSION,
     RECENT_LESSONS_VERSIONS,
     WHY_VERSIONS,
@@ -978,13 +979,17 @@ class DeskService:
 
     async def _why_evidence(self, now: datetime, inst: Instrument, direction: int, *,
                             also: Sequence[tuple[Instrument, int]] = (),
+                            window: EV.Window | None = None,
                             ) -> tuple[dict[str, Any], list[EV.Candidate]]:
         """The ``why_evidence`` fact and the reports behind it, at versions that take
         it. Outside coverage that can't be read is named, never fatal to the note.
         ``also`` are the other markets of an event note (instrument, direction): their
-        reports are read and ranked after the lead's."""
+        reports are read and ranked after the lead's. At desk:v12 the ``window`` being
+        explained weighs when each report was published against it."""
         if self.prompt_version not in WHY_VERSIONS:
             return {}, []
+        if self.prompt_version not in FRESH_VERSIONS:
+            window = None
         candidates = [
             EV.Candidate(source=HL.SOURCE_LABELS.get(e.source, e.source.replace("_", " ")),
                          headline=" ".join(e.headline.split())[:300],
@@ -1009,16 +1014,19 @@ class DeskService:
                 unavailable = ["outside coverage"]
         try:
             chosen = (EV.rank_event(candidates, [(inst.symbol, direction),
-                                                 *((i.symbol, d) for i, d in also)], now=now)
-                      if also else EV.rank(candidates, inst.symbol, direction=direction, now=now))
+                                                 *((i.symbol, d) for i, d in also)], now=now,
+                                         window=window)
+                      if also else EV.rank(candidates, inst.symbol, direction=direction, now=now,
+                                           window=window))
             fact = await EV.evidence_facts(chosen, symbol=inst.symbol, unavailable=unavailable,
                                            article_text=self.sources.article_text,
-                                           readable=article_allowed, when=et, now=now)
+                                           readable=article_allowed, when=et, now=now,
+                                           window=window)
         except Exception as exc:  # noqa: BLE001 - evidence is never worth losing a note
             logger.warning("evidence failed for %s: %s", inst.symbol, type(exc).__name__)
             return {"why_evidence": await EV.evidence_facts(
                 [], symbol=inst.symbol, unavailable=[*unavailable, "evidence ranking"],
-                article_text=None, when=et, now=now)}, []
+                article_text=None, when=et, now=now, window=window)}, []
         return {"why_evidence": fact}, chosen
 
     @staticmethod
@@ -1230,11 +1238,13 @@ class DeskService:
         recent = [n for n in self.store.recent(5)
                   if n.created_at >= now - timedelta(hours=3) and n.draft is not None]
         direction = "up" if move.change > 0 else "down"
+        window = EV.Window(move.start_at, move.end_at)
         if event is None:
-            evidence, chosen = await self._why_evidence(now, inst, 1 if move.change > 0 else -1)
+            evidence, chosen = await self._why_evidence(now, inst, 1 if move.change > 0 else -1,
+                                                        window=window)
         else:
             evidence, chosen = await self._why_evidence(
-                now, inst, 1 if move.change > 0 else -1,
+                now, inst, 1 if move.change > 0 else -1, window=window,
                 also=[(m.instrument, 1 if m.move.change > 0 else -1)
                       for m in event.members[1:]])
         facts = {
@@ -1309,7 +1319,10 @@ class DeskService:
             symbols=self._window_symbols(inst),
         )
         news = self.news_lines(now - timedelta(hours=6), now)
-        evidence, chosen = await self._why_evidence(now, inst, self._today_direction(common, inst))
+        # The why explains today's direction, so the window is today's session so far.
+        evidence, chosen = await self._why_evidence(
+            now, inst, self._today_direction(common, inst),
+            window=EV.Window(active_session(now).opens_at, now))
         facts = {**common, **(await asyncio.to_thread(self._nq_context, now, inst)),
                  **evidence,
                  "last_two_hours": self._moves_facts(moves),

@@ -298,7 +298,7 @@ async def test_event_evidence_uses_the_other_members_reports_after_the_leads():
 
 
 def test_v11_is_v10_plus_an_event_task_and_is_not_the_default():
-    assert P.PROMPT_VERSION == P.V9 and P.EVENT_VERSIONS == {P.V11}
+    assert P.PROMPT_VERSION == P.V9 and P.EVENT_VERSIONS == {P.V11, P.V12}
     for symbol in P.SPECS:
         v10, v11 = P.PROMPTS[P.V10][symbol], P.PROMPTS[P.V11][symbol]
         assert (v11.system, v11.tasks, v11.stated_facts) == (v10.system, v10.tasks,

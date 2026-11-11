@@ -18,6 +18,7 @@ import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 from core.desk.models import Headline, NoteDraft
@@ -34,6 +35,21 @@ SUMMARY_CHARS = 300
 EXCERPT_CHARS = 500
 #: Two titles sharing this much of their words are one report.
 SAME_REPORT = 0.7
+#: A report this far before a move began still counts as during it: coverage of a
+#: move often starts as the first minutes of it are seen.
+DURING_LEAD = timedelta(minutes=30)
+#: Older than ``DURING_LEAD`` but no more than this before the move began.
+SHORTLY_BEFORE = timedelta(hours=3)
+#: Timing weights (desk:v12). They are added to the content score, which tops out near
+#: 13 and has a floor of ``MIN_SCORE``. ``during`` beats ``shortly_before`` beats
+#: ``earlier``/``unknown`` by 2 and 1; a report in the last two classes that says this
+#: market moved describes some earlier move and loses ``OLD_MOVE_PENALTY``, so it sits
+#: 6 below a ``during`` report of equal content: only a much stronger one (e.g. exact
+#: wording of the cause plus a known publisher) outranks it. The floor is judged on
+#: content alone, so that penalty orders reports but never drops one (a live page's
+#: headline is updated after its stamp).
+TIMING_WEIGHT = {"during": 3, "shortly_before": 1, "earlier": 0, "unknown": 0}
+OLD_MOVE_PENALTY = 3
 
 
 def _rx(text: str) -> re.Pattern[str]:
@@ -72,6 +88,62 @@ KNOWN_PUBLISHERS = frozenset({
     "investing.com", "seeking alpha", "investinglive", "kitco", "fxstreet", "federal reserve",
     "cbs news", "cnn", "fox business",
 })
+
+
+class Timing(StrEnum):
+    """Where a report's time falls against the window being explained."""
+
+    DURING = "during"
+    SHORTLY_BEFORE = "shortly_before"
+    EARLIER = "earlier"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class Window:
+    """The span a note explains: a move's start and end (UTC)."""
+
+    start: datetime
+    end: datetime
+
+
+def timing_of(item: Candidate, window: Window) -> Timing:
+    """The class of ``item``'s time. Exactly ``DURING_LEAD`` before the start is
+    ``during``, exactly ``SHORTLY_BEFORE`` before it is ``shortly_before``; an
+    approximate time is ``unknown`` whatever it says."""
+    if item.time_approximate:
+        return Timing.UNKNOWN
+    if item.published_at >= window.start - DURING_LEAD:
+        return Timing.DURING
+    if item.published_at >= window.start - SHORTLY_BEFORE:
+        return Timing.SHORTLY_BEFORE
+    return Timing.EARLIER
+
+
+def _age_text(gap: timedelta) -> str:
+    minutes = round(gap.total_seconds() / 60 / 5) * 5
+    if gap < timedelta(hours=1):
+        return f"about {max(minutes, 5)} minutes"
+    hours = round(gap / timedelta(hours=1))
+    if hours < 24:
+        return f"about {hours} hours"
+    days = round(hours / 24)
+    return "about a day" if days == 1 else f"about {days} days"
+
+
+def timing_text(item: Candidate, window: Window) -> str:
+    """The class in plain English, for the writer."""
+    timing = timing_of(item, window)
+    if timing is Timing.UNKNOWN:
+        return "time not known: may be an older story"
+    if timing is Timing.DURING:
+        if item.published_at < window.start:
+            return (f"during the move ({_age_text(window.start - item.published_at)} "
+                    "before it began)")
+        if item.published_at > window.end:
+            return "during the move (after its measured end)"
+        return "during the move"
+    return f"{_age_text(window.start - item.published_at)} before the move began"
 
 
 @dataclass(frozen=True)
@@ -147,15 +219,17 @@ def _direction(text: str) -> int:
     return said(main) or said(text)
 
 
-def score(item: Candidate, symbol: str, direction: int, now: datetime) -> int:
-    """How much this report may explain ``symbol`` moving in ``direction`` (+1, -1, 0)."""
+def _assess(item: Candidate, symbol: str, direction: int, now: datetime,
+            window: Window | None) -> tuple[int, int]:
+    """``(content, total)``: what the headline earns, and that plus its timing.
+    Without a ``window`` timing is the old flat credit for the last 3 hours."""
     terms = TERMS[symbol]
     title = item.headline
     named = bool(terms.subject.search(title))
     driver = bool(terms.drivers.search(title))
     # Move words alone are about some other market; a how-to is not a report.
     if not (named or driver) or _NOT_NEWS.search(title):
-        return 0
+        return 0, 0
     moved = bool(_MOVED_UP.search(title) or _MOVED_DOWN.search(title))
     total = 0
     if named:
@@ -170,12 +244,25 @@ def score(item: Candidate, symbol: str, direction: int, now: datetime) -> int:
     compare = terms.direct.search(title) if terms.direct is not None else named
     if direction and said and compare:
         total += 1 if said == direction else -4
-    # A re-dated story mustn't get credit for looking new.
-    if now - item.published_at <= RECENT and not item.time_approximate:
-        total += 1
     if item.source.casefold() in KNOWN_PUBLISHERS:
         total += 2
-    return total
+    if window is None:
+        # A re-dated story mustn't get credit for looking new.
+        if now - item.published_at <= RECENT and not item.time_approximate:
+            total += 1
+        return total, total
+    timing = timing_of(item, window)
+    adjust = TIMING_WEIGHT[timing.value]
+    if named and moved and timing in (Timing.EARLIER, Timing.UNKNOWN):
+        adjust -= OLD_MOVE_PENALTY
+    return total, total + adjust
+
+
+def score(item: Candidate, symbol: str, direction: int, now: datetime,
+          window: Window | None = None) -> int:
+    """How much this report may explain ``symbol`` moving in ``direction`` (+1, -1, 0).
+    ``window`` (desk:v12) weighs when it was published against the move."""
+    return _assess(item, symbol, direction, now, window)[1]
 
 
 def _words(title: str) -> set[str]:
@@ -187,12 +274,17 @@ def _same_report(a: set[str], b: set[str]) -> bool:
 
 
 def rank(candidates: Iterable[Candidate], symbol: str, *, direction: int, now: datetime,
-         limit: int = MAX_ITEMS) -> list[Candidate]:
+         limit: int = MAX_ITEMS, window: Window | None = None) -> list[Candidate]:
     """The reports worth showing, strongest first. The order never depends on
-    input order, and nothing published after ``now`` or before ``LOOKBACK`` counts."""
-    scored = [(score(c, symbol, direction, now), c) for c in candidates
-              if now - LOOKBACK <= c.published_at <= now]
-    scored = [row for row in scored if row[0] >= MIN_SCORE]
+    input order, and nothing published after ``now`` or before ``LOOKBACK`` counts.
+    With a ``window`` the floor is judged on content alone and timing only orders."""
+    rows = []
+    for c in candidates:
+        if now - LOOKBACK <= c.published_at <= now:
+            content, total = _assess(c, symbol, direction, now, window)
+            if content >= MIN_SCORE:
+                rows.append((total, c))
+    scored = rows
     scored.sort(key=lambda row: (-row[0], -row[1].published_at.timestamp(), row[1].source,
                                  row[1].headline, row[1].url or ""))
     chosen: list[Candidate] = []
@@ -213,7 +305,8 @@ def rank(candidates: Iterable[Candidate], symbol: str, *, direction: int, now: d
 
 
 def rank_event(candidates: Iterable[Candidate], markets: Sequence[tuple[str, int]], *,
-               now: datetime, limit: int = MAX_ITEMS) -> list[Candidate]:
+               now: datetime, limit: int = MAX_ITEMS,
+               window: Window | None = None) -> list[Candidate]:
     """Reports for one note about several markets moving together.
 
     ``markets`` is ``(symbol, direction)`` with the lead market first. Each
@@ -222,7 +315,8 @@ def rank_event(candidates: Iterable[Candidate], markets: Sequence[tuple[str, int
     the others can add theirs. A market with no report adds nothing.
     """
     items = list(candidates)
-    pools = [rank(items, symbol, direction=direction, now=now) for symbol, direction in markets]
+    pools = [rank(items, symbol, direction=direction, now=now, window=window)
+             for symbol, direction in markets]
     chosen: list[Candidate] = []
     seen: list[set[str]] = []
     per_source: dict[str, int] = {}
@@ -276,9 +370,12 @@ def _shorten(text: str | None, limit: int) -> str | None:
 async def evidence_facts(chosen: Sequence[Candidate], *, symbol: str, unavailable: Sequence[str],
                          article_text: Callable[[str], Awaitable[str | None]] | None,
                          readable: Callable[[str | None], bool] = bool,
-                         when: Callable[[datetime], str], now: datetime) -> dict[str, Any]:
+                         when: Callable[[datetime], str], now: datetime,
+                         window: Window | None = None) -> dict[str, Any]:
     """The ``why_evidence`` fact: numbered reports, from ``now - LOOKBACK`` to ``now``,
-    with a passage from the strongest ones whose pages can be read."""
+    with a passage from the strongest ones whose pages can be read. With a ``window``
+    (desk:v12) each report says in words where its time falls against the move, and
+    the fact names the window it was matched against."""
     passages: dict[int, str | None] = {}
     if article_text is not None:
         wanted = [(i, c.url) for i, c in enumerate(chosen) if c.url and readable(c.url)]
@@ -293,6 +390,8 @@ async def evidence_facts(chosen: Sequence[Candidate], *, symbol: str, unavailabl
         row: dict[str, Any] = {"id": index + 1, "time": when(item.published_at),
                                "source": item.source, "headline": item.headline}
         summary = _shorten(item.summary, SUMMARY_CHARS)
+        if window is not None:
+            row["timing"] = timing_text(item, window)
         if item.time_approximate:
             row["time_is_approximate"] = True
         if summary and summary.casefold() != item.headline.casefold():
@@ -300,8 +399,10 @@ async def evidence_facts(chosen: Sequence[Candidate], *, symbol: str, unavailabl
         if passages.get(index):
             row["excerpt"] = passages[index]
         items.append(row)
-    return {"searched_from": when(now - LOOKBACK), "searched_to": when(now), "items": items,
-            "feeds_unavailable": list(unavailable)}
+    fact: dict[str, Any] = {"searched_from": when(now - LOOKBACK), "searched_to": when(now)}
+    if window is not None:
+        fact |= {"move_from": when(window.start), "move_to": when(window.end)}
+    return fact | {"items": items, "feeds_unavailable": list(unavailable)}
 
 
 def cited(draft: NoteDraft | None, chosen: Sequence[Candidate]) -> list[Headline]:
@@ -316,5 +417,6 @@ def cited(draft: NoteDraft | None, chosen: Sequence[Candidate]) -> list[Headline
             for i in dict.fromkeys(draft.why.evidence) if i in by_id]
 
 
-__all__ = ["Candidate", "KNOWN_PUBLISHERS", "LOOKBACK", "TERMS", "cited", "evidence_facts",
-           "excerpt", "rank", "rank_event", "score"]
+__all__ = ["Candidate", "KNOWN_PUBLISHERS", "LOOKBACK", "TERMS", "Timing", "Window", "cited",
+           "evidence_facts", "excerpt", "rank", "rank_event", "score", "timing_of",
+           "timing_text"]
