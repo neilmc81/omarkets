@@ -98,7 +98,6 @@ def _draft_text(draft: NoteDraft) -> str:
 
 #: Why a draft's reason can't be used. The rest of the note still can.
 WHY_INVALID = "note's why is missing or cites evidence that was not supplied"
-#: Written when the model gave no usable reason twice: a paid note is never lost to it.
 #: Why a draft's headline can't stand: the reason is only "likely".
 HEDGE_MISSING = "headline states a likely reason as fact"
 #: Added to the request when the headline must be rewritten.
@@ -106,6 +105,7 @@ HEDGE_INSTRUCTION = (
     "CORRECTION: your why level is \"likely\", but the headline states the reason as fact. "
     "Write the same note again with a headline that hedges it (for example \"likely\", "
     "\"appears\", \"may\" or \"could\").")
+#: Written when the model gave no usable reason twice: a paid note is never lost to it.
 NO_USABLE_WHY = WhyRead(level="unknown",
                         text="This note could not tie a reason to the reports it was given.")
 
@@ -360,7 +360,10 @@ class DeskWriter:
                                result.model, invented)
                 again = await self._call(result.model, prompt)
                 spent.append(again.cost_usd)
-                if again.draft is not None and not again.why_invalid:
+                # A rewrite that drops the hedge is not taken: the numbers are flagged
+                # either way, a likely reason stated as fact is not.
+                if (again.draft is not None and not again.why_invalid
+                        and not again.needs_hedge):
                     second = invented_numbers(again.draft, checked)
                     if len(second) <= len(invented):
                         result, invented = again, second
