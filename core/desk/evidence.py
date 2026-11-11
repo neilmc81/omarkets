@@ -141,7 +141,8 @@ def timing_text(item: Candidate, window: Window) -> str:
             return (f"during the move ({_age_text(window.start - item.published_at)} "
                     "before it began)")
         if item.published_at > window.end:
-            return "during the move (after its measured end)"
+            # A report on the move, not the moment its reason emerged.
+            return "after the move ended"
         return "during the move"
     return f"{_age_text(window.start - item.published_at)} before the move began"
 

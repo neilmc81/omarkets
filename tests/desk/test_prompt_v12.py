@@ -70,7 +70,7 @@ def test_timing_in_words():
     assert say(START + timedelta(minutes=5)) == "during the move"
     assert say(START - timedelta(minutes=20)) == \
         "during the move (about 20 minutes before it began)"
-    assert say(END + timedelta(minutes=5)) == "during the move (after its measured end)"
+    assert say(END + timedelta(minutes=5)) == "after the move ended"
     assert say(START - timedelta(minutes=90)) == "about 2 hours before the move began"
     assert say(START - timedelta(hours=4, minutes=19)) == "about 4 hours before the move began"
     assert say(START - timedelta(hours=26)) == "about a day before the move began"
@@ -315,7 +315,8 @@ def test_the_v12_rules_about_timing(symbol):
         task = profile.tasks.get(kind)
         if task is None:
             continue
-        assert 'an item whose timing is "during the move"' in task
+        assert ('an item whose timing is "during the move" or "after the move ended" '
+                'itself says') in task
         assert "the text must say the report predates the move" in task
     assert "predates the move" in profile.event_task
 
@@ -426,6 +427,16 @@ async def test_a_hedge_rewrite_that_invents_a_number_is_not_taken():
     assert len(bodies) == 2  # the clean first note needs no number rewrite
     assert result.draft.headline == "ES slides on tech selling"
     assert result.unverified_numbers == () and not result.needs_hedge
+
+
+async def test_a_hedge_rewrite_that_swaps_one_invented_number_for_another_is_not_taken():
+    writer, bodies = writer_replying(reply("ES slides 737% on tech selling"),
+                                     reply("ES likely slides 919% on tech selling"),
+                                     reply("ES slides 737% on tech selling"))
+    result = await writer.write(NoteKind.MOVE, FACTS, instrument=ES)
+    assert len(bodies) == 3  # first note, hedge rewrite, one number rewrite
+    assert "919" not in result.draft.headline
+    assert result.unverified_numbers == ("737",)
 
 
 async def test_a_failed_regeneration_keeps_the_first_note():

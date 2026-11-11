@@ -498,11 +498,14 @@ the Dow's change today as a same-window figure.
   6 below a `during` report of equal content. The minimum score is judged on content
   alone, so the penalty orders reports but never drops one: a live page's headline is
   updated after its stamp. Nothing after `now` or older than 24 hours counts, as before.
-- Each `why_evidence` item carries `timing` in words ("during the move", "about 4 hours
+- Each `why_evidence` item carries `timing` in words ("during the move", "after the move
+  ended" for a report published after the measured end, "about 4 hours
   before the move began", "about a day before the move began", "time not known: may be
   an older story"), and the fact carries `move_from` and `move_to`. `time` and
   `time_is_approximate` stay.
-- **Rules.** "reported" may rest only on a `during` item, or on an earlier item whose own
+- **Rules.** "reported" may rest only on a `during` item (which includes a report
+  published after the move ended: it reports on the move, and its time is never given
+  as when the reason emerged), or on an earlier item whose own
   text names the same cause as a release or event the measured facts place in or just
   before the window; otherwise the strongest level is "likely" and the text says the
   report predates the move. An item's time is never given as when the reason emerged
@@ -512,6 +515,10 @@ the Dow's change today as a same-window figure.
   doesn't, the writer regenerates once with a short instruction, sharing the single
   regeneration allowance of the `why` check (never a second paid retry). If the new
   headline still doesn't hedge, the note is kept and a warning is logged.
+  A hedge rewrite is taken only if it invents no number the first note didn't. Known
+  limit: the check looks for a hedge word anywhere in the headline, so a hedge on
+  something other than the cause ("ES falls on chip selling; yields may stabilize")
+  passes.
 - **Desk Note (ask) same-window figure.** Ask notes already measured the Dow over the last
   two hours (`last_two_hours`, since `desk:v10`), but the ask task never named that key,
   while `markets_today` lists the Dow's change today. A writer asked about "the same

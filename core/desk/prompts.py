@@ -719,8 +719,8 @@ _V12_WHY_TASK = _swap(
     ("\"reported\": "
      "an item itself says why {symbol} or its market moved;",
      "\"reported\": "
-     "an item whose timing is \"during the move\" itself says why {symbol} or its market "
-     "moved, or an earlier-timed item whose own text clearly names the same cause as a "
+     "an item whose timing is \"during the move\" or \"after the move ended\" itself says "
+     "why {symbol} or its market moved, or an earlier-timed item whose own text clearly names the same cause as a "
      "release or event that the measured facts place inside or just before the move window; "
      "otherwise the strongest level is \"likely\" and the text must say the report predates "
      "the move;"),

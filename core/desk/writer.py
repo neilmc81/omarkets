@@ -347,10 +347,10 @@ class DeskWriter:
             again = await self._call(
                 result.model, replace(prompt, user=f"{prompt.user}\n\n{HEDGE_INSTRUCTION}"))
             spent.append(again.cost_usd)
-            # Taken only if it is no worse on numbers: a clean note is not traded
-            # for one that hedges and invents a figure.
-            if again.draft is not None and not again.why_invalid and len(
-                    invented_numbers(again.draft, prompt.number_sources)) <= len(
+            # Taken only if it invents no number the first note didn't: a note is
+            # not traded for one that hedges and brings a new unsupported figure.
+            if again.draft is not None and not again.why_invalid and set(
+                    invented_numbers(again.draft, prompt.number_sources)) <= set(
                     invented_numbers(result.draft, prompt.number_sources)):
                 result = again
         if result.needs_hedge:
