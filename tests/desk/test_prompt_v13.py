@@ -105,6 +105,7 @@ def test_stocks_are_measured_over_the_window_and_missing_ones_are_named():
 def test_a_window_with_no_stock_quotes_says_so_and_gives_no_number():
     out = F.tech_stocks_same_window(history_of({}), start=START, end=NOW)
     assert out["available"] is False and "stocks" not in out and "04:00" in out["why_not"]
+    assert out["not_measured"] == ["SMH", *F.MEGACAPS]
     # Quotes that stopped before the window began (stocks shut) are not a move either.
     shut = quotes(200.0, 208.0, begin=START - timedelta(hours=3),
                   end=START - timedelta(hours=1))
@@ -112,10 +113,30 @@ def test_a_window_with_no_stock_quotes_says_so_and_gives_no_number():
                                      end=NOW)["available"] is False
 
 
-def test_a_stock_whose_quotes_stop_inside_the_window_shows_where_they_stopped():
-    part = quotes(200.0, 204.0, end=NOW - timedelta(minutes=30))
-    row = F.tech_stocks_same_window(history_of({"SMH": part}), start=START, end=NOW)["stocks"][0]
-    assert row["to"] == "Tue Oct 20, 10:30 ET" and row["change"] == "+2.00%"
+def test_a_stock_quoted_for_only_part_of_the_window_is_not_measured():
+    nvda = quotes(100.0, 99.0)
+    stops_early = quotes(200.0, 204.0, end=NOW - timedelta(minutes=30))
+    starts_late = quotes(200.0, 204.0, begin=START + timedelta(minutes=20))
+    old_start = [SimpleNamespace(timestamp=START - timedelta(minutes=29), value=200.0),
+                 *quotes(210.0, 220.0, begin=START + timedelta(minutes=30))]
+    for series in (stops_early, starts_late, old_start):
+        out = F.tech_stocks_same_window(history_of({"SMH": series, "NVDA": nvda}),
+                                        start=START, end=NOW)
+        assert [row["stock"] for row in out["stocks"]] == ["NVDA"]
+        assert out["not_measured"][0] == "SMH"
+
+
+def test_quotes_just_inside_the_edges_still_count():
+    edge = F.STOCK_EDGE
+    series = [SimpleNamespace(timestamp=START - edge, value=200.0),
+              SimpleNamespace(timestamp=NOW - edge, value=202.0)]
+    out = F.tech_stocks_same_window(history_of({"SMH": series}), start=START, end=NOW)
+    assert out["stocks"] == [{"stock": "chip stocks (SMH)", "change": "+1.00%",
+                              "from": "Tue Oct 20, 09:50 ET", "to": "Tue Oct 20, 10:50 ET"}]
+    late = [SimpleNamespace(timestamp=START - edge - timedelta(seconds=1), value=200.0),
+            series[1]]
+    assert F.tech_stocks_same_window(history_of({"SMH": late}), start=START,
+                                     end=NOW)["available"] is False
 
 
 # ------------------------------------------------------------------ the service

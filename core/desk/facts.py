@@ -675,20 +675,29 @@ def chip_stocks(state: Any) -> dict[str, Any]:
     return row
 
 
-def tech_stocks_same_window(history: HistoryFn, *, start: datetime, end: datetime,
-                            min_window: timedelta = timedelta(minutes=2)) -> dict[str, Any]:
+#: A stock counts as measured over a window only with a quote this close before
+#: the window's start and another this close before its end. These quotes are real
+#: time, so a wider gap means the stock was not trading for part of the window.
+STOCK_EDGE = timedelta(minutes=10)
+
+
+def tech_stocks_same_window(history: HistoryFn, *, start: datetime,
+                            end: datetime) -> dict[str, Any]:
     """Chip stocks and each megacap over ``start`` to ``end`` (a move's own window),
-    from stored quotes. A stock with no quote at both ends is left out, never
-    estimated: US stocks are quoted about 04:00 to 20:00 ET on trading days."""
-    moves = measure_moves(history, start=start, end=end, symbols=(CHIP_SYMBOL, *MEGACAPS),
-                          min_window=min_window)
+    from stored quotes. A stock without a quote near both ends (``STOCK_EDGE``) is
+    named as not measured, never estimated or measured over part of the window:
+    US stocks are quoted about 04:00 to 20:00 ET on trading days."""
+    symbols = (CHIP_SYMBOL, *MEGACAPS)
+    moves = [m for m in measure_moves(history, start=start, end=end, symbols=symbols)
+             if m.start_at >= start - STOCK_EDGE and m.end_at >= end - STOCK_EDGE]
+    missing = [s for s in symbols if s not in {m.symbol for m in moves}]
     if not moves:
         return {"available": False,
                 "why_not": "no stock quotes at both ends of this window (US stocks are "
-                           "quoted about 04:00 to 20:00 ET on trading days)"}
+                           "quoted about 04:00 to 20:00 ET on trading days)",
+                "not_measured": missing}
     rows = [{"stock": "chip stocks (SMH)" if m.symbol == CHIP_SYMBOL else m.symbol,
              "change": m.text, "from": _et(m.start_at), "to": _et(m.end_at)} for m in moves]
-    missing = [s for s in (CHIP_SYMBOL, *MEGACAPS) if s not in {m.symbol for m in moves}]
     return {"available": True, "stocks": rows,
             **({"not_measured": missing} if missing else {})}
 

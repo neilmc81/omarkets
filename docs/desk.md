@@ -541,8 +541,9 @@ earlier versions get neither fact (`VERSION_FACTS` in `core/desk/prompts.py`).
 - **`tech_stocks_same_window`** (move and event notes): SMH and each megacap from the
   move's start to its end, from stored quotes (`F.tech_stocks_same_window`, the same
   measurement as `other_markets_same_window`). Each row has its own `from` and `to`. A
-  stock with no quote at both ends is listed under `not_measured`; with none at all the
-  fact says `available: false` and why (US stocks are quoted about 04:00 to 20:00 ET
+  stock without a quote in the 10 minutes before the start and another in the 10
+  minutes before the end (`STOCK_EDGE`) is listed under `not_measured`, never measured
+  over part of the window; with none at all the fact says `available: false` and why (US stocks are quoted about 04:00 to 20:00 ET
   on trading days). These rows are for the writer only: the note's stored `moves`
   list, and so the UI, is unchanged.
 - **Rule** (appended to rule 19): quote the chip change only when live; use the
@@ -550,7 +551,10 @@ earlier versions get neither fact (`VERSION_FACTS` in `core/desk/prompts.py`).
   instrument; stocks moving together show who took part, not why (the reason still
   comes from `why_evidence`).
 
-Ask notes get `chip_stocks` only. Not built here: real yields.
+Ask notes get `chip_stocks` only. Known limit, shared with the megacaps: outside US
+stock hours a stock's last quote is labelled `stale`, not `closed`, because registry
+stocks use the futures session calendar (the rule above keeps a stale change from being
+quoted as current). Not built here: real yields.
 
 ## Did it hold? (release, Fed, earnings and move notes)
 
