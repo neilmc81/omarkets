@@ -295,3 +295,26 @@ def test_btc_quiet_spell_across_utc_midnight_stays_a_gap(memory_repo):
     assert [(b.time.isoformat(), b.count) for b in built] == [
         ("2026-10-22T23:00:00+00:00", 1), ("2026-10-23T00:00:00+00:00", 0),
         ("2026-10-23T01:00:00+00:00", 1)]
+
+
+@pytest.mark.parametrize("last", [
+    datetime(2026, 10, 20, 14, 7, 30, tzinfo=UTC),
+    datetime(2026, 10, 20, 14, 15, tzinfo=UTC),   # a quote exactly on a bucket boundary
+    datetime(2026, 10, 20, 14, 14, 59, tzinfo=UTC),  # the read ends on a boundary
+])
+def test_sparkline_parts_are_exactly_the_one_read(memory_repo, last):
+    """The sparkline is read in three parts; together they are the single 24-hour read."""
+    from core.api import chart
+
+    # Stepping back from ``last`` so the newest quote is exactly at it.
+    quotes = [MarketObservation(symbol="NQ", timestamp=last - timedelta(seconds=97 * i),
+                                value=100.0 + i / 4, unit="index points", source="t",
+                                received_at=last - timedelta(seconds=97 * i))
+              for i in range(26 * 3600 // 97, -1, -1)]
+    memory_repo.store(quotes)
+    assert quotes[-1].timestamp == last
+    end = last + timedelta(seconds=1)
+    one = memory_repo.ohlc("NQ", start=end - chart.SPARKLINE_SPAN, end=end, bucket_seconds=900)
+    for _ in range(2):  # the second time from what storage remembers
+        assert chart._sparkline_buckets(memory_repo, "NQ", end, 900) == one
+    assert len(one) >= 96

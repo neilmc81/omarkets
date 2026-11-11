@@ -15,7 +15,7 @@ number is computed here in the core; the web app only draws it.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Annotated
 
@@ -61,6 +61,9 @@ LEVEL_SYMBOLS = frozenset({"NQ", "ES", "YM"})
 RELEASE_PIN_SYMBOLS = frozenset({"NQ"})
 HOLIDAYS_AHEAD = timedelta(days=21)
 SPARKLINE_SPAN = timedelta(hours=24)
+#: The newest buckets are read fresh on every request: quotes still arrive there
+#: (a delayed feed's are 10 to 15 minutes old), which would drop a remembered read.
+SPARKLINE_FRESH_BUCKETS = 2
 
 
 def _symbol(symbol: str) -> str:
@@ -259,6 +262,27 @@ def _sparkline_symbols(symbols: str | None) -> list[str]:
     return list(dict.fromkeys(asked))
 
 
+def _floor(moment: datetime, seconds: int) -> datetime:
+    return datetime.fromtimestamp(moment.timestamp() // seconds * seconds, tz=UTC)
+
+
+def _sparkline_buckets(service, symbol: str, end: datetime, seconds: int) -> list:
+    """The buckets of the 24 hours to ``end``, read in three parts that meet on
+    bucket boundaries, so together they are exactly the one read. Only the
+    middle part is large, and it is the same read for a whole bucket's time,
+    which storage remembers; the first bucket and the newest ones are read fresh.
+    """
+    start = end - SPARKLINE_SPAN
+    head = min(_floor(start, seconds) + timedelta(seconds=seconds), end)
+    tail = max(_floor(end, seconds) - SPARKLINE_FRESH_BUCKETS * timedelta(seconds=seconds), head)
+    buckets: list = []
+    for part_start, part_end in ((start, head), (head, tail), (tail, end)):
+        if part_start < part_end:
+            buckets += service.ohlc(symbol, start=part_start, end=part_end,
+                                    bucket_seconds=seconds)
+    return buckets
+
+
 @router.get("/sparklines", response_model=Sparklines,
             responses={503: {"description": "Storage unavailable"},
                        422: {"description": "Unknown instrument"}})
@@ -282,9 +306,8 @@ async def sparklines(
                 lines.append(B.sparkline(symbol, [], interval))
                 continue
             end = inst.timestamp + timedelta(seconds=1)
-            lines.append(B.sparkline(symbol, service.ohlc(
-                symbol, start=end - SPARKLINE_SPAN, end=end,
-                bucket_seconds=INTERVAL_SECONDS[interval]), interval))
+            lines.append(B.sparkline(symbol, _sparkline_buckets(
+                service, symbol, end, INTERVAL_SECONDS[interval]), interval))
         return lines
 
     try:

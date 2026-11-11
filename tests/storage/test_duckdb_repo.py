@@ -479,3 +479,143 @@ def test_store_stays_fast_while_another_thread_runs_python(repo):
         stop.set()
         worker.join()
     assert statistics.median(durations) < 0.1, durations
+
+
+# ------------------------------------------------------- remembered ohlc reads
+
+_T0 = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
+
+
+def _counting(repo, monkeypatch) -> list:
+    """Every query ``repo.ohlc`` really runs."""
+    reads: list = []
+    real = repo._ohlc_read
+
+    def read(*args):
+        reads.append(args)
+        return real(*args)
+
+    monkeypatch.setattr(repo, "_ohlc_read", read)
+    return reads
+
+
+def _window(repo, symbol="NQ", start=_T0, hours=1):
+    return repo.ohlc(symbol, start=start, end=start + timedelta(hours=hours), bucket_seconds=900)
+
+
+def test_ohlc_is_read_once_for_a_window_nothing_is_stored_in(repo, monkeypatch):
+    repo.store([_obs(value=1.0, ts=_T0 + timedelta(minutes=5))])
+    reads = _counting(repo, monkeypatch)
+    first = _window(repo)
+    # Later quotes, and another symbol's quotes inside the window, change nothing.
+    repo.store([_obs(value=2.0, ts=_T0 + timedelta(hours=1)),
+                _obs("ES", value=3.0, ts=_T0 + timedelta(minutes=10))])
+    assert _window(repo) == first and len(reads) == 1
+    assert [b.close for b in first] == [1.0]
+    # The answer handed out is the caller's own: changing it changes no later one.
+    first.clear()
+    assert [b.close for b in _window(repo)] == [1.0] and len(reads) == 1
+
+
+def test_a_quote_stored_inside_the_window_is_seen_at_once(repo, monkeypatch):
+    repo.store([_obs(value=1.0, ts=_T0 + timedelta(minutes=5))])
+    reads = _counting(repo, monkeypatch)
+    assert [b.close for b in _window(repo)] == [1.0]
+    # A late quote for a time inside the window (and the window's first instant).
+    repo.store([_obs(value=7.0, ts=_T0 + timedelta(minutes=20))])
+    assert [b.close for b in _window(repo)] == [1.0, 7.0]
+    repo.store([_obs(value=9.0, ts=_T0)])
+    assert [b.open for b in _window(repo)] == [9.0, 7.0]
+    assert len(reads) == 3
+
+
+def test_ohlc_windows_and_bucket_sizes_are_remembered_apart(repo, monkeypatch):
+    repo.store([_obs(value=1.0, ts=_T0 + timedelta(minutes=5)),
+                _obs(value=2.0, ts=_T0 + timedelta(minutes=50))])
+    reads = _counting(repo, monkeypatch)
+    end = _T0 + timedelta(hours=1)
+    quarter = repo.ohlc("NQ", start=_T0, end=end, bucket_seconds=900)
+    hour = repo.ohlc("nq", start=_T0, end=end, bucket_seconds=3600)
+    part = repo.ohlc("NQ", start=_T0, end=end, bucket_seconds=900,
+                     within=[(_T0, _T0 + timedelta(minutes=30))])
+    assert (len(quarter), len(hour), len(part), len(reads)) == (2, 1, 1, 3)
+    assert repo.ohlc("NQ", start=_T0, end=end, bucket_seconds=3600) == hour and len(reads) == 3
+
+
+def test_compact_forgets_remembered_ohlc(repo, monkeypatch):
+    old = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
+    repo.store([_obs(value=float(i), ts=old + timedelta(seconds=10 * i)) for i in range(1, 6)])
+    reads = _counting(repo, monkeypatch)
+    assert _window(repo, start=old)[0].count == 5
+    assert repo.compact(now=old + timedelta(days=400)) > 0
+    assert _window(repo, start=old)[0].count == 1 and len(reads) == 2
+
+
+def test_a_quote_stored_during_a_read_keeps_that_read_from_being_remembered(repo, monkeypatch):
+    repo.store([_obs(value=1.0, ts=_T0 + timedelta(minutes=5))])
+    real = repo._ohlc_read
+
+    def read_then_a_quote_lands(*args):
+        rows = real(*args)  # this read saw the table before the quote below
+        repo.store([_obs(value=7.0, ts=_T0 + timedelta(minutes=20))])
+        return rows
+
+    monkeypatch.setattr(repo, "_ohlc_read", read_then_a_quote_lands)
+    assert [b.close for b in _window(repo)] == [1.0]
+    monkeypatch.setattr(repo, "_ohlc_read", real)
+    assert [b.close for b in _window(repo)] == [1.0, 7.0]
+
+
+def test_a_failed_ohlc_read_is_not_remembered(repo, monkeypatch):
+    repo.store([_obs(value=1.0, ts=_T0 + timedelta(minutes=5))])
+    real = repo._ohlc_read
+
+    def fail(*args):
+        raise StorageError("boom")
+
+    monkeypatch.setattr(repo, "_ohlc_read", fail)
+    with pytest.raises(StorageError):
+        _window(repo)
+    monkeypatch.setattr(repo, "_ohlc_read", real)
+    assert [b.close for b in _window(repo)] == [1.0]
+
+
+def test_remembered_ohlc_is_bounded_per_symbol(repo):
+    repo.store([_obs(value=1.0, ts=_T0)])
+    limit = repo._ohlc_cache.MAX_PER_SYMBOL
+    for i in range(limit + 5):
+        _window(repo, start=_T0 - timedelta(days=i + 1))
+    assert len(repo._ohlc_cache._answers["NQ"]) == limit
+
+
+def test_a_compact_that_fails_after_deleting_still_forgets(repo, monkeypatch):
+    old = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
+    repo.store([_obs(value=float(i), ts=old + timedelta(seconds=10 * i)) for i in range(1, 6)])
+    assert _window(repo, start=old)[0].count == 5
+
+    def fail(conn, key, value):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(repo, "_set_meta", fail)
+    with pytest.raises(StorageError):
+        repo.compact(now=old + timedelta(days=400))
+    assert _window(repo, start=old)[0].count == 1  # what a fresh read gives
+
+
+def test_overlapping_reads_keep_no_history_of_stored_quotes(repo):
+    cache = repo._ohlc_cache
+
+    def key(day: int) -> tuple:
+        return (_T0 + timedelta(days=day), _T0 + timedelta(days=day, hours=1), 900, ())
+
+    running = cache.get("NQ", key(0))
+    for day in range(1, 50):  # the next read begins before the last one ends
+        following = cache.get("NQ", key(day))
+        cache.stored([("NQ", _T0 + timedelta(minutes=5))])
+        cache.put(key(day - 1), running, ())
+        running = following
+        assert len(cache._reading) == 1
+    cache.put(key(49), running, ())
+    assert cache._reading == {}
+    # Only the first read's window took a quote while it ran: it is not remembered.
+    assert set(cache._answers["NQ"]) == {key(day) for day in range(1, 50)}

@@ -714,6 +714,16 @@ or reverse-proxy it publicly. Provider secrets are never returned in API data.
 | `/api/v1/ai/budget` | GET | AI cost guard status (weekly limit, spend, reservations) |
 | `/api/v1/theme` | GET | Active Omarchy palette (`/theme/stream` SSE, `POST /theme/reload`) |
 
+**Remembered bar reads.** Storage remembers the answer of each bar read
+(`DuckDBObservationRepository.ohlc`: symbol, window, bucket size). An answer is
+dropped the moment a quote of that symbol with an exchange time inside its window
+is stored, and all are dropped when old rows are thinned, so a remembered answer
+is always what a fresh read would give. Windows that ended in the past (prior-day
+and prior-week levels) are read once; windows at the live edge are re-read after
+each new quote. Sparklines read their 24 hours in three parts that meet on bucket
+boundaries (first bucket, middle, newest two buckets) so the large middle part is
+remembered. At most 64 answers per symbol are kept, in memory only.
+
 Calendar events (`/calendar`, `/calendar/today|week|upcoming`) carry `note_id`:
 the desk note written for that release, or null. The core matches it from the
 note id `release:<YYYYMMDDTHHMM>:<CODE>[+<CODE>…]` (the release minute in UTC and

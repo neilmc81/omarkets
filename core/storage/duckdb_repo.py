@@ -117,6 +117,70 @@ def _floor_minute(moment: datetime) -> datetime:
     return moment.astimezone(UTC).replace(second=0, microsecond=0)
 
 
+class _OhlcCache:
+    """Remembered :meth:`DuckDBObservationRepository.ohlc` answers.
+
+    An answer depends only on the stored rows of one symbol whose exchange time
+    falls in ``[start, end)``. So it stays right until a row of that symbol with
+    such a time is stored, which drops it, or rows are deleted, which drops
+    everything. A window that ends in the past is therefore read once; a window
+    that reaches the live edge is dropped by the next quote and costs nothing.
+    """
+
+    #: Per symbol; the oldest answer goes first.
+    MAX_PER_SYMBOL = 64
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._answers: dict[str, dict[tuple[object, ...], tuple[OhlcBucket, ...]]] = {}
+        #: Reads now running → [symbol, start, end, still good]. A read saw the
+        #: table before or after a row stored meanwhile, so one stored inside its
+        #: window (or any delete) marks it: its answer is not remembered.
+        self._reading: dict[int, list] = {}
+        self._tokens = 0
+
+    def get(self, symbol: str, key: tuple[object, ...]) -> tuple[OhlcBucket, ...] | int:
+        """The remembered answer, or a token to hand to :meth:`put` after reading.
+        ``key`` begins with the window's start and end."""
+        with self._lock:
+            hit = self._answers.get(symbol, {}).get(key)
+            if hit is not None:
+                return hit
+            self._tokens += 1
+            self._reading[self._tokens] = [symbol, key[0], key[1], True]
+            return self._tokens
+
+    def put(self, key: tuple[object, ...], token: int,
+            answer: tuple[OhlcBucket, ...] | None) -> None:
+        """End a read begun by :meth:`get`; ``answer`` is None when it failed."""
+        with self._lock:
+            symbol, _, _, good = self._reading.pop(token)
+            if answer is None or not good:
+                return
+            answers = self._answers.setdefault(symbol, {})
+            answers[key] = answer
+            while len(answers) > self.MAX_PER_SYMBOL:
+                del answers[next(iter(answers))]
+
+    def stored(self, rows: Iterable[tuple[str, datetime]]) -> None:
+        """Rows (symbol, exchange time) were stored: drop the answers they change."""
+        with self._lock:
+            for symbol, ts in rows:
+                for read in self._reading.values():
+                    if read[0] == symbol and read[1] <= ts < read[2]:
+                        read[3] = False
+                answers = self._answers.get(symbol)
+                if answers:
+                    for key in [k for k in answers if k[0] <= ts < k[1]]:
+                        del answers[key]
+
+    def clear(self) -> None:
+        with self._lock:
+            self._answers.clear()
+            for read in self._reading.values():
+                read[3] = False
+
+
 class DuckDBObservationRepository(ObservationRepository):
     """DuckDB implementation of :class:`ObservationRepository`."""
 
@@ -135,6 +199,7 @@ class DuckDBObservationRepository(ObservationRepository):
         self._reader: duckdb.DuckDBPyConnection | None = None
         self._last_health_ok = False
         self._last_key: dict[str, tuple[object, ...]] = {}
+        self._ohlc_cache = _OhlcCache()
 
     @classmethod
     def migrate_observations(
@@ -213,6 +278,7 @@ class DuckDBObservationRepository(ObservationRepository):
                 conn.execute(_SCHEMA_VERSION)
                 if self._meta(conn, "version") == "1":
                     removed = self._remove_repeated_polls(conn)
+                    self._ohlc_cache.clear()
                     logger.info("observation store migrated to v2: %d repeated polls removed",
                                 removed)
                 self._set_meta(conn, "version", self.SCHEMA_VERSION)
@@ -266,12 +332,14 @@ class DuckDBObservationRepository(ObservationRepository):
         with self._lock:
             keys = dict(self._last_key)
             rows: list[dict[str, object]] = []
+            written: list[tuple[str, datetime]] = []
             try:
                 for obs in observations:
                     key = _store_key(obs)
                     if keys.get(obs.symbol) == key:
                         continue
                     keys[obs.symbol] = key
+                    written.append((obs.symbol.strip().upper(), _to_utc(obs.timestamp)))
                     rows.append({
                         "symbol": obs.symbol,
                         "ts": _to_utc(obs.timestamp).isoformat(),
@@ -291,6 +359,9 @@ class DuckDBObservationRepository(ObservationRepository):
                 conn.execute(_INSERT_BATCH, [batch])
             except Exception as exc:
                 raise StorageError(f"cannot store observations: {exc}") from exc
+            finally:
+                # After the insert, so a read that began before it is not remembered.
+                self._ohlc_cache.stored(written)
             self._last_key = keys
         return len(rows)
 
@@ -376,6 +447,27 @@ class DuckDBObservationRepository(ObservationRepository):
     ) -> Sequence[OhlcBucket]:
         if bucket_seconds <= 0:
             raise ValueError("bucket_seconds must be positive")
+        name, first, last = symbol.strip().upper(), _to_utc(start), _to_utc(end)
+        key = (first, last, bucket_seconds,
+               tuple((_to_utc(a), _to_utc(b)) for a, b in within))
+        cached = self._ohlc_cache.get(name, key)
+        if not isinstance(cached, int):
+            return list(cached)
+        answer: tuple[OhlcBucket, ...] | None = None
+        try:
+            answer = tuple(self._ohlc_read(name, first, last, bucket_seconds, within))
+        finally:
+            self._ohlc_cache.put(key, cached, answer)
+        return list(answer)
+
+    def _ohlc_read(
+        self,
+        symbol: str,
+        start: datetime,
+        end: datetime,
+        bucket_seconds: int,
+        within: Sequence[tuple[datetime, datetime]],
+    ) -> list[OhlcBucket]:
         # One query for every sub-window: the cost is the scan, not the ranges.
         ranges = ""
         bounds: list[object] = []
@@ -417,8 +509,7 @@ class DuckDBObservationRepository(ObservationRepository):
                             false)
             FROM buckets ORDER BY bucket
         """
-        params = [symbol.strip().upper(), _to_utc(start), _to_utc(end), *bounds,
-                  bucket_seconds, bucket_seconds]
+        params = [symbol, start, end, *bounds, bucket_seconds, bucket_seconds]
         try:
             rows = self._read(query, params)
         except Exception as exc:
@@ -481,6 +572,9 @@ class DuckDBObservationRepository(ObservationRepository):
                     conn.execute("CHECKPOINT")
             except Exception as exc:
                 raise StorageError(f"cannot compact observations: {exc}") from exc
+            finally:
+                # Also when a later step fails: the rows may already be gone.
+                self._ohlc_cache.clear()
         return removed
 
     def health(self) -> bool:
@@ -503,6 +597,7 @@ class DuckDBObservationRepository(ObservationRepository):
 
     def close(self) -> None:
         with self._lock:
+            self._ohlc_cache.clear()
             with self._read_lock:
                 if self._reader is not None:
                     try:
