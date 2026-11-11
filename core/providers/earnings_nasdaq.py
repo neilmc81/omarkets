@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import ssl
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
@@ -89,24 +90,39 @@ def parse(payload: object, day: date) -> list[EarningsDate]:
     return result
 
 
+def _tls_context() -> ssl.SSLContext:
+    """Nasdaq's API refuses the default Python TLS cipher list (HTTP 403, seen
+    2026-11-10) and accepts this narrower modern one."""
+    context = ssl.create_default_context()
+    context.set_ciphers("ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM")
+    return context
+
+
 class NasdaqEarningsCalendar:
-    """Caches each day's mega-cap earnings; refreshes a day after ``ttl``."""
+    """Caches each day's mega-cap earnings; refreshes a day after ``ttl``.
+
+    After a failed fetch nothing is requested for ``retry_after``: the upstream
+    refuses every day alike, so asking again on each poll only adds load.
+    """
 
     def __init__(
         self,
         *,
         client: httpx.AsyncClient | None = None,
         ttl: timedelta = timedelta(hours=6),
+        retry_after: timedelta = timedelta(minutes=15),
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._client = client
         self._ttl = ttl
+        self._retry_after = retry_after
+        self._failed_at: datetime | None = None
         self._clock = clock
         self._cache: dict[date, tuple[datetime, list[EarningsDate]]] = {}
         self.last_error: str | None = None
 
     async def _fetch(self, day: date) -> list[EarningsDate]:
-        client = self._client or httpx.AsyncClient(timeout=15.0)
+        client = self._client or httpx.AsyncClient(timeout=15.0, verify=_tls_context())
         try:
             response = await client.get(
                 URL, params={"date": day.isoformat()},
@@ -124,12 +140,16 @@ class NasdaqEarningsCalendar:
         cached = self._cache.get(day)
         if cached is not None and now - cached[0] < self._ttl:
             return cached[1]
+        if self._failed_at is not None and now - self._failed_at < self._retry_after:
+            return cached[1] if cached else []
         try:
             rows = await self._fetch(day)
         except Exception as exc:  # noqa: BLE001 - provider isolation
+            self._failed_at = now
             self.last_error = f"earnings calendar unavailable ({type(exc).__name__})"
             logger.warning("nasdaq earnings fetch failed for %s: %s", day, type(exc).__name__)
             return cached[1] if cached else []
+        self._failed_at = None
         self.last_error = None
         self._cache[day] = (now, rows)
         return rows
