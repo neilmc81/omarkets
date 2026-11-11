@@ -20,6 +20,7 @@ from core.desk.prompts import (
     NoPromptProfile,
     Profile,
     Prompt,
+    hedged,
     profiles_at,
     render,
 )
@@ -61,6 +62,9 @@ class WriteResult:
     prompt: Prompt | None = None
     #: The note is fine but its ``why`` is missing or cites what wasn't supplied.
     why_invalid: bool = False
+    #: The note is fine but its "likely" why has a headline that states the reason
+    #: as fact (desk:v12).
+    needs_hedge: bool = False
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -94,13 +98,21 @@ def _draft_text(draft: NoteDraft) -> str:
 
 #: Why a draft's reason can't be used. The rest of the note still can.
 WHY_INVALID = "note's why is missing or cites evidence that was not supplied"
+#: Why a draft's headline can't stand: the reason is only "likely".
+HEDGE_MISSING = "headline states a likely reason as fact"
+#: Added to the request when the headline must be rewritten.
+HEDGE_INSTRUCTION = (
+    "CORRECTION: your why level is \"likely\", but the headline states the reason as fact. "
+    "Write the same note again with a headline that hedges it (for example \"likely\", "
+    "\"appears\", \"may\" or \"could\").")
 #: Written when the model gave no usable reason twice: a paid note is never lost to it.
 NO_USABLE_WHY = WhyRead(level="unknown",
                         text="This note could not tie a reason to the reports it was given.")
 
 
 def check_draft(draft: NoteDraft, *, rates_read_required: bool = True,
-                why_required: bool = False, evidence_ids: Iterable[int] = ()) -> str | None:
+                why_required: bool = False, evidence_ids: Iterable[int] = (),
+                hedge_likely: bool = False) -> str | None:
     if _ADVICE.search(_draft_text(draft)):
         return "draft contained trading advice"
     # The reader accepts a missing rates_read; a prompt that asks for it (every
@@ -113,6 +125,8 @@ def check_draft(draft: NoteDraft, *, rates_read_required: bool = True,
         if why is None or set(why.evidence) - set(evidence_ids) or (
                 why.level != "unknown" and not why.evidence):
             return WHY_INVALID
+        if hedge_likely and why.level == "likely" and not hedged(draft.headline):
+            return HEDGE_MISSING
     return None
 
 
@@ -326,6 +340,22 @@ class DeskWriter:
                 logger.warning("desk note kept without a sourced why")
                 result = replace(result, why_invalid=False, draft=result.draft.model_copy(
                     update={"why": NO_USABLE_WHY}))
+        elif result.needs_hedge:
+            # The same single regeneration the why gets; the note is never lost to it.
+            logger.warning("desk writer %s stated a likely reason as fact; regenerating",
+                           result.model)
+            again = await self._call(
+                result.model, replace(prompt, user=f"{prompt.user}\n\n{HEDGE_INSTRUCTION}"))
+            spent.append(again.cost_usd)
+            # Taken only if it invents no number the first note didn't: a note is
+            # not traded for one that hedges and brings a new unsupported figure.
+            if again.draft is not None and not again.why_invalid and set(
+                    invented_numbers(again.draft, prompt.number_sources)) <= set(
+                    invented_numbers(result.draft, prompt.number_sources)):
+                result = again
+        if result.needs_hedge:
+            logger.warning("desk note kept with an unhedged headline")
+            result = replace(result, needs_hedge=False)
         if result.draft is not None:
             checked = prompt.number_sources
             invented = invented_numbers(result.draft, checked)
@@ -334,7 +364,10 @@ class DeskWriter:
                                result.model, invented)
                 again = await self._call(result.model, prompt)
                 spent.append(again.cost_usd)
-                if again.draft is not None and not again.why_invalid:
+                # A rewrite that drops the hedge is not taken: the numbers are flagged
+                # either way, a likely reason stated as fact is not.
+                if (again.draft is not None and not again.why_invalid
+                        and not again.needs_hedge):
                     second = invented_numbers(again.draft, checked)
                     if len(second) <= len(invented):
                         result, invented = again, second
@@ -432,9 +465,12 @@ class DeskWriter:
                 draft = draft.model_copy(update={"why": None})
             problem = check_draft(draft, rates_read_required=prompt.rates_read_required,
                                   why_required=prompt.why_required,
-                                  evidence_ids=prompt.evidence_ids)
+                                  evidence_ids=prompt.evidence_ids,
+                                  hedge_likely=prompt.hedge_likely)
             if problem == WHY_INVALID:
                 return WriteResult(draft, model, cost, why_invalid=True)
+            if problem == HEDGE_MISSING:
+                return WriteResult(draft, model, cost, needs_hedge=True)
             if problem:
                 return WriteResult(None, model, cost, error=problem)
             return WriteResult(draft, model, cost)

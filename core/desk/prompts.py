@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +30,7 @@ V8 = "desk:v8"
 V9 = "desk:v9"
 V10 = "desk:v10"
 V11 = "desk:v11"
+V12 = "desk:v12"
 #: The version production writes by default (``desk_prompt_version`` overrides;
 #: desk:v8 stays selectable for NQ-only desks and replays; desk:v10 adds a labelled
 #: "why" to move and ask notes, written from ``why_evidence``).
@@ -201,6 +203,8 @@ class Profile:
     #: The task for one move note about several markets that moved in the same
     #: hour (desk:v11); ``None`` where the version has no such note.
     event_task: str | None = None
+    #: Whether a "likely" why needs a hedged headline (desk:v12).
+    hedge_likely: bool = False
 
 
 # --------------------------------------------------------------------------- desk:v9
@@ -401,12 +405,29 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
 BASIS_POINT = "1 basis point (bp) = 0.01 percentage point."
 #: Versions whose facts carry ``recent_lessons`` (the Learn boxes of the latest
 #: notes) so a note doesn't teach the same lesson again. desk:v8 never did.
-RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11})
+RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11, V12})
 #: Versions whose move and ask notes must say why, from ``why_evidence``.
-WHY_VERSIONS = frozenset({V10, V11})
+WHY_VERSIONS = frozenset({V10, V11, V12})
 #: Versions that write one note for several instruments moving in the same hour
 #: (``DeskService.due_jobs``). Earlier versions write one move note per instrument.
-EVENT_VERSIONS = frozenset({V11})
+EVENT_VERSIONS = frozenset({V11, V12})
+#: Versions whose why_evidence knows the move window: each item says when it was
+#: published against the move, and the ranking weighs that (``core.desk.evidence``).
+FRESH_VERSIONS = frozenset({V12})
+#: Versions that must hedge the headline when the why is "likely" (the writer asks
+#: once more when it doesn't).
+HEDGE_VERSIONS = frozenset({V12})
+#: Words that hedge a headline: "likely"/"appears" and their kin.
+HEDGES = ("likely", "appears", "appear", "may", "might", "could", "seems", "possibly",
+          "probably", "desk's read")
+#: "may" counts only in lower case: "May" in a headline is the month.
+_HEDGE = re.compile(r"\b(?:may|(?i:" + "|".join(re.escape(h) for h in HEDGES if h != "may")
+                    + r"))\b")
+
+
+def hedged(headline: str) -> bool:
+    """Whether the headline hedges its reason (needed when the why is "likely")."""
+    return bool(_HEDGE.search(headline.replace("\u2019", "'")))
 #: Facts only some prompt versions are written from → those versions; every
 #: other fact is shared. The one place a version's fact contract differs.
 VERSION_FACTS: Mapping[str, frozenset[str]] = {"recent_lessons": RECENT_LESSONS_VERSIONS,
@@ -680,6 +701,50 @@ _EVENT_TASK = (
     "all fields.")
 
 
+#: desk:v12 is desk:v11 plus rules about when a report was published against the move.
+#: Code supplies each item's "timing"; these rules say what the writer may do with it.
+_V12_SYSTEM = _swap(
+    _V10_SYSTEM,
+    ("An item with \"time_is_approximate\" may be an older story its "
+     "feed re-dated: never quote its time, and don't treat it as new.",
+     "An item with \"time_is_approximate\" may be an older story its "
+     "feed re-dated: never quote its time, and don't treat it as new. Each item's \"timing\" "
+     "says where its time falls against the move (move_from to move_to). Never give an "
+     "item's time as when the reason emerged unless its timing is \"during the move\"; "
+     "an item whose timing is \"time not known\" supports at most \"likely\"."),
+)
+
+_V12_WHY_TASK = _swap(
+    _WHY_TASK,
+    ("\"reported\": "
+     "an item itself says why {symbol} or its market moved;",
+     "\"reported\": "
+     "an item whose timing is \"during the move\" or \"after the move ended\" itself says "
+     "why {symbol} or its market moved, or an earlier-timed item whose own text clearly "
+     "names the same cause as a "
+     "release or event that the measured facts place inside or just before the move window; "
+     "otherwise the strongest level is \"likely\" and the text must say the report predates "
+     "the move;"),
+)
+
+_V12_INSTRUMENT_TASKS: dict[NoteKind, str] = {
+    **_V10_INSTRUMENT_TASKS,
+    NoteKind.MOVE: _V10_INSTRUMENT_TASKS[NoteKind.MOVE].replace(_WHY_TASK, _V12_WHY_TASK),
+    NoteKind.ASK: _swap(
+        _V10_INSTRUMENT_TASKS[NoteKind.ASK].replace(_WHY_TASK, _V12_WHY_TASK),
+        ("(markets_today), why,",
+         "(markets_today, whose change_today runs from the baseline named in change_from), why,"),
+        (" Length: 120-160 words across all fields.",
+         " Here move_from to move_to is today's session so far, and a why_evidence item's "
+         "timing is measured against its start. For what else moved, use last_two_hours "
+         "(each market's change from its \"from\" to \"to\"): that is the only same-window "
+         "figure, so never call a change_today the change over the same window. "
+         "Length: 120-160 words across all fields."),
+    ),
+}
+_V12_EVENT_TASK = _EVENT_TASK.replace(_WHY_TASK, _V12_WHY_TASK)
+
+
 def _v9(spec: InstrumentSpec) -> Profile:
     """An instrument's desk:v9 profile: the shared rules filled from its spec and
     its asset class's defaults."""
@@ -698,9 +763,16 @@ def _v11(spec: InstrumentSpec) -> Profile:
                     why_kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}), event_task=_EVENT_TASK)
 
 
+def _v12(spec: InstrumentSpec) -> Profile:
+    """desk:v11's profile with the timing rules and a hedged "likely" headline."""
+    return _profile(spec, _V12_SYSTEM, _V12_INSTRUMENT_TASKS,
+                    why_kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
+                    event_task=_V12_EVENT_TASK, hedge_likely=True)
+
+
 def _profile(spec: InstrumentSpec, system_text: str, instrument_tasks: Mapping[NoteKind, str],
              *, why_kinds: frozenset[NoteKind] = frozenset(),
-             event_task: str | None = None) -> Profile:
+             event_task: str | None = None, hedge_likely: bool = False) -> Profile:
     """The shared rules at one version, filled from an instrument's spec and its
     asset class's defaults."""
     defaults = ASSET_DEFAULTS[spec.asset]
@@ -732,7 +804,8 @@ def _profile(spec: InstrumentSpec, system_text: str, instrument_tasks: Mapping[N
     return Profile(system, {kind: text.format(**fields) for kind, text in templates.items()},
                    f"{defaults.about} {BASIS_POINT}",
                    rates_read_required=yields is not None, why_kinds=why_kinds,
-                   event_task=event_task.format(**fields) if event_task else None)
+                   event_task=event_task.format(**fields) if event_task else None,
+                   hedge_likely=hedge_likely)
 
 
 #: What the two Treasury yields share in desk:v9 (each is its own profile).
@@ -1155,6 +1228,7 @@ PROMPTS: Mapping[str, Mapping[str, Profile]] = {
     V9: {symbol: _v9(spec) for symbol, spec in SPECS.items()},
     V10: {symbol: _v10(spec) for symbol, spec in SPECS.items()},
     V11: {symbol: _v11(spec) for symbol, spec in SPECS.items()},
+    V12: {symbol: _v12(spec) for symbol, spec in SPECS.items()},
 }
 VERSIONS = tuple(PROMPTS)
 
@@ -1196,6 +1270,8 @@ class Prompt:
     #: Whether the note must have ``why``, and the evidence ids it may cite.
     why_required: bool = False
     evidence_ids: frozenset[int] = frozenset()
+    #: Whether a "likely" why needs a hedged headline (see ``hedged``).
+    hedge_likely: bool = False
 
     @property
     def system_sha256(self) -> str:
@@ -1267,4 +1343,5 @@ def render(kind: NoteKind, instrument: Instrument | None, facts: dict[str, Any],
                   stated_facts=profile.stated_facts,
                   rates_read_required=profile.rates_read_required,
                   why_required=kind in profile.why_kinds,
-                  evidence_ids=frozenset(item["id"] for item in evidence))
+                  evidence_ids=frozenset(item["id"] for item in evidence),
+                  hedge_likely=profile.hedge_likely and kind in profile.why_kinds)

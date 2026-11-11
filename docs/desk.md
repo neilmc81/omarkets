@@ -186,7 +186,7 @@ so a restart cannot produce a duplicate note or notification.
   not to teach one again; v8 facts never carry it. v9's stated facts include
   "1 basis point (bp) = 0.01 percentage point", so a note may quote it.
   `desk_prompt_version` (`OMARKETS_DESK_PROMPT_VERSION`: `desk:v8`, `desk:v9`,
-  `desk:v10` or `desk:v11`, default `desk:v9` since the Phase 2 release cut; see
+  `desk:v10`, `desk:v11` or `desk:v12`, default `desk:v9` since the Phase 2 release cut; see
   `.env.example`) selects the version. An instrument with no profile at that
   version is refused before anything is reserved or sent, and never borrows
   NQ's prompt. Event notes
@@ -476,6 +476,55 @@ member or joiner, along with that instrument's own notes and the desk-wide ones.
 To turn it on, set `OMARKETS_DESK_PROMPT_VERSION=desk:v11` in the service's drop-in
 and restart. Joins are written while the scheduler builds its jobs (`due_jobs`),
 so they happen on the first pass that sees the instrument past its trigger.
+
+## Fresh evidence and hedged headlines (`desk:v12`)
+
+`desk:v12` is `desk:v11` plus four changes; `desk:v9`, `v10` and `v11` are untouched
+(prompts and facts byte for byte). It is opt-in: set
+`OMARKETS_DESK_PROMPT_VERSION=desk:v12` in the service's drop-in and restart; the code
+default stays `desk:v9`. It was made after a review of live notes found old stories
+passing as fresh, "likely" headlines stating a guess as fact, and a Desk Note quoting
+the Dow's change today as a same-window figure.
+
+- **Evidence knows the window** (`core/desk/evidence.py`, no AI). Ranking is given the
+  window being explained: a move note's start and end, an event note's lead's window, and
+  for an ask note today's session so far (the active session's open to now, because the
+  ask's `why` explains today's direction). Each report gets a timing class from its
+  publication time: `during` (from 30 minutes before the window start up to now),
+  `shortly_before` (up to 3 hours before the start), `earlier` (older), or `unknown`
+  (its time is approximate). Scoring replaces the flat "+1 within 3 hours of now" with
+  +3 / +1 / 0 / 0 for those classes, and an `earlier` or `unknown` report whose headline
+  names this market and says it moved (so it describes some earlier move) loses 3 more,
+  6 below a `during` report of equal content. The minimum score is judged on content
+  alone, so the penalty orders reports but never drops one: a live page's headline is
+  updated after its stamp. Nothing after `now` or older than 24 hours counts, as before.
+- Each `why_evidence` item carries `timing` in words ("during the move", "after the move
+  ended" for a report published after the measured end, "about 4 hours
+  before the move began", "about a day before the move began", "time not known: may be
+  an older story"), and the fact carries `move_from` and `move_to`. `time` and
+  `time_is_approximate` stay.
+- **Rules.** "reported" may rest only on a `during` item (which includes a report
+  published after the move ended: it reports on the move, and its time is never given
+  as when the reason emerged), or on an earlier item whose own
+  text names the same cause as a release or event the measured facts place in or just
+  before the window; otherwise the strongest level is "likely" and the text says the
+  report predates the move. An item's time is never given as when the reason emerged
+  unless its timing is during the move; unknown timing supports at most "likely".
+- **A "likely" headline must hedge** (`HEDGES` in `core/desk/prompts.py`: likely,
+  appears, appear, may, might, could, seems, possibly, probably, "desk's read"). If it
+  doesn't, the writer regenerates once with a short instruction, sharing the single
+  regeneration allowance of the `why` check (never a second paid retry). If the new
+  headline still doesn't hedge, the note is kept and a warning is logged.
+  A hedge rewrite is taken only if it invents no number the first note didn't. Known
+  limit: the check looks for a hedge word anywhere in the headline, so a hedge on
+  something other than the cause ("ES falls on chip selling; yields may stabilize")
+  passes.
+- **Desk Note (ask) same-window figure.** Ask notes already measured the Dow over the last
+  two hours (`last_two_hours`, since `desk:v10`), but the ask task never named that key,
+  while `markets_today` lists the Dow's change today. A writer asked about "the same
+  window" reached for the figure it could see in the strip. The `desk:v12` ask task
+  names `last_two_hours` as the only same-window figure and says never to call a change
+  today the change over the same window. No fact keys changed.
 
 ## Did it hold? (release, Fed, earnings and move notes)
 
