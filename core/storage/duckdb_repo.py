@@ -133,31 +133,29 @@ class _OhlcCache:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._answers: dict[str, dict[tuple[object, ...], tuple[OhlcBucket, ...]]] = {}
-        self._reading = 0
-        #: Rows stored while a read was running: that read saw the table before
-        #: or after them, so it may not be remembered if they fall in its window.
-        self._stored_meanwhile: list[tuple[str, datetime]] = []
-        self._cleared = 0
+        #: Reads now running → [symbol, start, end, still good]. A read saw the
+        #: table before or after a row stored meanwhile, so one stored inside its
+        #: window (or any delete) marks it: its answer is not remembered.
+        self._reading: dict[int, list] = {}
+        self._tokens = 0
 
     def get(self, symbol: str, key: tuple[object, ...]) -> tuple[OhlcBucket, ...] | int:
-        """The remembered answer, or a token to hand to :meth:`put` after reading."""
+        """The remembered answer, or a token to hand to :meth:`put` after reading.
+        ``key`` begins with the window's start and end."""
         with self._lock:
             hit = self._answers.get(symbol, {}).get(key)
             if hit is not None:
                 return hit
-            self._reading += 1
-            return self._cleared
+            self._tokens += 1
+            self._reading[self._tokens] = [symbol, key[0], key[1], True]
+            return self._tokens
 
-    def put(self, symbol: str, key: tuple[object, ...], start: datetime, end: datetime,
-            token: int, answer: tuple[OhlcBucket, ...] | None) -> None:
+    def put(self, key: tuple[object, ...], token: int,
+            answer: tuple[OhlcBucket, ...] | None) -> None:
         """End a read begun by :meth:`get`; ``answer`` is None when it failed."""
         with self._lock:
-            self._reading -= 1
-            fresh = token == self._cleared and not any(
-                name == symbol and start <= ts < end for name, ts in self._stored_meanwhile)
-            if self._reading == 0:
-                self._stored_meanwhile.clear()
-            if answer is None or not fresh:
+            symbol, _, _, good = self._reading.pop(token)
+            if answer is None or not good:
                 return
             answers = self._answers.setdefault(symbol, {})
             answers[key] = answer
@@ -168,8 +166,9 @@ class _OhlcCache:
         """Rows (symbol, exchange time) were stored: drop the answers they change."""
         with self._lock:
             for symbol, ts in rows:
-                if self._reading:
-                    self._stored_meanwhile.append((symbol, ts))
+                for read in self._reading.values():
+                    if read[0] == symbol and read[1] <= ts < read[2]:
+                        read[3] = False
                 answers = self._answers.get(symbol)
                 if answers:
                     for key in [k for k in answers if k[0] <= ts < k[1]]:
@@ -178,7 +177,8 @@ class _OhlcCache:
     def clear(self) -> None:
         with self._lock:
             self._answers.clear()
-            self._cleared += 1
+            for read in self._reading.values():
+                read[3] = False
 
 
 class DuckDBObservationRepository(ObservationRepository):
@@ -457,7 +457,7 @@ class DuckDBObservationRepository(ObservationRepository):
         try:
             answer = tuple(self._ohlc_read(name, first, last, bucket_seconds, within))
         finally:
-            self._ohlc_cache.put(name, key, first, last, cached, answer)
+            self._ohlc_cache.put(key, cached, answer)
         return list(answer)
 
     def _ohlc_read(
@@ -568,11 +568,13 @@ class DuckDBObservationRepository(ObservationRepository):
                 ).fetchone()
                 self._set_meta(conn, "thinned_before", cutoff.isoformat())
                 removed = int(row[0]) if row else 0
-                self._ohlc_cache.clear()
                 if removed:
                     conn.execute("CHECKPOINT")
             except Exception as exc:
                 raise StorageError(f"cannot compact observations: {exc}") from exc
+            finally:
+                # Also when a later step fails: the rows may already be gone.
+                self._ohlc_cache.clear()
         return removed
 
     def health(self) -> bool:

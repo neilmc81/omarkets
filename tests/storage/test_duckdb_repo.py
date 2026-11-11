@@ -586,3 +586,36 @@ def test_remembered_ohlc_is_bounded_per_symbol(repo):
     for i in range(limit + 5):
         _window(repo, start=_T0 - timedelta(days=i + 1))
     assert len(repo._ohlc_cache._answers["NQ"]) == limit
+
+
+def test_a_compact_that_fails_after_deleting_still_forgets(repo, monkeypatch):
+    old = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
+    repo.store([_obs(value=float(i), ts=old + timedelta(seconds=10 * i)) for i in range(1, 6)])
+    assert _window(repo, start=old)[0].count == 5
+
+    def fail(conn, key, value):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(repo, "_set_meta", fail)
+    with pytest.raises(StorageError):
+        repo.compact(now=old + timedelta(days=400))
+    assert _window(repo, start=old)[0].count == 1  # what a fresh read gives
+
+
+def test_overlapping_reads_keep_no_history_of_stored_quotes(repo):
+    cache = repo._ohlc_cache
+
+    def key(day: int) -> tuple:
+        return (_T0 + timedelta(days=day), _T0 + timedelta(days=day, hours=1), 900, ())
+
+    running = cache.get("NQ", key(0))
+    for day in range(1, 50):  # the next read begins before the last one ends
+        following = cache.get("NQ", key(day))
+        cache.stored([("NQ", _T0 + timedelta(minutes=5))])
+        cache.put(key(day - 1), running, ())
+        running = following
+        assert len(cache._reading) == 1
+    cache.put(key(49), running, ())
+    assert cache._reading == {}
+    # Only the first read's window took a quote while it ran: it is not remembered.
+    assert set(cache._answers["NQ"]) == {key(day) for day in range(1, 50)}
