@@ -345,6 +345,7 @@ def test_the_evidence_fact_is_shared_by_v12_and_the_ask_facts_keep_their_keys():
     ("Desk’s read: yields lift gold", True),
     ("Maybe gold rises", False),
     ("Gold mayhem", False),
+    ("Gold rises on May inflation surprise", False),  # the month is not a hedge
 ])
 def test_what_counts_as_a_hedge(headline, ok):
     assert P.hedged(headline) is ok
@@ -416,6 +417,15 @@ async def test_a_headline_that_still_does_not_hedge_keeps_the_note_and_warns(cap
     assert result.draft is not None and result.error is None
     assert result.draft.headline == "ES slides on tech selling" and not result.needs_hedge
     assert "unhedged headline" in caplog.text
+
+
+async def test_a_hedge_rewrite_that_invents_a_number_is_not_taken():
+    writer, bodies = writer_replying(reply("ES slides on tech selling"),
+                                     reply("ES likely slides 7% on tech selling"))
+    result = await writer.write(NoteKind.MOVE, FACTS, instrument=ES)
+    assert len(bodies) == 2  # the clean first note needs no number rewrite
+    assert result.draft.headline == "ES slides on tech selling"
+    assert result.unverified_numbers == () and not result.needs_hedge
 
 
 async def test_a_failed_regeneration_keeps_the_first_note():

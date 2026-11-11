@@ -420,7 +420,9 @@ HEDGE_VERSIONS = frozenset({V12})
 #: Words that hedge a headline: "likely"/"appears" and their kin.
 HEDGES = ("likely", "appears", "appear", "may", "might", "could", "seems", "possibly",
           "probably", "desk's read")
-_HEDGE = re.compile(r"\b(?:" + "|".join(re.escape(h) for h in HEDGES) + r")\b", re.IGNORECASE)
+#: "may" counts only in lower case: "May" in a headline is the month.
+_HEDGE = re.compile(r"\b(?:may|(?i:" + "|".join(re.escape(h) for h in HEDGES if h != "may")
+                    + r"))\b")
 
 
 def hedged(headline: str) -> bool:
