@@ -276,7 +276,7 @@ class Settings(BaseSettings):
     #: Prompt version new notes are written with (``core/desk/prompts.py``).
     #: desk:v8 (NQ's text only) can still be selected for an NQ-only desk.
     desk_prompt_version: Literal[
-        "desk:v8", "desk:v9", "desk:v10", "desk:v11", "desk:v12"] = "desk:v9"
+        "desk:v8", "desk:v9", "desk:v10", "desk:v11", "desk:v12", "desk:v13"] = "desk:v9"
     #: Instruments that get their own notes (default NQ, ES, YM, GOLD, WTI, DXY,
     #: US2Y, US10Y and VIX), e.g. ``OMARKETS_DESK_INSTRUMENTS='["NQ"]'``. NQ gets
     #: pre-market, move and ask notes; every other instrument move and ask only.

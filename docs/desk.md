@@ -526,6 +526,36 @@ the Dow's change today as a same-window figure.
   names `last_two_hours` as the only same-window figure and says never to call a change
   today the change over the same window. No fact keys changed.
 
+## Chip stocks and stocks over the move's window (`desk:v13`)
+
+`desk:v13` is `desk:v12` plus two facts for NQ, ES and YM notes (the instruments that
+get megacap participation). Every other instrument's prompt is `desk:v12`'s text, and
+earlier versions get neither fact (`VERSION_FACTS` in `core/desk/prompts.py`).
+
+- **`chip_stocks`** (every NQ, ES and YM note): how chip (semiconductor) shares as a
+  group have done today, from one quote: SMH, the VanEck Semiconductor ETF, a new
+  registry instrument served by the CNBC adapter in real time, pre-market included. It
+  carries `status` (live, closed, stale, unavailable), `change_today`, what the change
+  is measured from and when. Without a quote it has no number. SMH is not one of the
+  eight megacaps and is not counted in `megacap_participation`.
+- **`tech_stocks_same_window`** (move and event notes): SMH and each megacap from the
+  move's start to its end, from stored quotes (`F.tech_stocks_same_window`, the same
+  measurement as `other_markets_same_window`). Each row has its own `from` and `to`. A
+  stock without a quote in the 10 minutes before the start and another in the 10
+  minutes before the end (`STOCK_EDGE`) is listed under `not_measured`, never measured
+  over part of the window; with none at all the fact says `available: false` and why (US stocks are quoted about 04:00 to 20:00 ET
+  on trading days). These rows are for the writer only: the note's stored `moves`
+  list, and so the UI, is unchanged.
+- **Rule** (appended to rule 19): quote the chip change only when live; use the
+  same-window rows, never a change today, to say which stocks moved with the
+  instrument; stocks moving together show who took part, not why (the reason still
+  comes from `why_evidence`).
+
+Ask notes get `chip_stocks` only. Known limit, shared with the megacaps: outside US
+stock hours a stock's last quote is labelled `stale`, not `closed`, because registry
+stocks use the futures session calendar (the rule above keeps a stale change from being
+quoted as current). Not built here: real yields.
+
 ## Did it hold? (release, Fed, earnings and move notes)
 
 No AI call. After a note is written, the desk measures NQ, ES and the 2- and

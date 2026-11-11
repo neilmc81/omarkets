@@ -18,7 +18,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from core.desk import facts as F
@@ -31,6 +31,7 @@ V9 = "desk:v9"
 V10 = "desk:v10"
 V11 = "desk:v11"
 V12 = "desk:v12"
+V13 = "desk:v13"
 #: The version production writes by default (``desk_prompt_version`` overrides;
 #: desk:v8 stays selectable for NQ-only desks and replays; desk:v10 adds a labelled
 #: "why" to move and ask notes, written from ``why_evidence``).
@@ -405,18 +406,22 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
 BASIS_POINT = "1 basis point (bp) = 0.01 percentage point."
 #: Versions whose facts carry ``recent_lessons`` (the Learn boxes of the latest
 #: notes) so a note doesn't teach the same lesson again. desk:v8 never did.
-RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11, V12})
+RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11, V12, V13})
 #: Versions whose move and ask notes must say why, from ``why_evidence``.
-WHY_VERSIONS = frozenset({V10, V11, V12})
+WHY_VERSIONS = frozenset({V10, V11, V12, V13})
 #: Versions that write one note for several instruments moving in the same hour
 #: (``DeskService.due_jobs``). Earlier versions write one move note per instrument.
-EVENT_VERSIONS = frozenset({V11, V12})
+EVENT_VERSIONS = frozenset({V11, V12, V13})
 #: Versions whose why_evidence knows the move window: each item says when it was
 #: published against the move, and the ranking weighs that (``core.desk.evidence``).
-FRESH_VERSIONS = frozenset({V12})
+FRESH_VERSIONS = frozenset({V12, V13})
 #: Versions that must hedge the headline when the why is "likely" (the writer asks
 #: once more when it doesn't).
-HEDGE_VERSIONS = frozenset({V12})
+HEDGE_VERSIONS = frozenset({V12, V13})
+#: Versions whose NQ, ES and YM notes are told how chip stocks did (``chip_stocks``)
+#: and how chip stocks and each megacap moved over a move's own window
+#: (``tech_stocks_same_window``).
+CHIP_VERSIONS = frozenset({V13})
 #: Words that hedge a headline: "likely"/"appears" and their kin.
 HEDGES = ("likely", "appears", "appear", "may", "might", "could", "seems", "possibly",
           "probably", "desk's read")
@@ -432,7 +437,9 @@ def hedged(headline: str) -> bool:
 #: other fact is shared. The one place a version's fact contract differs.
 VERSION_FACTS: Mapping[str, frozenset[str]] = {"recent_lessons": RECENT_LESSONS_VERSIONS,
                                                "why_evidence": WHY_VERSIONS,
-                                               "the_event": EVENT_VERSIONS}
+                                               "the_event": EVENT_VERSIONS,
+                                               "chip_stocks": CHIP_VERSIONS,
+                                               "tech_stocks_same_window": CHIP_VERSIONS}
 
 
 def facts_at(version: str | None, facts: Mapping[str, Any]) -> dict[str, Any]:
@@ -768,6 +775,28 @@ def _v12(spec: InstrumentSpec) -> Profile:
     return _profile(spec, _V12_SYSTEM, _V12_INSTRUMENT_TASKS,
                     why_kinds=frozenset({NoteKind.MOVE, NoteKind.ASK}),
                     event_task=_V12_EVENT_TASK, hedge_likely=True)
+
+
+#: desk:v13 is desk:v12 plus chip stocks and the megacaps over the move's own window,
+#: for the instruments that get megacap participation. Other instruments' text is v12's.
+_V13_CHIP_RULE = (
+    " \"chip_stocks\" is how chip (semiconductor) shares as a group have done today, from "
+    "one fund's quote (\"what\" says which): quote its change only when its status is "
+    "\"live\", and say what it is in plain words the first time. "
+    "\"tech_stocks_same_window\", when supplied, gives chip stocks and each big tech stock "
+    "over the same window as the move (each with its own \"from\" and \"to\"): use it, not "
+    "the changes today, to say which stocks moved with {symbol} in that window; if "
+    "\"available\" is false, say stock moves over the window are not available and never "
+    "use a change today in their place. Stocks moving with {symbol} show who took part, "
+    "not why: the reason still comes from why_evidence.")
+
+
+def _v13(spec: InstrumentSpec) -> Profile:
+    """desk:v12's profile; with chip stocks and same-window stock moves where the
+    instrument gets megacap participation."""
+    if not spec.participation:
+        return _v12(spec)
+    return _v12(replace(spec, megacap_rule=spec.megacap_rule + _V13_CHIP_RULE))
 
 
 def _profile(spec: InstrumentSpec, system_text: str, instrument_tasks: Mapping[NoteKind, str],
@@ -1229,6 +1258,7 @@ PROMPTS: Mapping[str, Mapping[str, Profile]] = {
     V10: {symbol: _v10(spec) for symbol, spec in SPECS.items()},
     V11: {symbol: _v11(spec) for symbol, spec in SPECS.items()},
     V12: {symbol: _v12(spec) for symbol, spec in SPECS.items()},
+    V13: {symbol: _v13(spec) for symbol, spec in SPECS.items()},
 }
 VERSIONS = tuple(PROMPTS)
 

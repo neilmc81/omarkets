@@ -65,6 +65,7 @@ SYMBOL_MAP: dict[str, str] = {
     "GOOGL": "GOOGL.O",
     "AVGO": "AVGO.O",
     "TSLA": "TSLA.O",
+    "SMH": "SMH",
 }
 
 #: Canonical symbol -> the exchange delay (seconds) CNBC serves it with. A

@@ -289,7 +289,7 @@ def test_v12_is_selectable_layered_on_v11_and_not_the_default():
     assert P.PROMPT_VERSION == P.V9
     assert Settings(_env_file=None, desk_prompt_version=P.V12).desk_prompt_version == P.V12
     assert P.V12 in P.WHY_VERSIONS and P.V12 in P.EVENT_VERSIONS
-    assert P.FRESH_VERSIONS == {P.V12} and P.HEDGE_VERSIONS == {P.V12}
+    assert P.FRESH_VERSIONS == {P.V12, P.V13} and P.HEDGE_VERSIONS == {P.V12, P.V13}
     assert set(P.PROMPTS[P.V12]) == set(P.PROMPTS[P.V11])
 
 
