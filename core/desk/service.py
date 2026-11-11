@@ -60,6 +60,7 @@ from core.desk.models import (
     WatchCard,
 )
 from core.desk.prompts import (
+    CHIP_VERSIONS,
     EVENT_VERSIONS,
     FRESH_VERSIONS,
     PROMPT_VERSION,
@@ -909,7 +910,17 @@ class DeskService:
             symbol=inst.symbol)
         return {**self._location(now, inst),
                 **({"normal_move_size": normal} if normal else {}),
-                **F.participation(state, inst.symbol)}
+                **F.participation(state, inst.symbol,
+                                  chips=self.prompt_version in CHIP_VERSIONS)}
+
+    def _tech_window(self, inst: Instrument, start: datetime, end: datetime) -> dict[str, Any]:
+        """Chip stocks and the megacaps over a move's own window, for the instruments
+        that get megacap participation at a version that takes it (else nothing)."""
+        if (self.prompt_version not in CHIP_VERSIONS
+                or inst.symbol not in F.PARTICIPATION_INSTRUMENTS):
+            return {}
+        return {"tech_stocks_same_window": F.tech_stocks_same_window(
+            self.sources.history, start=start, end=end)}
 
     def _location(self, now: datetime, inst: Instrument = NQ) -> dict[str, Any]:
         """The instrument against its overnight, prior-day and prior-week levels,
@@ -1259,6 +1270,7 @@ class DeskService:
                                              move.end_at),
                 start=move.start_at, end=move.end_at, lead=MOVE_EVENT_LEAD),
             "other_markets_same_window": self._moves_facts(moves),
+            **(await asyncio.to_thread(self._tech_window, inst, move.start_at, move.end_at)),
             "headlines_around_the_move": self._headline_facts(news),
             "recent_omarkets_notes": [{"title": n.title, "summary": n.draft.summary}
                                       for n in recent],

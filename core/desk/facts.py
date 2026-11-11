@@ -41,6 +41,7 @@ LABELS: dict[str, str] = {
     "WTI": "Crude oil",
     "GOLD": "Gold",
     "BTC": "Bitcoin",
+    "SMH": "Chip stocks (SMH ETF)",
 }
 
 FED_CODES = frozenset({"FOMC", "FOMC_PRESS_CONFERENCE", "FOMC_MINUTES"})
@@ -651,11 +652,54 @@ def megacap_participation(state: Any, symbols: Sequence[str] = MEGACAPS) -> dict
             "stocks": stocks}
 
 
-def participation(state: Any, symbol: str) -> dict[str, Any]:
-    """NQ vs ES and megacap participation for an NQ, ES or YM note (else nothing)."""
+#: Chip stocks as a group: the semiconductor ETF, quoted like a stock.
+CHIP_SYMBOL = "SMH"
+_CHIPS_ARE = ("SMH, a fund that holds the big semiconductor (chip) shares such as Nvidia, "
+              "TSMC and Broadcom, used here as one figure for chip stocks")
+
+
+def chip_stocks(state: Any) -> dict[str, Any]:
+    """How chip stocks as a group have done today, from the semiconductor ETF's
+    quote. Without a live quote the status says so and no change is given as current."""
+    inst = state.instruments.get(CHIP_SYMBOL)
+    if inst is None or inst.value is None or _value(inst, "status") == "unavailable":
+        return {"what": _CHIPS_ARE, "status": "unavailable"}
+    closed = bool(getattr(inst, "market_closed", False))
+    status = "closed" if closed else "stale" if _value(inst, "status") == "stale" else "live"
+    row: dict[str, Any] = {"what": _CHIPS_ARE, "status": status}
+    if inst.change_pct is not None:
+        row["change_today"] = _pct(inst.change_pct)
+        row["change_from"] = _baseline_text(inst, CHIP_SYMBOL)
+    if inst.timestamp is not None:
+        row["as_of"] = _et(inst.timestamp)
+    return row
+
+
+def tech_stocks_same_window(history: HistoryFn, *, start: datetime, end: datetime,
+                            min_window: timedelta = timedelta(minutes=2)) -> dict[str, Any]:
+    """Chip stocks and each megacap over ``start`` to ``end`` (a move's own window),
+    from stored quotes. A stock with no quote at both ends is left out, never
+    estimated: US stocks are quoted about 04:00 to 20:00 ET on trading days."""
+    moves = measure_moves(history, start=start, end=end, symbols=(CHIP_SYMBOL, *MEGACAPS),
+                          min_window=min_window)
+    if not moves:
+        return {"available": False,
+                "why_not": "no stock quotes at both ends of this window (US stocks are "
+                           "quoted about 04:00 to 20:00 ET on trading days)"}
+    rows = [{"stock": "chip stocks (SMH)" if m.symbol == CHIP_SYMBOL else m.symbol,
+             "change": m.text, "from": _et(m.start_at), "to": _et(m.end_at)} for m in moves]
+    missing = [s for s in (CHIP_SYMBOL, *MEGACAPS) if s not in {m.symbol for m in moves}]
+    return {"available": True, "stocks": rows,
+            **({"not_measured": missing} if missing else {})}
+
+
+def participation(state: Any, symbol: str, *, chips: bool = False) -> dict[str, Any]:
+    """NQ vs ES and megacap participation for an NQ, ES or YM note (else nothing);
+    with ``chips``, chip stocks as a group too."""
     if symbol not in PARTICIPATION_INSTRUMENTS:
         return {}
-    return {"nq_vs_es": nq_vs_es(state), "megacap_participation": megacap_participation(state)}
+    return {"nq_vs_es": nq_vs_es(state), "megacap_participation": megacap_participation(state),
+            **({"chip_stocks": chip_stocks(state)} if chips else {})}
 
 
 # --------------------------------------------------------------------------- events in a window

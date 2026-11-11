@@ -70,6 +70,7 @@ _SIM: dict[str, _Sim] = {
     "GOOGL": _Sim(start=176.80, sigma=0.38, model="walk"),
     "AVGO": _Sim(start=171.60, sigma=0.55, model="walk"),
     "TSLA": _Sim(start=248.90, sigma=0.95, model="walk"),
+    "SMH": _Sim(start=262.40, sigma=0.60, model="walk"),
 }
 
 

@@ -255,6 +255,9 @@ _ALL: tuple[Instrument, ...] = (
     _megacap("GOOGL", "Alphabet"),
     _megacap("AVGO", "Broadcom"),
     _megacap("TSLA", "Tesla"),
+    # Chip stocks as a group: an ETF that trades like a stock, pre-market included.
+    _instrument("SMH", "VanEck Semiconductor ETF", AssetClass.EQUITY, QuoteType.PRICE, "USD",
+                venue="NASDAQ", currency="USD", price_precision=2),
 )
 
 #: The canonical instrument registry. Read-only: the universe is static.

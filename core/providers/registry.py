@@ -79,5 +79,6 @@ DEFAULT_ROUTES: dict[str, str] = {
     "GOOGL": "cnbc",
     "AVGO": "cnbc",
     "TSLA": "cnbc",
+    "SMH": "cnbc",
     "BTC": "binance",
 }

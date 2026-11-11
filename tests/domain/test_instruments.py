@@ -41,12 +41,13 @@ REQUIRED_SYMBOLS = (
     "GOOGL",
     "AVGO",
     "TSLA",
+    "SMH",
 )
 
 
 def test_exactly_the_required_symbols_exist() -> None:
     assert set(all_symbols()) == set(REQUIRED_SYMBOLS)
-    assert len(all_symbols()) == 19
+    assert len(all_symbols()) == 20
     assert set(INSTRUMENTS) == set(REQUIRED_SYMBOLS)
 
 

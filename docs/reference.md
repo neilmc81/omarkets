@@ -320,7 +320,7 @@ synthetic provider. A failed live feed is never silently replaced by demo data.
 
 | Provider | Transport | Instruments | Freshness | Auth |
 | --- | --- | --- | --- | --- |
-| CNBC quote webservice | HTTPS polling (5s default) | NQ, ES, WTI (explicit front-month futures), US2Y, US10Y, DXY, VIX, VXN, WTI, GOLD, NVDA, MSFT, AAPL, AMZN, META, GOOGL, AVGO, TSLA | NQ/ES ~10 min **delayed**; yields/DXY ~seconds; index/equity closes after hours | none |
+| CNBC quote webservice | HTTPS polling (5s default) | NQ, ES, WTI (explicit front-month futures), US2Y, US10Y, DXY, VIX, VXN, WTI, GOLD, NVDA, MSFT, AAPL, AMZN, META, GOOGL, AVGO, TSLA, SMH | NQ/ES ~10 min **delayed**; yields/DXY ~seconds; index/equity closes after hours | none |
 | Binance spot | HTTPS polling (10s default) | BTC | seconds | none |
 
 Verified real fetch on 2026-09-18: NQZ26 29,918, ESZ26 7,734, US10Y 4.922%,
@@ -1008,7 +1008,7 @@ Canonical symbols (not vendor tickers — provider adapters map onto these):
 
 **Context:** ES, US2Y, US10Y, DXY, VIX, VXN, WTI, GOLD, BTC
 
-**Technology:** NVDA, MSFT, AAPL, AMZN, META, GOOGL, AVGO, TSLA
+**Technology:** NVDA, MSFT, AAPL, AMZN, META, GOOGL, AVGO, TSLA; SMH (semiconductor ETF, chip stocks as a group)
 
 ## Architecture (high level)
 
