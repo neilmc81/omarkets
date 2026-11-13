@@ -218,7 +218,40 @@ async def test_rejection_reports_the_http_status() -> None:
     source, client, seen = _counting_source([httpx.Response(404)])
     with pytest.raises(NewsSourceError, match=r"HTTP request rejected \(HTTP 404\)"):
         await source.fetch()
-    assert len(seen) == 1 and source.backoff_seconds == 0
+    assert len(seen) == 2 and source.backoff_seconds == 0  # one retry, then reported
+    await client.aclose()
+
+
+async def test_lone_404_from_an_official_feed_is_retried_not_reported() -> None:
+    """Nov 13, 2026: press_all.xml 404s now and then, yet the URL is current; one
+    retry recovers it so the source is not left degraded."""
+    sleeps: list[float] = []
+    source, client, seen = _counting_source(
+        [httpx.Response(404), httpx.Response(200, content=RSS)], sleeps
+    )
+    assert len(await source.fetch()) == 2 and len(seen) == 2 and sleeps == [1.0]
+    source.record_success(2)
+    assert source.health().status is SourceStatus.HEALTHY
+    await client.aclose()
+
+
+async def test_404_is_not_retried_for_plain_http_sources() -> None:
+    from core.providers.news.rss import RssFeedSource
+
+    seen: list[int] = []
+
+    async def handler(request):
+        seen.append(1)
+        return httpx.Response(404)
+
+    metadata = SourceMetadata(name="plain", display_name="Plain", source_type=SourceType.NEWS)
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    source = RssFeedSource(
+        metadata=metadata, url="https://example.test/feed.xml", client=client, clock=lambda: NOW
+    )
+    with pytest.raises(NewsSourceError, match=r"HTTP 404"):
+        await source.fetch()
+    assert len(seen) == 1
     await client.aclose()
 
 
