@@ -80,13 +80,24 @@ _ANALYSIS = re.compile(r"^(why|how|what|analysis|opinion|explainer|live)\b|\?\s*
 
 #: Conflict headlines about what might happen are not an event that happened.
 _SPECULATION = re.compile(r"\b(possible|could|may|might|warns?|threat\w*|prepar\w*|plans?|"
-                          r"planned|considers?|weighs?|reportedly)\b", re.IGNORECASE)
+                          r"considers?|weighs?|reportedly)\b", re.IGNORECASE)
 
-#: ...nor is one the headline denies, rules out, or calls unlikely.
-_DENIAL = re.compile(r"\b((highly |very |seems? |is |are )?un(likely|planned)|no (attack|strike|"
-                     r"invasion)s?|(denies|denied|deny|dismisses|dismissed|rules? out|ruled out|"
-                     r"rejects?|rejected|no plans?|not planning|won'?t|will not|"
-                     r"no intention)\b)", re.IGNORECASE)
+#: ...nor is one the headline denies, rules out, or calls unlikely. The negation has
+#: to be about the attack itself: "US attacks Iran, Pentagon denies civilian
+#: casualties" or "Iran rejects ceasefire, launches new attacks" are real events.
+_ACT = r"(?:attacks?|strikes?|invasions?|invad\w+|war|military action)\b"
+_DENIAL = re.compile(
+    # "more US attacks on Iran 'highly unlikely'" / "... not likely" / "... not expected"
+    rf"\b{_ACT}[^,;:.]{{0,40}}?\b"
+    r"(?:(?:highly |very )?unlikely\b(?! to\b)|not (?:likely|expected)\b)"
+    # "no attack on Israel is planned"
+    rf"|\bno {_ACT}[^,;:.]{{0,30}}?\b(?:is|are|was|will be) (?:planned|expected|imminent|coming)\b"
+    # "Israel rules out strikes on Iran", "no plans for an invasion"
+    rf"|\b(?:rul(?:es|ed|ing) out|no plans? (?:for|to)|no intention of|not planning|"
+    rf"denies (?:any )?plans? (?:for|to))\s+(?:[\w'’-]+\s+){{0,2}}{_ACT}"
+    # "Iran won't attack Israel"
+    rf"|\b(?:will not|won['’]t) (?:attack|strike|invade)\b",
+    re.IGNORECASE)
 
 
 def match_rule(headline: str, source: str) -> Rule | None:
