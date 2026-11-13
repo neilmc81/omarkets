@@ -312,3 +312,31 @@ def test_denied_or_speculative_launches_and_shared_hedges_are_quiet(headline):
 ])
 def test_these_still_alert(headline):
     assert B.match_rule(headline, "bbc_world").key == "conflict"
+
+
+@pytest.mark.parametrize("headline", [
+    "US plans strikes on Iran and attacks on Taiwan kill 20",
+    "US plans strikes on Iran and attacks on Taiwan kill 40",
+    "US plans strikes on Iran and attacks on Israel kill 40",
+    "US plans strikes on Iran and invasion of Taiwan has begun",
+    "US plans strikes on Iran and invasion of Taiwan begins",
+    "US plans strikes on Iran and an invasion of Taiwan is under way",
+    "US may respond and invasion of Taiwan begins",
+    "Israel weighs attack and strikes on Iran kill 20",
+    "US plans strikes on Iran and attacks Taiwan",
+    "Iran launches missiles at the U.S.",
+    "Iran launches ballistic missiles at Israel",
+])
+def test_a_clause_with_its_own_predicate_does_not_inherit_a_hedge(headline):
+    assert B.match_rule(headline, "bbc_world").key == "conflict"
+
+
+@pytest.mark.parametrize("headline", [
+    "US plans strikes on Iran to prevent war",
+    "US weighs strikes on Iran to stop attacks on Israel",
+    "US plans military action to prevent an invasion of Taiwan",
+    "Israel considers strikes on Iran to prevent a nuclear attack",
+    "US plans strikes on Iran and invasion of Taiwan",
+])
+def test_a_purpose_clause_after_speculation_is_quiet(headline):
+    assert B.match_rule(headline, "bbc_world") is None

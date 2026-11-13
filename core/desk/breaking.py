@@ -62,10 +62,10 @@ RULES: tuple[Rule, ...] = (
     Rule("conflict", "Attack or invasion", _rx(
         r"\b(invades?|invasion of|declares? war|blockade of taiwan|nuclear (test|strike|attack)|"
         r"(strikes?|attacks?|missiles?) on (taiwan|iran|israel|china|the us|the u\.s\.|america)|"
-        r"(china|iran|israel|russia|us|u\.s\.) launch(es|ed) missiles? at "
-        r"(taiwan|iran|israel|china|the us|the u\.s\.|america)|"
         r"(china|iran|israel|russia|us|u\.s\.) (strikes|attacks|bombs|invades) "
-        r"(taiwan|iran|israel|china|us|u\.s\.|american))\b")),
+        r"(taiwan|iran|israel|china|us|u\.s\.|american))\b|"
+        r"\b(china|iran|israel|russia|us|u\.s\.) launch(es|ed) (ballistic |cruise )?"
+        r"missiles? at (taiwan|iran|israel|china|the us|the u\.s\.|america)(?![\w])")),
     Rule("default", "Debt default or shutdown", _rx(
         r"\b(defaults? on (its )?(debt|bonds?|payments?)|debt default|sovereign default|"
         r"government shutdown (begins|starts)|shuts? down the government|debt ceiling breach)\b")),
@@ -103,8 +103,10 @@ _CLAUSE_SPLIT = re.compile(
 #: hedge of the clause before it ("US plans strikes on Iran and invasion of Taiwan").
 #: A verb ("and attacks Taiwan") has no preposition and so stands on its own.
 _NOUN_CONT = re.compile(
-    rf"^(?:(?:more|further|new|a|an|the|military|any) ){{0,2}}{_ACT} (?:on|against|of|in) ",
-    re.IGNORECASE)
+    rf"^(?:(?:more|further|new|a|an|the|military|any) ){{0,2}}{_ACT} (?:on|against|of|in) "
+    r"(?:the )?[\w.'-]+$", re.IGNORECASE)
+#: A purpose clause after speculation is as hypothetical as what it follows.
+_PURPOSE = re.compile(r"^(?:to|in order to|so as to)\b", re.IGNORECASE)
 #: Any of these in a clause makes it an attack clause (broad on purpose).
 _ATTACK_TERM = re.compile(
     r"\b(?:attack\w*|strike\w*|struck|invad\w*|invasion\w*|war|bomb\w*|missile\w*|blockade\w*|"
@@ -157,8 +159,9 @@ def _hedged_attack(headline: str) -> bool:
     speculative = False
     for i in range(0, len(parts), 2):
         clause = " ".join(parts[i].split())
-        shares = (i > 0 and parts[i - 1].lower() == "and" and bool(_NOUN_CONT.match(clause))
-                  and speculative)
+        sep = parts[i - 1].lower() if i > 0 else ""
+        shares = speculative and (
+            (sep == "and" and bool(_NOUN_CONT.match(clause))) or bool(_PURPOSE.match(sep)))
         speculative = shares or bool(_SPECULATION.search(clause))
         if _ATTACK_TERM.search(clause):
             hedged.append(speculative or _clause_negated(clause))
