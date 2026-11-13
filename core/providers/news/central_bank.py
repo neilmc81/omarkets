@@ -73,6 +73,8 @@ def extract_meeting_date(text: str) -> str | None:
 class CentralBankFeedSource(RssFeedSource):
     """RSS/Atom feed belonging to a central bank or monetary authority."""
 
+    retry_not_found = True
+
     def __init__(self, *, central_bank: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.central_bank = central_bank

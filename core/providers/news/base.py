@@ -131,6 +131,10 @@ class HttpNewsSource(NewsSource):
 
     max_bytes = 2_000_000
     request_timeout = 15.0
+    #: Retry a 404 once. For an official feed whose URL is known good, a lone 404
+    #: is a CDN glitch (the Fed's press_all.xml does it), not a retired feed; a
+    #: 404 that repeats still fails and is reported.
+    retry_not_found = False
 
     def __init__(
         self,
@@ -195,6 +199,8 @@ class HttpNewsSource(NewsSource):
                                 raise NewsSourceError(
                                     self.name, f"transient failure (HTTP {status})"
                                 )
+                        elif status == 404 and self.retry_not_found and not attempt:
+                            pass
                         elif status != 200:
                             raise NewsSourceError(
                                 self.name, f"HTTP request rejected (HTTP {status})"
