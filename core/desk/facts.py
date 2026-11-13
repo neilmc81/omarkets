@@ -110,6 +110,14 @@ def format_value(value: float | None, unit: str, decimals: int = 1) -> str:
     return f"{value:.{decimals}f}"
 
 
+def _fine(value: float, unit: str) -> str:
+    """Thousands with one decimal (19.8K), for values the plain text cannot tell apart."""
+    if unit == "percent" or not 1_000 <= abs(value) < 1_000_000:
+        return format_value(value, unit)
+    text = f"{value / 1_000:.1f}"
+    return (text[:-2] if text.endswith(".0") else text) + "K"
+
+
 def build_figure(
     name: str,
     unit: str,
@@ -118,6 +126,10 @@ def build_figure(
     previous: float | None,
     revised_previous: float | None = None,
 ) -> Figure:
+    if unit == "thousand jobs":  # FRED/BLS count in thousands; show it on the jobs scale
+        unit = "jobs"
+        actual, forecast, previous, revised_previous = (
+            None if v is None else v * 1000 for v in (actual, forecast, previous, revised_previous))
     decimals = reporting_decimals(unit, forecast, previous)
     shown = None if actual is None else _compare_round(actual, decimals)
     if shown is None:
@@ -128,6 +140,18 @@ def build_figure(
         expected = _compare_round(forecast, decimals)
         verdict = "in_line" if shown == expected else ("above" if shown > expected else "below")
     revised, revision_text = _revision(unit, decimals, previous, revised_previous)
+    actual_text = format_value(shown, unit, decimals)
+    previous_text = format_value(previous, unit, decimals)
+    forecast_text = format_value(forecast, unit, decimals)
+    if unit != "percent" and actual is not None and abs(actual) < 100_000 and (
+        (previous is not None and actual != previous and actual_text == previous_text)
+        or (forecast is not None and actual != forecast and actual_text == forecast_text)
+    ):
+        # Counts only: 19,750 vs 19,500 would both read "20K". Percentages keep
+        # the official rounding.
+        actual_text = _fine(actual, unit)
+        previous_text = previous_text if previous is None else _fine(previous, unit)
+        forecast_text = forecast_text if forecast is None else _fine(forecast, unit)
     return Figure(
         name=name,
         unit=unit,
@@ -136,9 +160,9 @@ def build_figure(
         previous=previous,
         decimals=decimals,
         verdict=verdict,
-        actual_text=format_value(shown, unit, decimals),
-        forecast_text=format_value(forecast, unit, decimals),
-        previous_text=format_value(previous, unit, decimals),
+        actual_text=actual_text,
+        forecast_text=forecast_text,
+        previous_text=previous_text,
         revised_previous=revised,
         revised_previous_text=None if revised is None else format_value(revised, unit, decimals),
         revision_text=revision_text,
@@ -290,6 +314,78 @@ def _value(item: Any, name: str):
     return getattr(value, "value", value)
 
 
+_ADP_SLOT_GAP = 300
+_HEADING_PROVIDERS = {"fred_release_calendar", "bls_calendar"}
+
+
+def has_near_duplicate_note(note_id: str, existing: Iterable[str]) -> bool:
+    """Whether another written release note has the same codes within five minutes.
+
+    A source can re-list one release a minute later, which gives the slot a new
+    key (``release:20261110T1315:ADP`` vs ``...T1316:ADP``) on a later pass.
+    """
+    def parse(key: str) -> tuple[datetime, str] | None:
+        stamp, _, codes = key.removeprefix("release:").partition(":")
+        try:
+            return datetime.strptime(stamp, "%Y%m%dT%H%M"), codes
+        except ValueError:
+            return None
+
+    mine = parse(note_id)
+    if mine is None:
+        return False
+    for other in existing:
+        theirs = parse(other)
+        if (other != note_id and theirs is not None and theirs[1] == mine[1]
+                and abs((theirs[0] - mine[0]).total_seconds()) <= _ADP_SLOT_GAP):
+            return True
+    return False
+
+
+_MOM_CODES = {"CPI", "CORE_CPI", "PPI", "CORE_PPI"}
+
+
+def _heading_rows(rows: list[Any]) -> tuple[set[int], dict[str, float]]:
+    """Heading rows to leave out of the figures, and actuals to move onto real rows.
+
+    A FRED/BLS heading row ("Consumer Price Index") repeats a figure the real
+    rows carry. It is dropped only when the figure it duplicates keeps its
+    actual: either a real row of the same metric already has one, or the heading's
+    own actual is moved onto the single real row it belongs to. Otherwise the
+    heading row stays, so a slot never loses its only actual.
+    """
+    def figure(row: Any) -> bool:
+        return row.unit != "release" and (
+            row.actual is not None or row.consensus is not None or row.previous is not None)
+
+    def same_metric(heading: Any, other: Any) -> bool:
+        # Headline CPI/PPI actuals are month-over-month, never year-over-year.
+        return heading.event_code not in _MOM_CODES or other.name.casefold().endswith("m/m")
+
+    skipped: set[int] = set()
+    carried: dict[str, float] = {}
+    for row in rows:
+        if getattr(row, "provider", None) not in _HEADING_PROVIDERS or not figure(row):
+            continue
+        real = [o for o in rows if getattr(o, "provider", None) not in _HEADING_PROVIDERS
+                and o.event_code == row.event_code and figure(o) and same_metric(row, o)]
+        if not real:
+            continue
+        if row.actual is None or any(o.actual is not None for o in real):
+            skipped.add(id(row))
+            continue
+        targets = {o.name.casefold(): o for o in real}
+        if len(targets) != 1:
+            continue
+        target = next(iter(targets.values()))
+        if (row.unit == "percent") != (target.unit == "percent"):
+            continue
+        scale = 1000 if row.unit == "thousand jobs" and target.unit != "thousand jobs" else 1
+        carried[target.name.casefold()] = row.actual * scale
+        skipped.add(id(row))
+    return skipped, carried
+
+
 def release_slots(
     events: Iterable[Any],
     *,
@@ -303,17 +399,23 @@ def release_slots(
     kept only when its most important row reaches ``min_importance``.
     """
     groups: dict[datetime, list[Any]] = {}
-    for item in events:
+    for item in sorted(events, key=lambda e: getattr(e, "scheduled_at", None) or start):
         at = getattr(item, "scheduled_at", None)
         if at is None or not (start <= at < end):
             continue
         if getattr(item, "country", "US") != "US" or _value(item, "status") == "cancelled":
             continue
+        if item.event_code == "ADP":
+            # A source can list one ADP release twice a minute apart; one release, one note.
+            at = next((g for g in groups if abs((at - g).total_seconds()) <= _ADP_SLOT_GAP
+                       and any(r.event_code == "ADP" for r in groups[g])), at)
         groups.setdefault(at, []).append(item)
 
     slots: list[ReleaseSlot] = []
     for at, rows in sorted(groups.items()):
-        rows.sort(key=lambda r: -_RANK.get(_value(r, "importance"), 0))
+        # Most important first; among equals the latest (corrected) row leads.
+        rows.sort(key=lambda r: (-_RANK.get(_value(r, "importance"), 0),
+                                 -(getattr(r, "scheduled_at", at) or at).timestamp()))
         importance = _value(rows[0], "importance")
         if _RANK.get(importance, 0) < _RANK[min_importance]:
             continue
@@ -322,10 +424,11 @@ def release_slots(
             if row.event_code not in codes:
                 codes.append(row.event_code)
         merged: dict[str, dict[str, Any]] = {}
+        skipped, carried = _heading_rows(rows)
         for row in rows:
             if row.unit == "release" or (
                 row.actual is None and row.consensus is None and row.previous is None
-            ):
+            ) or id(row) in skipped:
                 continue
             slot = merged.setdefault(
                 row.name.casefold(),
@@ -343,6 +446,9 @@ def release_slots(
                 slot["revised_previous"] = revised
                 if row.previous is not None:
                     slot["previous"] = row.previous
+        for key, value in carried.items():
+            if key in merged and merged[key]["actual"] is None:
+                merged[key]["actual"] = value
         figures = [
             build_figure(m["name"], m["unit"], m["actual"], m["forecast"], m["previous"],
                          m["revised_previous"])

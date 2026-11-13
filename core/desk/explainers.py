@@ -260,12 +260,12 @@ READING_CODES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("fed", ("FOMC", "SEP")),
     ("jobless", ("INITIAL_CLAIMS", "CONTINUING_CLAIMS", "UNEMPLOYMENT")),
     ("inflation", ("CPI", "CORE_CPI", "PPI", "CORE_PPI", "BLS_PPI", "BLS_CORE_PPI", "PCE",
-                   "CORE_PCE", "ISM_MFG_PRICES", "AHE", "GDP_PRICE_INDEX")),
+                   "CORE_PCE", "ISM_MFG_PRICES", "AHE", "GDP_PRICE_INDEX", "ECI")),
     ("growth", ("PAYROLLS", "ADP", "RETAIL_SALES", "CORE_RETAIL_SALES", "GDP", "ISM_MFG",
                 "ISM_SERVICES", "INDUSTRIAL_PRODUCTION", "JOLTS", "DURABLE_GOODS",
                 "HOUSING_STARTS", "BUILDING_PERMITS", "EXISTING_HOME_SALES",
                 "NEW_HOME_SALES", "EMPIRE_STATE_MFG", "PHILLY_FED_MFG",
-                "CONSUMER_CONFIDENCE")),
+                "CONSUMER_CONFIDENCE", "UMICH_SENTIMENT", "PRODUCTIVITY")),
 )
 
 
@@ -350,6 +350,24 @@ INDICATORS: tuple[Explainer, ...] = (
                "Fewer than forecast: the job market is holding up. NQ's reaction is mixed."),
     _indicator("JOLTS", "Job openings (JOLTS)", "How many jobs employers are trying to fill.",
                "A read on how hot the job market is.", _GROWTH_UP, _GROWTH_DOWN),
+    _indicator("ECI", "Employment Cost Index",
+               "How much it costs employers to pay and benefit their workers.",
+               "A broad read on wage pressure, which feeds inflation.",
+               "More than forecast: labor costs are rising faster, so inflation worries grow. "
+               "Yields usually rise; NQ's reaction is mixed.",
+               "Less than forecast: labor costs are cooling. Yields usually fall; NQ's "
+               "reaction is mixed."),
+    _indicator("PRODUCTIVITY", "Productivity",
+               "How much output each hour of work produces.",
+               "Higher productivity lets companies pay more without raising prices.",
+               "More than forecast: workers are producing more per hour, which eases "
+               "inflation pressure. NQ's reaction is mixed.",
+               "Less than forecast: output per hour is slipping, which can push costs up. "
+               "NQ's reaction is mixed."),
+    _indicator("UMICH_SENTIMENT", "Michigan consumer sentiment",
+               "A survey of how households feel about their finances and the economy.",
+               "Confident households tend to keep spending; it also reports inflation "
+               "expectations.", _GROWTH_UP, _GROWTH_DOWN),
     _indicator("ADP", "ADP private jobs", "A private-sector estimate of hiring.",
                "A preview of the official jobs report two days later; usually a smaller "
                "mover.", _GROWTH_UP, _GROWTH_DOWN),

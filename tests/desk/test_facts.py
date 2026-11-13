@@ -7,10 +7,11 @@ T = datetime(2026, 10, 14, 12, 30, tzinfo=UTC)
 
 
 def row(code, name, *, at=T, actual=None, consensus=None, previous=None, unit="percent",
-        importance="critical", status="released", country="US"):
+        importance="critical", status="released", country="US", provider="consensus"):
     return SimpleNamespace(event_code=code, name=name, scheduled_at=at, actual=actual,
                            consensus=consensus, previous=previous, unit=unit,
-                           importance=importance, status=status, country=country)
+                           importance=importance, status=status, country=country,
+                           provider=provider)
 
 
 def obs(ts, value):
@@ -74,6 +75,137 @@ def test_release_slot_merges_sources_and_skips_schedule_only_rows():
     assert slot.complete
     assert slot.title == "Consumer prices (CPI) & Jobless claims"
     assert not slot.is_fed
+
+
+def test_official_heading_rows_do_not_add_a_duplicate_figure():
+    # After the calendar join the FRED/BLS heading row can carry the same number
+    # as the real figure, which showed up as a stray "Consumer Price Index: 0.4%".
+    rows = [
+        row("CPI", "Consumer Price Index", actual=0.4, provider="fred_release_calendar"),
+        row("CPI", "CPI m/m", actual=0.4, consensus=0.4, previous=0.3),
+        row("PAYROLLS", "Employment Situation", actual=160.0, unit="thousand jobs",
+            provider="bls_calendar"),
+        row("PAYROLLS", "Non-Farm Employment Change", actual=160000.0, consensus=150000.0,
+            unit="value"),
+    ]
+    [slot] = F.release_slots(rows, start=T - timedelta(hours=1), end=T + timedelta(hours=1))
+    assert [f.name for f in slot.figures] == ["CPI m/m", "Non-Farm Employment Change"]
+
+
+def test_heading_row_still_shows_when_it_is_the_only_figure():
+    rows = [row("JOLTS", "Job Openings and Labor Turnover Survey", actual=7079.0,
+                unit="thousand jobs", provider="fred_release_calendar", importance="high")]
+    [slot] = F.release_slots(rows, start=T - timedelta(hours=1), end=T + timedelta(hours=1))
+    assert [f.name for f in slot.figures] == ["Job Openings and Labor Turnover Survey"]
+
+
+def test_adp_slots_a_minute_apart_are_one_release():
+    rows = [
+        row("ADP", "ADP Weekly Employment Change", at=T, consensus=19500.0, previous=19500.0,
+            unit="value", importance="medium"),
+        row("ADP", "ADP Weekly Employment Change", at=T + timedelta(minutes=1),
+            actual=19750.0, consensus=19500.0, previous=19500.0, unit="value",
+            importance="medium"),
+    ]
+    slots = F.release_slots(rows, start=T - timedelta(hours=1), end=T + timedelta(hours=1),
+                            min_importance="medium")
+    assert len(slots) == 1
+    assert slots[0].key == f"{T:%Y%m%dT%H%M}:ADP"
+    assert slots[0].figures[0].actual == 20000.0
+
+
+def test_unrelated_slots_a_minute_apart_stay_separate():
+    rows = [row("CPI", "CPI m/m", consensus=0.3),
+            row("PPI", "PPI m/m", at=T + timedelta(minutes=1), consensus=0.2, importance="high")]
+    assert len(F.release_slots(rows, start=T - timedelta(hours=1),
+                               end=T + timedelta(hours=1))) == 2
+
+
+def test_previous_is_not_shown_equal_to_a_different_actual():
+    # ADP 10 Nov: actual 19,750 vs previous 19,500 both used to print as "20K".
+    figure = F.build_figure("ADP", "value", 19750.0, 19500.0, 19500.0)
+    assert figure.actual_text != figure.previous_text
+    assert figure.previous_text == "19.5K"
+    assert figure.actual_text == "19.8K"
+    assert F.build_figure("X", "value", 19_000.0, None, 19_000.0).previous_text == "19K"
+
+
+WIN = {"start": T - timedelta(hours=1), "end": T + timedelta(hours=1)}
+
+
+def test_heading_actual_is_not_dropped_for_a_forecast_only_row():
+    # Live JOLTS 3 Nov: FRED carried 7523 (thousands), consensus only the forecast.
+    rows = [
+        row("JOLTS", "Job Openings and Labor Turnover Survey", actual=7523.0,
+            unit="thousand jobs", provider="fred_release_calendar", importance="high"),
+        row("JOLTS", "JOLTS Job Openings", consensus=7180000.0, previous=7200000.0,
+            unit="value", importance="high"),
+    ]
+    [slot] = F.release_slots(rows, **WIN)
+    [figure] = slot.figures
+    assert figure.name == "JOLTS Job Openings"
+    assert figure.actual_text == "7.52M"
+    assert figure.forecast_text == "7.18M"
+
+
+def test_cpi_heading_actual_moves_to_mom_row_not_yoy():
+    rows = [
+        row("CPI", "Consumer Price Index", actual=0.4, provider="fred_release_calendar"),
+        row("CPI", "CPI m/m", consensus=0.3, previous=0.3),
+        row("CPI", "CPI y/y", consensus=3.0, previous=3.0),
+    ]
+    [slot] = F.release_slots(rows, **WIN)
+    by = {f.name: f for f in slot.figures}
+    assert by["CPI m/m"].actual_text == "0.4%"
+    assert by["CPI y/y"].actual_text == "—"
+    assert "Consumer Price Index" not in by
+
+
+def test_heading_actual_stays_when_real_rows_are_ambiguous():
+    rows = [
+        row("CPI", "Consumer Price Index", actual=0.4, provider="fred_release_calendar"),
+        row("CPI", "CPI y/y", consensus=3.0),
+    ]
+    [slot] = F.release_slots(rows, **WIN)
+    assert [f.name for f in slot.figures] == ["Consumer Price Index", "CPI y/y"] or \
+        {f.name for f in slot.figures} == {"Consumer Price Index", "CPI y/y"}
+
+
+def test_thousand_jobs_render_on_the_jobs_scale():
+    figure = F.build_figure("JOLTS", "thousand jobs", 7523.0, None, None)
+    assert figure.actual_text == "7.52M"
+
+
+def test_percent_figures_keep_official_rounding():
+    core = F.build_figure("Core CPI m/m", "percent", 0.3348, 0.3, 0.3)
+    assert (core.actual_text, core.previous_text) == ("0.3%", "0.3%")
+    ahe = F.build_figure("AHE m/m", "percent", 0.26, 0.3, 0.3)
+    assert ahe.actual_text == "0.3%"
+    assert F.build_figure("CPI m/m", "percent", 0.6485, 0.6, 0.4).actual_text == "0.6%"
+
+
+def test_extra_digit_also_separates_actual_from_forecast_for_counts():
+    figure = F.build_figure("ADP", "value", 19750.0, 19500.0, None)
+    assert figure.actual_text == "19.8K" and figure.forecast_text == "19.5K"
+
+
+def test_adp_merge_takes_previous_from_the_latest_row():
+    rows = [
+        row("ADP", "ADP Weekly Employment Change", at=T, consensus=17000.0,
+            previous=16750.0, unit="value", importance="medium"),
+        row("ADP", "ADP Weekly Employment Change", at=T + timedelta(minutes=1),
+            consensus=17000.0, previous=19500.0, unit="value", importance="medium"),
+    ]
+    [slot] = F.release_slots(rows, **WIN, min_importance="medium")
+    assert slot.figures[0].previous == 19500.0
+
+
+def test_near_duplicate_release_note_is_detected():
+    first = "release:20261110T1315:ADP"
+    assert F.has_near_duplicate_note("release:20261110T1316:ADP", [first])
+    assert not F.has_near_duplicate_note(first, [first])
+    assert not F.has_near_duplicate_note("release:20261110T1330:ADP", [first])
+    assert not F.has_near_duplicate_note("release:20261110T1316:CPI", [first])
 
 
 def test_medium_only_slots_are_dropped_unless_requested():

@@ -173,3 +173,13 @@ def test_classify_and_parse_number_units():
     assert parse_number("") == (None, None)
     assert parse_number("—") == (None, None)
     assert parse_number("garbage") == (None, None)
+
+
+def test_umich_eci_and_productivity_have_their_own_events():
+    assert classify("Prelim UoM Consumer Sentiment")[0] == "UMICH_SENTIMENT"
+    assert classify("Revised UoM Consumer Sentiment")[0] == "UMICH_SENTIMENT"
+    assert classify("Employment Cost Index q/q")[0] == "ECI"
+    # "Nonfarm Productivity" is not the payrolls release.
+    assert classify("Prelim Nonfarm Productivity q/q")[0] == "PRODUCTIVITY"
+    assert classify("Revised Non-Farm Productivity q/q")[0] == "PRODUCTIVITY"
+    assert classify("Non-Farm Employment Change")[0] == "PAYROLLS"
