@@ -220,3 +220,52 @@ async def test_a_second_kind_of_alert_waits_for_the_gap():
     service, _, notes = make(NOW, news=news)
     assert [a.id for a in await service.scan_breaking(NOW)] == ["e1"]
     assert [a.id for a in await service.scan_breaking(NOW + timedelta(minutes=31))] == ["e2"]
+
+
+HEDGES = [
+    "more strikes could follow",
+    "more attacks may follow",
+    "Trump warns of more strikes",
+    "US may respond",
+    "Israel weighs a further attack",
+    "Iran threatens new strikes",
+    "US plans more strikes",
+    "an invasion is possible",
+]
+SPECULATIONS = [
+    "Israel could strike Iran",
+    "US weighs strikes on Iran",
+    "Iran may attack Israel",
+    "China prepares to invade Taiwan",
+    "US warns of attack on Iran",
+    "Iran reportedly plans to strike Israel",
+]
+
+
+@pytest.mark.parametrize("headline", [
+    "US attacks Iran, warns of more",
+    "Israel strikes Iran; more strikes could follow",
+    "Iran launches missiles at Israel as US may respond",
+])
+def test_an_attack_with_a_hedged_clause_still_alerts(headline):
+    assert B.match_rule(headline, "bbc_world").key == "conflict"
+
+
+@pytest.mark.parametrize("headline", SPECULATIONS)
+def test_pure_speculation_alone_is_quiet(headline):
+    assert B.match_rule(headline, "bbc_world") is None
+
+
+def test_a_hedge_never_hides_an_attack_in_another_clause():
+    missed = [
+        headline
+        for hedge in HEDGES for brk in BREAKS for attack in ATTACKS
+        for headline in (f"{hedge}{brk}{attack}", f"{attack}{brk}{hedge}")
+        if getattr(B.match_rule(headline, "bbc_world"), "key", None) != "conflict"
+    ]
+    assert missed == []
+
+
+def test_speculation_and_denial_together_stay_quiet():
+    assert B.match_rule("Iran could attack Israel, US denies strikes", "bbc_world") is None
+    assert B.match_rule("Israel has not ruled out strikes on Iran", "bbc_world").key == "conflict"

@@ -62,6 +62,7 @@ RULES: tuple[Rule, ...] = (
     Rule("conflict", "Attack or invasion", _rx(
         r"\b(invades?|invasion of|declares? war|blockade of taiwan|nuclear (test|strike|attack)|"
         r"(strikes?|attacks?|missiles?) on (taiwan|iran|israel|china|the us|the u\.s\.|america)|"
+        r"launch\w* missiles? at (taiwan|iran|israel|china|the us|the u\.s\.|america)|"
         r"(china|iran|israel|russia|us|u\.s\.) (strikes|attacks|bombs|invades) "
         r"(taiwan|iran|israel|china|us|u\.s\.|american))\b")),
     Rule("default", "Debt default or shutdown", _rx(
@@ -130,13 +131,20 @@ def _clause_negated(clause: str) -> bool:
     return not _ATTACK_TERM.search(before) and not _INVERTED.search(before)
 
 
-def _denied(headline: str) -> bool:
-    """True only when every clause mentioning an attack denies or hedges it."""
+def _hedged_attack(headline: str) -> bool:
+    """True only when every clause mentioning an attack denies or hedges it.
+
+    A clause is hedged if it is a plain denial or contains a speculation word ("could",
+    "warns", "plans" ...). One un-hedged attack clause means a real attack was reported.
+    """
     text = " ".join(headline.replace("\u2019", "'").replace("\u2018", "'").split())
     text = _QUOTES.sub("", text)
     clauses = [" ".join(c.split()) for c in _CLAUSE_SPLIT.split(text)]
     attack_clauses = [c for c in clauses if _ATTACK_TERM.search(c)]
-    return bool(attack_clauses) and all(_clause_negated(c) for c in attack_clauses)
+    if not attack_clauses:
+        # No clause to judge: keep the old whole-headline veto.
+        return bool(_SPECULATION.search(headline))
+    return all(_SPECULATION.search(c) or _clause_negated(c) for c in attack_clauses)
 
 
 def match_rule(headline: str, source: str) -> Rule | None:
@@ -149,9 +157,7 @@ def match_rule(headline: str, source: str) -> Rule | None:
             r"\b(fed|federal reserve|fomc)\b", headline, re.IGNORECASE
         ):
             continue
-        if rule.key == "conflict" and (
-            _SPECULATION.search(headline) or _denied(headline)
-        ):
+        if rule.key == "conflict" and _hedged_attack(headline):
             continue
         if rule.pattern.search(headline):
             return rule
