@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 import pytest
@@ -115,3 +116,46 @@ async def test_release_stamped_later_today_is_pending_not_feed_down():
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         batch = await NARReleasesProvider(client, clock=lambda: early).fetch()
     assert batch.status == "healthy" and batch.events == [] and batch.issues == []
+
+
+FIXTURES = Path(__file__).parents[1] / 'fixtures' / 'economics'
+OCT_URL = 'https://www.nar.realtor/newsroom/existing-home-sales-decreased-5-5-percent-october-nar-report'
+OCT_NOW = datetime(2026, 11, 12, 16, tzinfo=UTC)
+
+
+def test_october_2026_listing_and_release_fixtures_parse():
+    listing = (FIXTURES / 'nar-listing-2026-11-12.html').read_bytes()
+    assert release_url(listing) == OCT_URL
+    event = parse_release((FIXTURES / 'nar-release-2026-11-12.html').read_bytes(), OCT_URL, OCT_NOW)
+    assert event.event_code == 'EXISTING_HOME_SALES'
+    assert event.period == '2026-10'
+    assert event.actual == 3_750_000
+
+
+def test_october_2026_regional_or_subtype_rate_cannot_be_national_actual():
+    page = (FIXTURES / 'nar-release-2026-11-12.html').read_bytes()
+    national = b'year-over-year to a seasonally adjusted annual rate of 3.75 million'
+    assert national in page
+    for lead in (b'Existing-home sales in the South decreased 8.8%',
+                 b'Existing-home sales for single-family homes decreased 8.8%'):
+        body = page.replace(b'Existing-home sales decreased 8.8% year-over-year to a seasonally '
+                            b'adjusted annual rate of 3.75 million',
+                            lead + b' year-over-year to a seasonally adjusted annual rate '
+                            b'of 3.75 million')
+        assert body != page
+        with pytest.raises(ValueError):
+            parse_release(body, OCT_URL, OCT_NOW)
+
+
+async def test_unreadable_release_page_is_reported_as_parse_failure():
+    listing = f'<a href="{URL}">Read the full news release</a>'.encode()
+
+    def handler(request):
+        return httpx.Response(200, content=b'<html>new layout</html>' if str(request.url) == URL
+                              else listing)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        batch = await NARReleasesProvider(client, clock=lambda: NOW).fetch()
+    assert batch.status == 'unavailable'
+    assert 'could not be read' in batch.issues[0]
+    assert 'suppressed' not in batch.issues[0]
