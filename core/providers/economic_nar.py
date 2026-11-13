@@ -74,7 +74,10 @@ def parse_release(body: bytes, url: str, now: datetime) -> EconomicEvent:
                     r"seasonally adjusted annual rate of (\d+(?:\.\d+)?) million")
     rates = re.findall(rate_pattern, national, re.I)
     metadata_head = description.split(". ", 1)[0]
-    metadata_rates = re.findall(rate_pattern, metadata_head, re.I)
+    # The page summary may say "an annual rate of" without "seasonally adjusted".
+    metadata_pattern = rate_pattern.replace(
+        "seasonally adjusted annual rate", "(?:seasonally adjusted )?annual rate")
+    metadata_rates = re.findall(metadata_pattern, metadata_head, re.I)
     metadata_periods = re.findall(
         r"\bin (" + "|".join(calendar.month_name[1:]) + r")(?:\s+(\d{4}))?\b",
         metadata_head, re.I)
@@ -108,9 +111,23 @@ class NARReleasesProvider(HttpEconomicProvider):
     provider_name = "nar_releases"
 
     async def collect(self, now: datetime) -> EconomicBatch:
-        url = release_url(await self.request("GET", NAR_URL))
+        listing = await self.request("GET", NAR_URL)
         try:
-            events = [parse_release(await self.request("GET", url), url, now)]
+            url = release_url(listing)
+        except ValueError:
+            return self._unreadable(now, "NAR listing page could not be read: "
+                                    "no unique release link found (page layout may have changed).")
+        body = await self.request("GET", url)
+        try:
+            events = [parse_release(body, url, now)]
         except ReleasePending:
             events = []
+        except ValueError:
+            return self._unreadable(now, "NAR release page could not be read: national "
+                                    "existing-home sales figure not found or failed checks "
+                                    "(page layout may have changed).")
         return EconomicBatch(provider=self.name, checked_at=now, events=events, status="healthy")
+
+    def _unreadable(self, now: datetime, issue: str) -> EconomicBatch:
+        return EconomicBatch(provider=self.name, checked_at=now, status="unavailable",
+                             issues=[issue])
