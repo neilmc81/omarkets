@@ -15,12 +15,16 @@ EVENT_CODES: tuple[tuple[str, str, str, str], ...] = (
     # ADP titles may also say "Non-Farm"; classify the issuer first so the
     # private estimate is never presented as the official payroll release.
     ("adp", "ADP", "employment", "medium"),
+    # "Nonfarm Productivity" is a different release from nonfarm payrolls.
+    ("productivity", "PRODUCTIVITY", "growth", "medium"),
     ("non-farm", "PAYROLLS", "employment", "critical"),
     ("nonfarm", "PAYROLLS", "employment", "critical"),
     ("average hourly", "AHE", "employment", "high"),
     ("unemployment rate", "UNEMPLOYMENT", "employment", "high"),
     ("unemployment claims", "INITIAL_CLAIMS", "employment", "high"),
     ("jolts", "JOLTS", "employment", "high"),
+    ("employment cost index", "ECI", "inflation", "high"),
+    ("uom consumer sentiment", "UMICH_SENTIMENT", "growth", "medium"),
     ("core pce", "CORE_PCE", "inflation", "critical"),
     ("pce price", "PCE", "inflation", "critical"),
     ("core ppi", "CORE_PPI", "inflation", "high"),

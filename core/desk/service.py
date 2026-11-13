@@ -629,6 +629,9 @@ class DeskService:
             if slot.speakers_only:  # Fed speeches appear in Coming up only
                 continue
             note_id = f"release:{slot.key}"
+            if "ADP" in slot.codes and F.has_near_duplicate_note(
+                    note_id, self.store.release_note_ids()):
+                continue  # the same ADP release re-listed a minute later: one note
             delay = (PRESS_CONFERENCE_DELAY if "FOMC_PRESS_CONFERENCE" in slot.codes
                      else RELEASE_DELAY)
             if now < slot.at + delay:
