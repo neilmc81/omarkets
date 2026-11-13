@@ -5,7 +5,7 @@ import re
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from core.analysis.economics import numeric, transform_history
+from core.analysis.economics import month_before, numeric, transform_history
 from core.domain.economics import MacroInput
 from core.domain.macro_registry import MACRO_DEFINITIONS
 from core.providers.economic_base import EconomicBatch
@@ -48,6 +48,39 @@ def near_release(now: datetime) -> bool:
         if bell - _BELL_BEFORE <= local < bell + _BELL_AFTER:
             return True
     return False
+
+
+def _with_year_ago_slot(definition, inputs, source, now) -> list[MacroInput]:
+    """Give a y/y series' latest month an empty year-ago slot when BLS omits that row.
+
+    Without it the latest month has no observation at all and reads as an empty
+    series; with it the gap is handled like a year-ago month BLS leaves blank.
+    """
+    if definition.transform != "yoy" or not inputs:
+        return inputs
+    latest = max(item.period for item in inputs)
+    year_ago = month_before(latest, 12)
+    if any(item.period == year_ago for item in inputs):
+        return inputs
+    slot = MacroInput(
+        source_series_id=source,
+        provider=BLSEconomicProvider.provider_name,
+        period=year_ago,
+        value=None,
+        unit=BLS_INPUT_UNITS[source],
+        received_at=now,
+    )
+    return [*inputs, slot]
+
+
+def _year_ago_gap(definition, observation) -> str | None:
+    """Precise note when only the year-ago month of a y/y series has no value."""
+    if definition.transform != "yoy" or len(observation.metadata.inputs) != 2:
+        return None
+    current, previous = observation.metadata.inputs
+    if current.value is None or previous.value is not None:
+        return None
+    return f"Year-ago month {previous.period} is not published by BLS; year over year unavailable."
 
 
 class BLSEconomicProvider(HttpEconomicProvider):
@@ -141,7 +174,7 @@ class BLSEconomicProvider(HttpEconomicProvider):
                     if definition.provider == self.name and definition.source_series_id == source:
                         history = transform_history(
                             definition,
-                            inputs,
+                            _with_year_ago_slot(definition, inputs, source, now),
                             now,
                             BLS_URL,
                             [definition.info or "", "Publication time not supplied by BLS API."],
@@ -149,8 +182,20 @@ class BLSEconomicProvider(HttpEconomicProvider):
                         if history:
                             observations.extend(history)
                             checked.append(definition.id)
-                            if history[-1].value is None:
-                                issues.append(f"{definition.id}: required period value unavailable")
+                            latest = history[-1]
+                            if latest.value is None:
+                                gap = _year_ago_gap(definition, latest)
+                                if gap is None:
+                                    issues.append(
+                                        f"{definition.id}: required period value unavailable"
+                                    )
+                                else:
+                                    # A year-over-year gap is a fixed hole in BLS history, not a
+                                    # fault: no retry, no degraded provider. Note it on the
+                                    # observation only.
+                                    observations[-1] = latest.model_copy(
+                                        update={"notes": [*latest.notes, gap]}
+                                    )
                         else:
                             issues.append(f"{definition.id}: empty series")
             except (ValueError, KeyError, TypeError):
