@@ -82,6 +82,62 @@ _ANALYSIS = re.compile(r"^(why|how|what|analysis|opinion|explainer|live)\b|\?\s*
 _SPECULATION = re.compile(r"\b(possible|could|may|might|warns?|threat\w*|prepar\w*|plans?|"
                           r"considers?|weighs?|reportedly)\b", re.IGNORECASE)
 
+#: ...nor is one the headline denies or calls unlikely. A false alert is cheap and a
+#: hidden real attack is not, so this fails toward alerting: the headline is cut into
+#: clauses first, and it is only quiet when *every* clause that mentions an attack is
+#: itself a plain denial or hedge of that attack.
+_CLAUSE_SPLIT = re.compile(
+    r"[;:,!?\u2014\u2013]| - |\.(?= |$)|"
+    r"\b(?:but|while|as|after|and|amid|despite|though|although|before|when|since|then|with)\b",
+    re.IGNORECASE)
+#: Any of these in a clause makes it an attack clause (broad on purpose).
+_ATTACK_TERM = re.compile(
+    r"\b(?:attack\w*|strike\w*|struck|invad\w*|invasion\w*|war|bomb\w*|missile\w*|blockade\w*|"
+    r"nuclear|military action)\b", re.IGNORECASE)
+_ACT = r"(?:attacks?|strikes?|invasions?|war|military action)"
+_TARGET = r"(?: (?:on|against|of|in) (?:the )?[\w.'-]+)?"
+_TIME = r"(?: (?:this|next) \w+| today| tonight)?"
+#: Matched against one whitespace-normalised clause; each form must end the clause.
+_NEGATED = re.compile(
+    # "more US attacks on Iran highly unlikely", "an invasion of Taiwan is unlikely to happen"
+    rf"\b{_ACT}{_TARGET} (?:(?:is|are|seems?) )?(?:(?:highly|very) )?"
+    r"(?:unlikely|not (?:likely|expected))(?: to (?:happen|occur|materiali[sz]e|take place))?"
+    rf"{_TIME}$"
+    # "no attack on Israel is planned"
+    rf"|\bno {_ACT}{_TARGET} (?:(?:is|are) )?(?:planned|expected|imminent){_TIME}$"
+    # "Israel rules out strikes on Iran", "China denies invasion of Taiwan"
+    r"|\b(?:rul(?:es?|ed|ing) out|denies|denied|no plans? for|no intention of|not planning) "
+    rf"(?:(?:any|more|new|further|a|an|the|military) ){{0,2}}{_ACT}{_TARGET}{_TIME}$"
+    # "Iran won't attack Israel", "US will not launch an attack on Iran"
+    rf"|\b(?:will not|won't) (?:attack|strike|invade)(?: (?:the )?[\w.'-]+)?{_TIME}$"
+    rf"|\b(?:will not|won't) (?:launch|carry out) (?:an?|any) {_ACT}{_TARGET}{_TIME}$",
+    re.IGNORECASE)
+_QUOTES = re.compile(r"[\"\u201c\u201d]|(?<![a-z])'|'(?![a-z])", re.IGNORECASE)
+
+
+#: "has not ruled out", "refuses to rule out", "no one has denied": the opposite of a denial.
+_INVERTED = re.compile(r"\b(?:not|never|yet to|refus\w+ to|declin\w+ to|no one|nobody|"
+                       r"neither|nor|fail\w* to)\b|n't\b", re.IGNORECASE)
+
+
+def _clause_negated(clause: str) -> bool:
+    found = _NEGATED.search(clause)
+    if not found:
+        return False
+    before = clause[: found.start()]
+    # An attack reported before the denial ("Iran strikes Israel denies ...") still counts,
+    # and an inverted denial is not a denial.
+    return not _ATTACK_TERM.search(before) and not _INVERTED.search(before)
+
+
+def _denied(headline: str) -> bool:
+    """True only when every clause mentioning an attack denies or hedges it."""
+    text = " ".join(headline.replace("\u2019", "'").replace("\u2018", "'").split())
+    text = _QUOTES.sub("", text)
+    clauses = [" ".join(c.split()) for c in _CLAUSE_SPLIT.split(text)]
+    attack_clauses = [c for c in clauses if _ATTACK_TERM.search(c)]
+    return bool(attack_clauses) and all(_clause_negated(c) for c in attack_clauses)
+
 
 def match_rule(headline: str, source: str) -> Rule | None:
     if source not in TRUSTED_SOURCES or _ANALYSIS.search(headline.strip()):
@@ -93,7 +149,9 @@ def match_rule(headline: str, source: str) -> Rule | None:
             r"\b(fed|federal reserve|fomc)\b", headline, re.IGNORECASE
         ):
             continue
-        if rule.key == "conflict" and _SPECULATION.search(headline):
+        if rule.key == "conflict" and (
+            _SPECULATION.search(headline) or _denied(headline)
+        ):
             continue
         if rule.pattern.search(headline):
             return rule
