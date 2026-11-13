@@ -99,20 +99,22 @@ _CLAUSE_SPLIT = re.compile(
     r"\bto (?:prevent|stop|avert|deter|forestall|thwart|head off|preempt|pre-empt|avoid|block)\b|"
     r"\b(?:in order|so as) to\b)",
     re.IGNORECASE)
-#: After "and", a bare noun phrase ("invasion of Taiwan", "attacks on Iran") shares the
-#: hedge of the clause before it ("US plans strikes on Iran and invasion of Taiwan").
-#: A verb ("and attacks Taiwan") has no preposition and so stands on its own.
-_NOUN_CONT = re.compile(
-    rf"^(?:(?:more|further|new|a|an|the|military|any) ){{0,2}}{_ACT} (?:on|against|of|in) "
-    r"(?:the )?[\w.'-]+$", re.IGNORECASE)
-#: A purpose clause after speculation is as hypothetical as what it follows.
-_PURPOSE = re.compile(r"^(?:to|in order to|so as to)\b", re.IGNORECASE)
 #: Any of these in a clause makes it an attack clause (broad on purpose).
 _ATTACK_TERM = re.compile(
     r"\b(?:attack\w*|strike\w*|struck|invad\w*|invasion\w*|war|bomb\w*|missile\w*|blockade\w*|"
     r"nuclear|military action)\b", re.IGNORECASE)
 _TARGET = r"(?: (?:on|against|of|in) (?:the )?[\w.'-]+)?"
 _TIME = r"(?: (?:this|next) \w+| today| tonight)?"
+#: One rule for when a clause may inherit the hedge of the speculative clause before it
+#: (after "and", or as a purpose clause "to prevent ..."): it must be only a bare noun
+#: phrase, optionally with a time or place modifier. Any predicate ("begins", "kill 40"),
+#: relative clause, participle or casualty phrase makes it a report of its own.
+_ADJ = r"(?:(?:more|further|new|a|an|the|another|any|military|nuclear) ){0,3}"
+_MODIFIER = (r"(?: (?:(?:this|next|by|on|until) [\w.'-]+|today|tonight|tomorrow"
+             r"|in the [\w.'-]+))?")
+_BARE_NOUN = re.compile(
+    rf"^{_ADJ}{_ACT}(?: (?:on|against|of|in) (?:the )?[\w.'-]+)?{_MODIFIER}$", re.IGNORECASE)
+_SHARING_SEPARATOR = re.compile(r"^(?:and|to \w+(?: off)?|in order to|so as to)$", re.IGNORECASE)
 #: Matched against one whitespace-normalised clause; each form must end the clause.
 _NEGATED = re.compile(
     # "more US attacks on Iran highly unlikely", "an invasion of Taiwan is unlikely to happen"
@@ -124,6 +126,9 @@ _NEGATED = re.compile(
     # "Israel rules out strikes on Iran", "China denies invasion of Taiwan"
     r"|\b(?:rul(?:es?|ed|ing) out|denies|denied|no plans? for|no intention of|not planning) "
     rf"(?:(?:any|more|new|further|a|an|the|military) ){{0,2}}{_ACT}{_TARGET}{_TIME}$"
+    # "Iran denies reports that Iran launched missiles at Israel"
+    rf"|\b(?:denies|denied) (?:(?:reports?|claims?|allegations?) )?(?:that )?[\w.']+ "
+    rf"launch(?:ed|es) (?:(?:ballistic|cruise) )?missiles? at (?:the )?[\w.']+{_TIME}$"
     # "Iran won't attack Israel", "US will not launch an attack on Iran"
     rf"|\b(?:will not|won't) (?:attack|strike|invade)(?: (?:the )?[\w.'-]+)?{_TIME}$"
     rf"|\b(?:will not|won't) (?:launch|carry out) (?:an?|any) {_ACT}{_TARGET}{_TIME}$",
@@ -159,9 +164,11 @@ def _hedged_attack(headline: str) -> bool:
     speculative = False
     for i in range(0, len(parts), 2):
         clause = " ".join(parts[i].split())
-        sep = parts[i - 1].lower() if i > 0 else ""
-        shares = speculative and (
-            (sep == "and" and bool(_NOUN_CONT.match(clause))) or bool(_PURPOSE.match(sep)))
+        if not clause:
+            continue  # ", and" / ", to ..." leave an empty clause: keep the hedge going
+        sep = " ".join(parts[i - 1].split()) if i > 0 else ""
+        shares = (speculative and bool(_SHARING_SEPARATOR.match(sep))
+                  and bool(_BARE_NOUN.match(clause)))
         speculative = shares or bool(_SPECULATION.search(clause))
         if _ATTACK_TERM.search(clause):
             hedged.append(speculative or _clause_negated(clause))

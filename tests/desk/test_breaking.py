@@ -340,3 +340,61 @@ def test_a_clause_with_its_own_predicate_does_not_inherit_a_hedge(headline):
 ])
 def test_a_purpose_clause_after_speculation_is_quiet(headline):
     assert B.match_rule(headline, "bbc_world") is None
+
+
+BARE = ["attacks on Israel", "invasion of Taiwan", "an invasion of Taiwan", "war",
+        "a nuclear attack", "strikes on Iran", "invasion of Taiwan next week",
+        "attacks on Israel this week", "invasion of Taiwan by Friday",
+        "attacks on Israel in the Gulf", "invasion of Taiwan tomorrow"]
+PREDICATES = ["that have killed 40", "that killed 20", "killing 20", "kill 40", "begins",
+              "has begun", "already under way", "under way", "intensify", "continues"]
+PLANS = ["US plans strikes on Iran", "US weighs strikes on Iran",
+         "Israel considers strikes on Iran"]
+JOINERS = [" and ", ", and ", " to prevent ", ", to prevent ", " to stop ", ", to stop "]
+
+
+def test_a_hedge_is_inherited_only_by_a_bare_noun_phrase():
+    wrong = []
+    for plan in PLANS:
+        for joiner in JOINERS:
+            for bare in BARE:
+                if B.match_rule(f"{plan}{joiner}{bare}", "bbc_world") is not None:
+                    wrong.append(f"{plan}{joiner}{bare}")
+                for pred in PREDICATES:
+                    headline = f"{plan}{joiner}{bare} {pred}"
+                    if getattr(B.match_rule(headline, "bbc_world"), "key", None) != "conflict":
+                        wrong.append(headline)
+    assert wrong == []
+
+
+@pytest.mark.parametrize("headline", [
+    "US weighs response to stop attacks on Israel that have killed 40",
+    "US plans aid to stop invasion of Taiwan already under way",
+    "US plans strikes on Iran to stop attacks on Israel that killed 20",
+    "US weighs strikes on Iran to stop attacks on US bases that killed 3 soldiers",
+    "US plans strikes on Iran to stop attacks on Israel killing 20",
+    "US plans military action to prevent an invasion of Taiwan that has begun",
+    "US attacks Iran to prevent possible nuclear strike",
+])
+def test_purpose_clause_with_its_own_event_alerts(headline):
+    assert B.match_rule(headline, "bbc_world").key == "conflict"
+
+
+@pytest.mark.parametrize("headline", [
+    "US plans strikes on Iran to prevent war",
+    "US weighs strikes on Iran to stop attacks on Israel",
+    "US plans military action to prevent an invasion of Taiwan",
+    "Israel considers strikes on Iran to prevent a nuclear attack",
+    "US plans strikes on Iran and invasion of Taiwan next week",
+    "US plans strikes on Iran and invasion of Taiwan this week",
+    "US plans strikes on Iran and invasion of Taiwan by Friday",
+    "US plans strikes on Iran and attacks on Israel in the Gulf",
+    "US plans strikes on Iran and invasion of Taiwan tomorrow",
+    "US plans strikes on Iran, and an invasion of Taiwan",
+    "US plans strikes on Iran, to prevent war",
+    "US weighs strikes on Iran, to stop attacks on Israel",
+    "Iran denies reports that Iran launched missiles at Israel",
+    "US denies reports US launched missiles at Iran",
+])
+def test_bare_noun_phrases_and_denied_reports_are_quiet(headline):
+    assert B.match_rule(headline, "bbc_world") is None
