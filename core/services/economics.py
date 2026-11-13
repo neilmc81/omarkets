@@ -807,6 +807,14 @@ class EconomicService:
             "core retail sales" in current.name.casefold()
         ):
             current = current.model_copy(update={"event_code": "CORE_RETAIL_SALES"})
+        if current.provider == "consensus" and current.event_code == "PAYROLLS" and (
+            "productivity" in current.name.casefold()
+        ):
+            # Older stored rows classed "Nonfarm Productivity" as payrolls.
+            current = current.model_copy(update={
+                "event_code": "PRODUCTIVITY", "category": MacroCategory.GROWTH,
+                "importance": "medium",
+            })
         return self._calendar_coverage(self._ism_calendar_actual(self._calendar_actual(current)))
 
     def _ism_calendar_actual(self, item: EconomicEvent) -> EconomicEvent:
@@ -961,7 +969,14 @@ class EconomicService:
         local = slot.astimezone(ZoneInfo("America/New_York"))
         year, month = (local.year - 1, 12) if local.month == 1 else (local.year, local.month - 1)
         period = f"{year:04d}-{month:02d}"
-        if item.period is not None and item.period != period:
+        periods = {period}
+        if item.event_code == "JOLTS" and local.day <= 15:
+            # JOLTS comes out about five weeks after its month, so a slot early in
+            # a month is usually for the month two back, not the one before.
+            from core.analysis.economics import month_before
+
+            periods.add(month_before(period, 1))
+        if item.period is not None and item.period not in periods:
             return item
         if item.provider == "consensus":
             expected_time = (9, 15, 0) if item.event_code == "INDUSTRIAL_PRODUCTION" else (8, 30, 0)
@@ -1024,7 +1039,7 @@ class EconomicService:
             for observation in self._observations
             if observation.provider == definition.provider
             and observation.id == series
-            and observation.period == period
+            and observation.period in periods
             and observation.value is not None
             and slot <= observation.received_at <= self.clock()
             and (observation.released_at is None or slot <= observation.released_at <= self.clock())
@@ -1042,6 +1057,9 @@ class EconomicService:
         ]
         if not candidates:
             return item
+        newest = max(row.period for row in candidates)
+        candidates = [row for row in candidates if row.period == newest]
+        period = newest
         observation = max(candidates, key=lambda row: (row.revision, row.received_at))
         if len({row.value for row in candidates if row.revision == observation.revision}) > 1:
             return item

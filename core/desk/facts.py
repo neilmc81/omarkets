@@ -110,6 +110,14 @@ def format_value(value: float | None, unit: str, decimals: int = 1) -> str:
     return f"{value:.{decimals}f}"
 
 
+def _fine(value: float, unit: str) -> str:
+    """Thousands with one decimal (19.8K), for values the plain text cannot tell apart."""
+    if unit == "percent" or not 1_000 <= abs(value) < 1_000_000:
+        return format_value(value, unit, 2)
+    text = f"{value / 1_000:.1f}"
+    return (text[:-2] if text.endswith(".0") else text) + "K"
+
+
 def build_figure(
     name: str,
     unit: str,
@@ -128,6 +136,13 @@ def build_figure(
         expected = _compare_round(forecast, decimals)
         verdict = "in_line" if shown == expected else ("above" if shown > expected else "below")
     revised, revision_text = _revision(unit, decimals, previous, revised_previous)
+    actual_text = format_value(shown, unit, decimals)
+    previous_text = format_value(previous, unit, decimals)
+    if (actual is not None and previous is not None and actual != previous
+            and actual_text == previous_text):
+        # Different values that round to the same text (19,750 vs 19,500 both
+        # "20K") would read as "previous equals actual"; show the extra digit.
+        actual_text, previous_text = _fine(actual, unit), _fine(previous, unit)
     return Figure(
         name=name,
         unit=unit,
@@ -136,9 +151,9 @@ def build_figure(
         previous=previous,
         decimals=decimals,
         verdict=verdict,
-        actual_text=format_value(shown, unit, decimals),
+        actual_text=actual_text,
         forecast_text=format_value(forecast, unit, decimals),
-        previous_text=format_value(previous, unit, decimals),
+        previous_text=previous_text,
         revised_previous=revised,
         revised_previous_text=None if revised is None else format_value(revised, unit, decimals),
         revision_text=revision_text,
@@ -290,6 +305,10 @@ def _value(item: Any, name: str):
     return getattr(value, "value", value)
 
 
+_ADP_SLOT_GAP = 300
+_HEADING_PROVIDERS = {"fred_release_calendar", "bls_calendar"}
+
+
 def release_slots(
     events: Iterable[Any],
     *,
@@ -303,12 +322,16 @@ def release_slots(
     kept only when its most important row reaches ``min_importance``.
     """
     groups: dict[datetime, list[Any]] = {}
-    for item in events:
+    for item in sorted(events, key=lambda e: getattr(e, "scheduled_at", None) or start):
         at = getattr(item, "scheduled_at", None)
         if at is None or not (start <= at < end):
             continue
         if getattr(item, "country", "US") != "US" or _value(item, "status") == "cancelled":
             continue
+        if item.event_code == "ADP":
+            # A source can list one ADP release twice a minute apart; one release, one note.
+            at = next((g for g in groups if abs((at - g).total_seconds()) <= _ADP_SLOT_GAP
+                       and any(r.event_code == "ADP" for r in groups[g])), at)
         groups.setdefault(at, []).append(item)
 
     slots: list[ReleaseSlot] = []
@@ -326,6 +349,16 @@ def release_slots(
             if row.unit == "release" or (
                 row.actual is None and row.consensus is None and row.previous is None
             ):
+                continue
+            if getattr(row, "provider", None) in _HEADING_PROVIDERS and any(
+                getattr(other, "provider", None) not in _HEADING_PROVIDERS
+                and other.event_code == row.event_code
+                and other.unit != "release"
+                and (other.actual is not None or other.consensus is not None)
+                for other in rows
+            ):
+                # The schedule's heading row (e.g. "Consumer Price Index") only
+                # repeats a figure the real rows already carry.
                 continue
             slot = merged.setdefault(
                 row.name.casefold(),

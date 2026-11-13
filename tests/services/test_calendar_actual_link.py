@@ -255,3 +255,41 @@ def test_jobs_requires_reference_period_on_matching_official_schedule_if_supplie
     set_events(service, [service._events[0].model_copy(update={"period": "2026-08"}),
                          *service._events[1:]])
     assert service.calendar_event_state(scheduled).actual is None
+
+
+def test_jolts_actual_fills_when_the_reference_month_is_two_back():
+    # JOLTS publishes about five weeks after the month: a 3 Nov slot is for September.
+    slot = datetime(2026, 11, 3, 15, tzinfo=UTC)
+    now = slot + timedelta(hours=3)
+    service = EconomicService(mode="live", clock=lambda: now)
+    sched = schedule().model_copy(update={"scheduled_at": slot})
+    set_events(service, [sched])
+    service._observations = [observation(period="2026-09", received_at=slot + timedelta(hours=1))]
+    [row] = service.calendar_events(start=slot, end=slot + timedelta(days=1))
+    assert row.actual == 7079
+    assert row.period == "2026-09"
+
+
+def test_jolts_prefers_the_newer_reference_month_when_both_exist():
+    slot = datetime(2026, 11, 3, 15, tzinfo=UTC)
+    now = slot + timedelta(hours=3)
+    service = EconomicService(mode="live", clock=lambda: now)
+    set_events(service, [schedule().model_copy(update={"scheduled_at": slot})])
+    older = observation(period="2026-09", received_at=slot + timedelta(hours=1))
+    newer = observation(period="2026-10", received_at=slot + timedelta(hours=1)).model_copy(
+        update={"value": 7200})
+    service._observations = [older, newer]
+    [row] = service.calendar_events(start=slot, end=slot + timedelta(days=1))
+    assert row.period == "2026-10" and row.actual == 7200
+
+
+def test_productivity_rows_are_not_joined_to_payrolls():
+    service = EconomicService(mode="live", clock=lambda: JOBS_SLOT + timedelta(hours=1))
+    legacy = jobs_schedule(name="Prelim Nonfarm Productivity q/q", unit="percent",
+                           consensus=2.0, previous=3.3)
+    set_events(service, [jobs_schedule(provider="bls_calendar", unit="release",
+                                       period="2026-09", consensus=None, previous=None), legacy])
+    service._observations = [jobs_observation()]
+    state = service.calendar_event_state(legacy)
+    assert state.event_code == "PRODUCTIVITY"
+    assert state.actual is None
