@@ -5,7 +5,7 @@ import re
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from core.analysis.economics import numeric, transform_history
+from core.analysis.economics import month_before, numeric, transform_history
 from core.domain.economics import MacroInput
 from core.domain.macro_registry import MACRO_DEFINITIONS
 from core.providers.economic_base import EconomicBatch
@@ -48,6 +48,29 @@ def near_release(now: datetime) -> bool:
         if bell - _BELL_BEFORE <= local < bell + _BELL_AFTER:
             return True
     return False
+
+
+def _with_year_ago_slot(definition, inputs, source, now) -> list[MacroInput]:
+    """Give a y/y series' latest month an empty year-ago slot when BLS omits that row.
+
+    Without it the latest month has no observation at all and reads as an empty
+    series; with it the gap is handled like a year-ago month BLS leaves blank.
+    """
+    if definition.transform != "yoy" or not inputs:
+        return inputs
+    latest = max(item.period for item in inputs)
+    year_ago = month_before(latest, 12)
+    if any(item.period == year_ago for item in inputs):
+        return inputs
+    slot = MacroInput(
+        source_series_id=source,
+        provider=BLSEconomicProvider.provider_name,
+        period=year_ago,
+        value=None,
+        unit=BLS_INPUT_UNITS[source],
+        received_at=now,
+    )
+    return [*inputs, slot]
 
 
 def _year_ago_gap(definition, observation) -> str | None:
@@ -151,7 +174,7 @@ class BLSEconomicProvider(HttpEconomicProvider):
                     if definition.provider == self.name and definition.source_series_id == source:
                         history = transform_history(
                             definition,
-                            inputs,
+                            _with_year_ago_slot(definition, inputs, source, now),
                             now,
                             BLS_URL,
                             [definition.info or "", "Publication time not supplied by BLS API."],

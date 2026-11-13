@@ -702,16 +702,19 @@ async def test_bls_batch_with_issues_away_from_a_release_is_not_retried():
 YOY_SOURCES = ("CUUR0000SA0", "CUUR0000SA0L1E")
 
 
-def _bls_yoy_gap_payload():
-    """m/m is out, but BLS has no value for the year-ago month of the NSA series."""
+def _bls_yoy_gap_payload(omit):
+    """m/m is out, but BLS has no year-ago month for the NSA series (blank or absent)."""
     payload = bls_payload()
     for entry in payload["Results"]["series"]:
         if entry["seriesID"] in YOY_SOURCES:
-            entry["data"][1]["value"] = "-"  # 2025-08
+            if omit:
+                del entry["data"][1]  # 2025-08 row not returned at all
+            else:
+                entry["data"][1]["value"] = "-"  # 2025-08
     return payload
 
 
-async def _bls_yoy_gap(now):
+async def _bls_yoy_gap(now, omit):
     calls, sleeps = [], []
 
     async def sleep(seconds):
@@ -719,19 +722,21 @@ async def _bls_yoy_gap(now):
 
     def handler(request):
         calls.append(request)
-        return httpx.Response(200, json=_bls_yoy_gap_payload())
+        return httpx.Response(200, json=_bls_yoy_gap_payload(omit))
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         batch = await BLSEconomicProvider(client, clock=lambda: now, sleep=sleep).fetch()
     return batch, len(calls), sleeps
 
 
-async def test_bls_yoy_year_ago_gap_does_not_degrade_or_delay_the_batch():
-    batch, calls, sleeps = await _bls_yoy_gap(BELL)
+@pytest.mark.parametrize("omit", [False, True], ids=["blank_value", "omitted_row"])
+async def test_bls_yoy_year_ago_gap_does_not_degrade_or_delay_the_batch(omit):
+    batch, calls, sleeps = await _bls_yoy_gap(BELL, omit)
     assert (calls, sleeps) == (1, [])  # no bell retries over a permanent gap
     assert batch.status == "healthy" and batch.issues == []
     mom = {o.id: o for o in batch.observations if o.period == "2026-08"}
-    assert mom["CPI_MOM"].value == 10 and mom["CORE_CPI_MOM"].value == 10
+    for series_id in ("CPI_MOM", "CORE_CPI_MOM", "BLS_PPI_MOM", "BLS_CORE_PPI_MOM"):
+        assert mom[series_id].value == 10
     for series_id in ("CPI_YOY", "CORE_CPI_YOY"):
         assert series_id in batch.checked_series_ids
         yoy = mom[series_id]
