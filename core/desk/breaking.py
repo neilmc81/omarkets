@@ -80,7 +80,13 @@ _ANALYSIS = re.compile(r"^(why|how|what|analysis|opinion|explainer|live)\b|\?\s*
 
 #: Conflict headlines about what might happen are not an event that happened.
 _SPECULATION = re.compile(r"\b(possible|could|may|might|warns?|threat\w*|prepar\w*|plans?|"
-                          r"considers?|weighs?|reportedly)\b", re.IGNORECASE)
+                          r"planned|considers?|weighs?|reportedly)\b", re.IGNORECASE)
+
+#: ...nor is one the headline denies, rules out, or calls unlikely.
+_DENIAL = re.compile(r"\b((highly |very |seems? |is |are )?un(likely|planned)|no (attack|strike|"
+                     r"invasion)s?|(denies|denied|deny|dismisses|dismissed|rules? out|ruled out|"
+                     r"rejects?|rejected|no plans?|not planning|won'?t|will not|"
+                     r"no intention)\b)", re.IGNORECASE)
 
 
 def match_rule(headline: str, source: str) -> Rule | None:
@@ -93,7 +99,9 @@ def match_rule(headline: str, source: str) -> Rule | None:
             r"\b(fed|federal reserve|fomc)\b", headline, re.IGNORECASE
         ):
             continue
-        if rule.key == "conflict" and _SPECULATION.search(headline):
+        if rule.key == "conflict" and (
+            _SPECULATION.search(headline) or _DENIAL.search(headline)
+        ):
             continue
         if rule.pattern.search(headline):
             return rule

@@ -23,6 +23,7 @@ NOW = datetime(2026, 10, 21, 14, 0, tzinfo=UTC)
         ("China invades Taiwan's outlying islands, state media says", "bbc_world", "conflict"),
         ("Iran strikes Israel with ballistic missiles", "cnbc_top", "conflict"),
         ("Missile attacks on Israel from Iran trigger sirens", "bbc_world", "conflict"),
+        ("US launches new attacks on Iran, Pentagon confirms", "bbc_world", "conflict"),
         ("Argentina defaults on its debt again", "cnbc_top", "default"),
         ("Government shutdown begins after Congress misses deadline", "cnbc_top", "default"),
         ("NYSE halts trading after technical outage", "cnbc_markets", "halt"),
@@ -48,6 +49,11 @@ def test_market_moving_headlines_match(headline, source, rule):
         ("Why Canada is preparing for a (long shot) US invasion", "bbc_world"),
         ("Russia launches largest attack on Ukraine energy infrastructure since spring",
          "bbc_world"),
+        # Denials and hedges: the headline says the attack is not happening.
+        ("Trump says more US attacks on Iran 'highly unlikely'", "bbc_world"),
+        ("Israel rules out strikes on Iran this year", "cnbc_top"),
+        ("China denies plans for invasion of Taiwan", "bbc_world"),
+        ("Iran says no attack on Israel is planned", "cnbc_top"),
         # Routine coverage and untrusted sources.
         ("What new tariffs would mean for your shopping?", "cnbc_top"),
         ("Fed officials see emergency of AI investment", "cnbc_top"),  # no rate action
