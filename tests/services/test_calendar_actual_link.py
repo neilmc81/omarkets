@@ -270,17 +270,32 @@ def test_jolts_actual_fills_when_the_reference_month_is_two_back():
     assert row.period == "2026-09"
 
 
-def test_jolts_prefers_the_newer_reference_month_when_both_exist():
+def test_jolts_period_stays_bound_when_a_newer_month_arrives():
     slot = datetime(2026, 11, 3, 15, tzinfo=UTC)
     now = slot + timedelta(hours=3)
     service = EconomicService(mode="live", clock=lambda: now)
     set_events(service, [schedule().model_copy(update={"scheduled_at": slot})])
-    older = observation(period="2026-09", received_at=slot + timedelta(hours=1))
-    newer = observation(period="2026-10", received_at=slot + timedelta(hours=1)).model_copy(
+    sept = observation(period="2026-09", received_at=slot + timedelta(hours=1))
+    octo = observation(period="2026-10", received_at=slot + timedelta(hours=1)).model_copy(
         update={"value": 7200})
-    service._observations = [older, newer]
+    service._observations = [sept, octo]
     [row] = service.calendar_events(start=slot, end=slot + timedelta(days=1))
-    assert row.period == "2026-10" and row.actual == 7200
+    assert row.period == "2026-09" and row.actual == 7079
+    service._observations = [octo]  # only the wrong month exists: stay blank
+    set_events(service, [schedule().model_copy(update={"scheduled_at": slot})])
+    [row] = service.calendar_events(start=slot, end=slot + timedelta(days=1))
+    assert row.actual is None
+
+
+def test_jolts_explicit_period_must_match_exactly():
+    slot = datetime(2026, 11, 3, 15, tzinfo=UTC)
+    service = EconomicService(mode="live", clock=lambda: slot + timedelta(hours=3))
+    explicit = schedule().model_copy(update={"scheduled_at": slot, "period": "2026-10"})
+    set_events(service, [explicit])
+    service._observations = [observation(period="2026-09", received_at=slot + timedelta(hours=1))]
+    assert service.calendar_event_state(explicit).actual is None
+    service._observations = [observation(period="2026-10", received_at=slot + timedelta(hours=1))]
+    assert service.calendar_event_state(explicit).actual == 7079
 
 
 def test_productivity_rows_are_not_joined_to_payrolls():

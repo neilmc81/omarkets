@@ -969,14 +969,17 @@ class EconomicService:
         local = slot.astimezone(ZoneInfo("America/New_York"))
         year, month = (local.year - 1, 12) if local.month == 1 else (local.year, local.month - 1)
         period = f"{year:04d}-{month:02d}"
-        periods = {period}
-        if item.event_code == "JOLTS" and local.day <= 15:
-            # JOLTS comes out about five weeks after its month, so a slot early in
-            # a month is usually for the month two back, not the one before.
-            from core.analysis.economics import month_before
+        if item.event_code == "JOLTS":
+            if item.period is not None:
+                period = item.period  # an explicit reference month binds exactly
+            elif local.day <= 15:
+                # JOLTS comes out about five weeks after its month, so a slot early
+                # in a month is for the month two back; the binding never floats
+                # to whichever month happens to have data.
+                from core.analysis.economics import month_before
 
-            periods.add(month_before(period, 1))
-        if item.period is not None and item.period not in periods:
+                period = month_before(period, 1)
+        elif item.period is not None and item.period != period:
             return item
         if item.provider == "consensus":
             expected_time = (9, 15, 0) if item.event_code == "INDUSTRIAL_PRODUCTION" else (8, 30, 0)
@@ -1039,7 +1042,7 @@ class EconomicService:
             for observation in self._observations
             if observation.provider == definition.provider
             and observation.id == series
-            and observation.period in periods
+            and observation.period == period
             and observation.value is not None
             and slot <= observation.received_at <= self.clock()
             and (observation.released_at is None or slot <= observation.released_at <= self.clock())
@@ -1057,9 +1060,6 @@ class EconomicService:
         ]
         if not candidates:
             return item
-        newest = max(row.period for row in candidates)
-        candidates = [row for row in candidates if row.period == newest]
-        period = newest
         observation = max(candidates, key=lambda row: (row.revision, row.received_at))
         if len({row.value for row in candidates if row.revision == observation.revision}) > 1:
             return item
