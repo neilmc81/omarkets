@@ -33,6 +33,11 @@ NOW = datetime(2026, 10, 21, 14, 0, tzinfo=UTC)
         ("Pentagon rules out pause as strikes on Iran widen", "bbc_world", "conflict"),
         ("US attacks Iran, war not expected to end soon", "bbc_world", "conflict"),
         ("Iran denies attacks on Israel, launches new strikes on Israel", "bbc_world", "conflict"),
+        ("Iran denies attacks on Israel. US attacks Iran", "bbc_world", "conflict"),
+        ("US will not launch an attack on Iran but Israel attacks Iran", "bbc_world", "conflict"),
+        ("Israel will not attack Iran, but Iran strikes Israel", "bbc_world", "conflict"),
+        ("US attacks Iran: China denies invasion of Taiwan", "bbc_world", "conflict"),
+        ("Iran strikes Israel denies invasion of Taiwan", "bbc_world", "conflict"),
         ("US launches new attacks on Iran, Pentagon confirms", "bbc_world", "conflict"),
         ("US attacks Iran, Pentagon denies civilian casualties", "bbc_world", "conflict"),
         ("US attacks Iran and won't stop attacks", "bbc_world", "conflict"),
@@ -96,6 +101,56 @@ def test_market_moving_headlines_match(headline, source, rule):
 )
 def test_routine_or_untrusted_headlines_do_not_match(headline, source):
     assert B.match_rule(headline, source) is None
+
+
+DENIALS = [
+    "Trump says more US attacks on Iran 'highly unlikely'",
+    "Trump says more US attacks on Iran not likely",
+    "US attack on Iran unlikely to happen",
+    "An invasion of Taiwan is unlikely to happen",
+    "Iran denies attacks on Israel",
+    "China denies invasion of Taiwan",
+    "Israel rules out strikes on Iran this year",
+    "No attack on Iran expected this week",
+    "US will not launch an attack on Iran",
+    "Israel will not attack Iran",
+    "Iran won't attack Israel",
+    "Iran won\u2019t strike Israel",
+]
+BREAKS = [". ", "; ", ": ", " \u2014 ", " \u2013 ", " - ", ", ", " but ", ", but ",
+          " while ", " as ", " after ", " and "]
+ATTACKS = [f"{subject} {verb} {target}"
+           for subject, target in [("US", "Iran"), ("Iran", "Israel"), ("Israel", "Iran"),
+                                   ("China", "Taiwan"), ("Russia", "US")]
+           for verb in ("strikes", "attacks", "bombs", "invades")]
+
+
+@pytest.mark.parametrize("denial", DENIALS)
+def test_a_denial_alone_is_quiet(denial):
+    assert B.match_rule(denial, "bbc_world") is None
+
+
+def test_a_denial_never_hides_an_attack_in_another_clause():
+    missed = [
+        headline
+        for denial in DENIALS for brk in BREAKS for attack in ATTACKS
+        for headline in (f"{denial}{brk}{attack}", f"{attack}{brk}{denial}")
+        if getattr(B.match_rule(headline, "bbc_world"), "key", None) != "conflict"
+    ]
+    assert missed == []
+
+
+def test_long_whitespace_runs_stay_fast():
+    import time
+
+    gap = " " * 50_000
+    headlines = [f"Iran denies{gap}attacks on{gap}Israel{gap}. US attacks Iran",
+                 f"US attacks on Iran{gap}", f"{gap}US will not{gap}attack Iran{gap}unlikely{gap}"]
+    start = time.perf_counter()
+    for headline in headlines:
+        B.match_rule(headline, "bbc_world")
+    assert time.perf_counter() - start < 1.0
+    assert B.match_rule(headlines[0], "bbc_world").key == "conflict"
 
 
 def test_repeats_and_the_same_story_still_developing_are_suppressed():
