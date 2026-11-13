@@ -269,3 +269,46 @@ def test_a_hedge_never_hides_an_attack_in_another_clause():
 def test_speculation_and_denial_together_stay_quiet():
     assert B.match_rule("Iran could attack Israel, US denies strikes", "bbc_world") is None
     assert B.match_rule("Israel has not ruled out strikes on Iran", "bbc_world").key == "conflict"
+
+
+QUIET_LAUNCH = [
+    "Iran denies launching missiles at Israel",
+    "Iran denies it launched missiles at Israel",
+    "Iran denies reports it launched missiles at Israel",
+    "Iran denies that it launched missiles at Israel",
+    "Iran says it did not launch missiles at Israel",
+    "Iran did not launch missiles at Israel",
+    "Iran will not launch missiles at Israel",
+    "Iran won't launch missiles at Israel",
+    "Iran rules out launching missiles at Israel",
+    "Israel rules out launching missiles at Iran",
+    "Iran is expected to launch missiles at Israel",
+    "Iran is set to launch missiles at Israel",
+    "Iran is due to launch missiles at Israel",
+    "Iran is poised to launch missiles at Israel",
+    "Iran is likely to launch missiles at Israel",
+    "Iran vows to launch missiles at Israel",
+    "Iran says it will launch missiles at Israel",
+    "US officials fear Iran will launch missiles at Israel",
+    "US plans strikes on Iran and invasion of Taiwan",
+    "US weighs strikes on Iran and an invasion of Taiwan",
+    "US plans strikes on Iran and attacks on Taiwan",
+]
+
+
+@pytest.mark.parametrize("headline", QUIET_LAUNCH)
+def test_denied_or_speculative_launches_and_shared_hedges_are_quiet(headline):
+    assert B.match_rule(headline, "bbc_world") is None
+
+
+@pytest.mark.parametrize("headline", [
+    "Iran launches missiles at Israel",
+    "Iran launched missiles at Israel",
+    "US attacks Iran to prevent possible nuclear strike",
+    "US strikes Iran in order to stop a possible invasion of Taiwan",
+    "Israel attacks Iran so as to avert possible nuclear attack",
+    "US plans strikes on Iran and attacks Taiwan",
+    "US plans strikes on Iran and Israel attacks Iran",
+])
+def test_these_still_alert(headline):
+    assert B.match_rule(headline, "bbc_world").key == "conflict"

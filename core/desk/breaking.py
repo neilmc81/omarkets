@@ -62,7 +62,8 @@ RULES: tuple[Rule, ...] = (
     Rule("conflict", "Attack or invasion", _rx(
         r"\b(invades?|invasion of|declares? war|blockade of taiwan|nuclear (test|strike|attack)|"
         r"(strikes?|attacks?|missiles?) on (taiwan|iran|israel|china|the us|the u\.s\.|america)|"
-        r"launch\w* missiles? at (taiwan|iran|israel|china|the us|the u\.s\.|america)|"
+        r"(china|iran|israel|russia|us|u\.s\.) launch(es|ed) missiles? at "
+        r"(taiwan|iran|israel|china|the us|the u\.s\.|america)|"
         r"(china|iran|israel|russia|us|u\.s\.) (strikes|attacks|bombs|invades) "
         r"(taiwan|iran|israel|china|us|u\.s\.|american))\b")),
     Rule("default", "Debt default or shutdown", _rx(
@@ -83,19 +84,31 @@ _ANALYSIS = re.compile(r"^(why|how|what|analysis|opinion|explainer|live)\b|\?\s*
 _SPECULATION = re.compile(r"\b(possible|could|may|might|warns?|threat\w*|prepar\w*|plans?|"
                           r"considers?|weighs?|reportedly)\b", re.IGNORECASE)
 
+_ACT = r"(?:attacks?|strikes?|invasions?|war|military action)"
+
 #: ...nor is one the headline denies or calls unlikely. A false alert is cheap and a
 #: hidden real attack is not, so this fails toward alerting: the headline is cut into
 #: clauses first, and it is only quiet when *every* clause that mentions an attack is
 #: itself a plain denial or hedge of that attack.
+#: The separator is captured so that "and" can be told apart from the rest. A purpose
+#: phrase ("to prevent possible ...") also starts a new clause: its hedge is about a
+#: different event than the attack before it.
 _CLAUSE_SPLIT = re.compile(
-    r"[;:,!?\u2014\u2013]| - |\.(?= |$)|"
-    r"\b(?:but|while|as|after|and|amid|despite|though|although|before|when|since|then|with)\b",
+    r"([;:,!?\u2014\u2013]| - |\.(?= |$)|"
+    r"\b(?:but|while|as|after|and|amid|despite|though|although|before|when|since|then|with)\b|"
+    r"\bto (?:prevent|stop|avert|deter|forestall|thwart|head off|preempt|pre-empt|avoid|block)\b|"
+    r"\b(?:in order|so as) to\b)",
+    re.IGNORECASE)
+#: After "and", a bare noun phrase ("invasion of Taiwan", "attacks on Iran") shares the
+#: hedge of the clause before it ("US plans strikes on Iran and invasion of Taiwan").
+#: A verb ("and attacks Taiwan") has no preposition and so stands on its own.
+_NOUN_CONT = re.compile(
+    rf"^(?:(?:more|further|new|a|an|the|military|any) ){{0,2}}{_ACT} (?:on|against|of|in) ",
     re.IGNORECASE)
 #: Any of these in a clause makes it an attack clause (broad on purpose).
 _ATTACK_TERM = re.compile(
     r"\b(?:attack\w*|strike\w*|struck|invad\w*|invasion\w*|war|bomb\w*|missile\w*|blockade\w*|"
     r"nuclear|military action)\b", re.IGNORECASE)
-_ACT = r"(?:attacks?|strikes?|invasions?|war|military action)"
 _TARGET = r"(?: (?:on|against|of|in) (?:the )?[\w.'-]+)?"
 _TIME = r"(?: (?:this|next) \w+| today| tonight)?"
 #: Matched against one whitespace-normalised clause; each form must end the clause.
@@ -139,12 +152,20 @@ def _hedged_attack(headline: str) -> bool:
     """
     text = " ".join(headline.replace("\u2019", "'").replace("\u2018", "'").split())
     text = _QUOTES.sub("", text)
-    clauses = [" ".join(c.split()) for c in _CLAUSE_SPLIT.split(text)]
-    attack_clauses = [c for c in clauses if _ATTACK_TERM.search(c)]
-    if not attack_clauses:
+    parts = _CLAUSE_SPLIT.split(text)  # clause, separator, clause, separator, ...
+    hedged = []
+    speculative = False
+    for i in range(0, len(parts), 2):
+        clause = " ".join(parts[i].split())
+        shares = (i > 0 and parts[i - 1].lower() == "and" and bool(_NOUN_CONT.match(clause))
+                  and speculative)
+        speculative = shares or bool(_SPECULATION.search(clause))
+        if _ATTACK_TERM.search(clause):
+            hedged.append(speculative or _clause_negated(clause))
+    if not hedged:
         # No clause to judge: keep the old whole-headline veto.
         return bool(_SPECULATION.search(headline))
-    return all(_SPECULATION.search(c) or _clause_negated(c) for c in attack_clauses)
+    return all(hedged)
 
 
 def match_rule(headline: str, source: str) -> Rule | None:
