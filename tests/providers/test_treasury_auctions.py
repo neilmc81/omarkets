@@ -137,12 +137,18 @@ async def test_concurrent_readers_share_one_request():
     await client.aclose()
 
 
-def _after_close_setup(handler, **kwargs):
+def _after_close_setup(handler, *, retry_pause=0.0, results_deadline=None, retries=None,
+                       **kwargs):
     # 30-year bond closes at 1:00 PM ET on 2026-11-12 (18:00 UTC); two minutes later.
     clock = {"now": datetime(2026, 11, 12, 18, 2, tzinfo=UTC)}
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    provider = TreasuryAuctions(client=client, clock=lambda: clock["now"],
-                                retry_pause=0.0, **kwargs)
+    provider = TreasuryAuctions(client=client, clock=lambda: clock["now"], **kwargs)
+    # Set after construction so the same tests also run against code that predates these knobs.
+    provider._retry_pause = retry_pause
+    if results_deadline is not None:
+        provider._results_deadline = results_deadline
+    if retries is not None:
+        provider._retries = retries
     return provider, client, clock
 
 
@@ -263,7 +269,8 @@ async def test_the_cooldown_outside_the_awaiting_window_is_the_normal_poll():
 
     clock = {"now": datetime(2026, 11, 14, 12, 0, tzinfo=UTC)}  # no auction pending
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    provider = TreasuryAuctions(client=client, clock=lambda: clock["now"], retry_pause=0.0)
+    provider = TreasuryAuctions(client=client, clock=lambda: clock["now"])
+    provider._retry_pause = 0.0
     await provider.results()
     assert sorted(calls) == ["Bond", "Note", "TIPS"]  # single attempt each
     calls.clear()
@@ -310,6 +317,80 @@ async def test_a_results_refresh_is_bounded_by_an_overall_deadline():
     results = await asyncio.wait_for(provider.results(), 1.0)
     assert [a.years for a in results] == [10]  # Note/TIPS kept; Bond timed out
     assert "unavailable" in provider.last_error
+    await client.aclose()
+
+
+async def test_the_cooldown_starts_when_a_slow_failing_attempt_ends():
+    calls: list[str] = []
+    holder: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("upcoming"):
+            return httpx.Response(200, json=_bond_rows(False))
+        kind = request.url.params["type"]
+        calls.append(kind)
+        if kind == "Bond":
+            holder["clock"]["now"] += timedelta(seconds=30)  # a slow failure
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json=[row()])
+
+    provider, client, clock = _after_close_setup(handler, retries=0)
+    holder["clock"] = clock
+    await provider.upcoming()
+    await provider.results()
+    calls.clear()
+    clock["now"] += timedelta(seconds=10)  # 10s after the attempt ended: still cooling down
+    await provider.results()
+    assert "Bond" not in calls
+    clock["now"] += timedelta(seconds=10)  # past the 15s cooldown; Note/TIPS are fresh
+    await provider.results()
+    assert calls == ["Bond"]
+    await client.aclose()
+
+
+async def test_readers_queued_behind_a_slow_failing_refresh_share_its_outcome():
+    import asyncio
+
+    calls: list[str] = []
+    holder: dict = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("upcoming"):
+            return httpx.Response(200, json=_bond_rows(False))
+        calls.append(request.url.params["type"])
+        await asyncio.sleep(0.01)
+        holder["clock"]["now"] += timedelta(seconds=20)  # the attempt takes 20s
+        raise httpx.ReadTimeout("slow", request=request)
+
+    provider, client, clock = _after_close_setup(handler, retries=0)
+    holder["clock"] = clock
+    await provider.upcoming()
+    # Cold readers: nothing cached, so each queues behind the running refresh.
+    outcomes = await asyncio.gather(*(provider.results() for _ in range(5)))
+    assert outcomes == [[]] * 5
+    assert sorted(calls) == ["Bond", "Note", "TIPS"]  # one refresh, not five
+    assert "unavailable" in provider.last_error
+    await client.aclose()
+
+
+async def test_schedule_and_results_errors_are_tracked_separately():
+    state = {"schedule_ok": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("upcoming"):
+            if state["schedule_ok"]:
+                return httpx.Response(200, json=_bond_rows(False))
+            return httpx.Response(503)
+        return httpx.Response(200, json=[row()])
+
+    provider, client, clock = _after_close_setup(handler)
+    await provider.upcoming()
+    await provider.results()  # results succeed...
+    assert "schedule" in provider.last_error  # ...but do not hide the schedule failure
+    state["schedule_ok"] = True
+    clock["now"] += timedelta(hours=7)
+    await provider.upcoming()
+    assert provider.last_error is None
     await client.aclose()
 
 

@@ -203,10 +203,16 @@ class TreasuryAuctions:
         self._next_try: dict[str, datetime] = {}
         self._upcoming: tuple[datetime, list[Auction]] | None = None
         self._results: tuple[datetime, list[Auction]] | None = None
-        self.last_error: str | None = None
+        self._upcoming_error: str | None = None
+        self._results_error: str | None = None
         # Separate locks: a slow results refresh never blocks the cached schedule.
         self._upcoming_lock = asyncio.Lock()
         self._results_lock = asyncio.Lock()
+
+    @property
+    def last_error(self) -> str | None:
+        """Why the schedule or results are stale, if either is."""
+        return self._results_error or self._upcoming_error
 
     async def _get(self, path: str, params: dict[str, str]) -> object:
         client = self._client or httpx.AsyncClient(timeout=30.0)
@@ -233,10 +239,10 @@ class TreasuryAuctions:
         try:
             rows = parse(await self._get("upcoming", {}))
         except Exception as exc:  # noqa: BLE001 - provider isolation
-            self.last_error = f"Treasury auction schedule unavailable ({type(exc).__name__})"
+            self._upcoming_error = f"Treasury auction schedule unavailable ({type(exc).__name__})"
             logger.warning("treasury upcoming fetch failed: %s", type(exc).__name__)
             return self._upcoming[1] if self._upcoming else []
-        self.last_error = None
+        self._upcoming_error = None
         self._upcoming = (now, rows)
         return rows
 
@@ -277,6 +283,8 @@ class TreasuryAuctions:
         return error
 
     async def _results_locked(self) -> list[Auction]:
+        # Read the clock only once we hold the lock: a reader that queued behind a
+        # refresh then sees that attempt's outcome and cooldown instead of starting another.
         now = self._clock()
         awaiting = self._awaiting_results(now)
         fresh = self._results_poll if awaiting else self._ttl
@@ -286,12 +294,16 @@ class TreasuryAuctions:
         if not due:
             return self._results[1] if self._results else []
         # After the close TreasuryDirect can be slow: fetch the types together, retry
-        # just the ones that fail, and bound the whole refresh.
+        # just the ones that fail while the overall deadline allows, and bound the refresh.
         attempts = 1 + (self._retries if awaiting else 0)
         errors: dict[str, Exception] = {}
+        succeeded: set[str] = set()
 
         async def run(kind: str) -> None:
-            if (error := await self._refresh_kind(kind, now, attempts)) is not None:
+            error = await self._refresh_kind(kind, now, attempts)
+            if error is None:
+                succeeded.add(kind)
+            else:
                 errors[kind] = error
 
         try:
@@ -299,21 +311,23 @@ class TreasuryAuctions:
                 await asyncio.gather(*(run(k) for k in due))
         except TimeoutError:
             for kind in due:
-                if kind not in errors and self._kinds.get(kind, (None,))[0] != now:
+                if kind not in succeeded and kind not in errors:
                     errors[kind] = TimeoutError("refresh deadline")
+        # The cooldown runs from when the attempt ended, not when it began.
+        done = self._clock()
         cooldown = self._retry_cooldown if awaiting else max(self._retry_cooldown,
                                                              self._results_poll)
         for kind in due:
             if kind in errors:
-                self._next_try[kind] = now + cooldown
+                self._next_try[kind] = done + cooldown
             else:
                 self._next_try.pop(kind, None)
         if errors:
             name = type(next(iter(errors.values()))).__name__
-            self.last_error = f"Treasury auction results unavailable ({name})"
+            self._results_error = f"Treasury auction results unavailable ({name})"
             logger.warning("treasury results fetch failed: %s (%s)", name, ", ".join(errors))
         else:
-            self.last_error = None
+            self._results_error = None
         if not self._kinds:
             return []
         rows = [r for k in KINDS if k in self._kinds for r in self._kinds[k][1]]
