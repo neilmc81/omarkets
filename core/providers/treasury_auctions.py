@@ -36,6 +36,7 @@ TIPS_YEARS = frozenset({5, 10, 30})
 USUAL_CLOSE = time(13, 0)
 
 Kind = Literal["note", "bond", "tips"]
+KINDS = ("Note", "Bond", "TIPS")
 
 
 class AuctionResult(BaseModel):
@@ -181,13 +182,19 @@ class TreasuryAuctions:
         ttl: timedelta = timedelta(hours=6),
         results_poll: timedelta = timedelta(minutes=2),
         history_days: int = 400,
+        retries: int = 2,
+        retry_pause: float = 3.0,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._client = client
         self._ttl = ttl
         self._results_poll = results_poll
         self._history_days = history_days
+        self._retries = retries
+        self._retry_pause = retry_pause
         self._clock = clock
+        # Last good rows per security type, so one slow type never wipes the others.
+        self._kinds: dict[str, tuple[datetime, list[object]]] = {}
         self._upcoming: tuple[datetime, list[Auction]] | None = None
         self._results: tuple[datetime, list[Auction]] | None = None
         self.last_error: str | None = None
@@ -195,7 +202,7 @@ class TreasuryAuctions:
         self._lock = asyncio.Lock()
 
     async def _get(self, path: str, params: dict[str, str]) -> object:
-        client = self._client or httpx.AsyncClient(timeout=20.0)
+        client = self._client or httpx.AsyncClient(timeout=30.0)
         try:
             response = await client.get(
                 f"{BASE}/{path}", params={"format": "json", **params},
@@ -238,25 +245,46 @@ class TreasuryAuctions:
         async with self._lock:
             return await self._results_locked()
 
+    async def _fetch_kind(self, kind: str) -> list[object]:
+        payload = await self._get("auctioned", {"type": kind, "days": str(self._history_days)})
+        return payload if isinstance(payload, list) else []
+
     async def _results_locked(self) -> list[Auction]:
         now = self._clock()
-        if self._results is not None:
-            age = now - self._results[0]
-            fresh = self._results_poll if self._awaiting_results(now) else self._ttl
-            if age < fresh:
-                return self._results[1]
-        rows: list[object] = []
-        try:
-            for kind in ("Note", "Bond", "TIPS"):
-                payload = await self._get("auctioned",
-                                          {"type": kind, "days": str(self._history_days)})
-                if isinstance(payload, list):
-                    rows.extend(payload)
-        except Exception as exc:  # noqa: BLE001 - provider isolation
-            self.last_error = f"Treasury auction results unavailable ({type(exc).__name__})"
-            logger.warning("treasury results fetch failed: %s", type(exc).__name__)
-            return self._results[1] if self._results else []
-        self.last_error = None
+        awaiting = self._awaiting_results(now)
+        fresh = self._results_poll if awaiting else self._ttl
+        due = [k for k in KINDS if k not in self._kinds or now - self._kinds[k][0] >= fresh]
+        if not due and self._results is not None:
+            return self._results[1]
+        # After the close TreasuryDirect can be slow: fetch the types together and
+        # retry just the ones that failed, instead of waiting out the poll interval.
+        failed: dict[str, Exception] = {}
+        for attempt in range(1 + (self._retries if awaiting else 0)):
+            if attempt and self._retry_pause > 0:
+                await asyncio.sleep(self._retry_pause)
+            outcomes = await asyncio.gather(*(self._fetch_kind(k) for k in due),
+                                            return_exceptions=True)
+            failed, retry = {}, []
+            for kind, outcome in zip(due, outcomes, strict=True):
+                if isinstance(outcome, Exception):
+                    failed[kind] = outcome
+                    retry.append(kind)
+                elif isinstance(outcome, BaseException):
+                    raise outcome
+                else:
+                    self._kinds[kind] = (now, outcome)
+            due = retry
+            if not due:
+                break
+        if failed:
+            name = type(next(iter(failed.values()))).__name__
+            self.last_error = f"Treasury auction results unavailable ({name})"
+            logger.warning("treasury results fetch failed: %s (%s)", name, ", ".join(failed))
+        else:
+            self.last_error = None
+        if not self._kinds:
+            return []
+        rows = [r for k in KINDS if k in self._kinds for r in self._kinds[k][1]]
         auctions = [a for a in parse(rows) if a.result is not None]
         self._results = (now, auctions)
         return auctions

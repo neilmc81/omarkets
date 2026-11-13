@@ -135,3 +135,112 @@ async def test_concurrent_readers_share_one_request():
     await asyncio.gather(provider.upcoming(), provider.upcoming())
     assert len(calls) == 1
     await client.aclose()
+
+
+def _after_close_setup(handler, **kwargs):
+    # 30-year bond closes at 1:00 PM ET on 2026-11-12 (18:00 UTC); two minutes later.
+    clock = {"now": datetime(2026, 11, 12, 18, 2, tzinfo=UTC)}
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = TreasuryAuctions(client=client, clock=lambda: clock["now"],
+                                retry_pause=0.0, **kwargs)
+    return provider, client, clock
+
+
+def _bond_rows(with_result: bool):
+    extra = {} if with_result else {"highYield": "", "bidToCoverRatio": ""}
+    return [row(securityType="Bond", originalSecurityTerm="30-Year", reopening="No",
+                cusip="912810UA4", competitiveAuctionCloseDate="2026-11-12T00:00:00", **extra)]
+
+
+async def test_a_timeout_after_the_close_is_retried_for_only_the_failed_type():
+    seen: list[str] = []
+    bond_attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("upcoming"):
+            return httpx.Response(200, json=_bond_rows(False))
+        kind = request.url.params["type"]
+        seen.append(kind)
+        if kind == "Bond":
+            bond_attempts["n"] += 1
+            if bond_attempts["n"] <= 2:
+                raise httpx.ReadTimeout("slow", request=request)
+            return httpx.Response(200, json=_bond_rows(True))
+        return httpx.Response(200, json=[])
+
+    provider, client, _ = _after_close_setup(handler)
+    await provider.upcoming()
+    results = await provider.results()
+    assert [a.label for a in results] == ["30-year bond"]
+    assert results[0].result.bid_to_cover == 2.77
+    assert seen.count("Bond") == 3 and seen.count("Note") == 1 and seen.count("TIPS") == 1
+    assert provider.last_error is None
+    await client.aclose()
+
+
+async def test_a_type_that_keeps_failing_is_retried_on_the_next_read_not_the_slow_poll():
+    state = {"bond_ok": False}
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("upcoming"):
+            return httpx.Response(200, json=_bond_rows(False))
+        kind = request.url.params["type"]
+        seen.append(kind)
+        if kind == "Bond":
+            if not state["bond_ok"]:
+                raise httpx.ReadTimeout("slow", request=request)
+            return httpx.Response(200, json=_bond_rows(True))
+        return httpx.Response(200, json=[row()])
+
+    provider, client, clock = _after_close_setup(handler)
+    await provider.upcoming()
+    first = await provider.results()
+    assert [a.years for a in first] == [10]  # the other types are kept, nothing invented
+    assert "unavailable" in provider.last_error
+    seen.clear()
+    state["bond_ok"] = True
+    clock["now"] += timedelta(seconds=20)  # well inside the 2-minute poll
+    second = await provider.results()
+    assert seen == ["Bond"]
+    assert sorted(a.years for a in second) == [10, 30]
+    assert provider.last_error is None
+    await client.aclose()
+
+
+async def test_one_failing_type_does_not_wipe_that_types_previous_results():
+    state = {"bond_ok": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        kind = request.url.params["type"]
+        if kind == "Bond":
+            if not state["bond_ok"]:
+                raise httpx.ReadTimeout("slow", request=request)
+            return httpx.Response(200, json=_bond_rows(True))
+        return httpx.Response(200, json=[row()])
+
+    provider, client, clock = _after_close_setup(handler, ttl=timedelta(0))
+    assert sorted(a.years for a in await provider.results()) == [10, 30]
+    state["bond_ok"] = False
+    clock["now"] += timedelta(hours=1)
+    assert sorted(a.years for a in await provider.results()) == [10, 30]
+    assert "unavailable" in provider.last_error
+    await client.aclose()
+
+
+async def test_the_three_types_are_fetched_concurrently():
+    import asyncio
+
+    active = {"now": 0, "peak": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        active["now"] += 1
+        active["peak"] = max(active["peak"], active["now"])
+        await asyncio.sleep(0.02)
+        active["now"] -= 1
+        return httpx.Response(200, json=[row()])
+
+    provider, client, _ = _after_close_setup(handler)
+    await provider.results()
+    assert active["peak"] == 3
+    await client.aclose()
