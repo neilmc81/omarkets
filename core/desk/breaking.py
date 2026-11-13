@@ -82,22 +82,38 @@ _ANALYSIS = re.compile(r"^(why|how|what|analysis|opinion|explainer|live)\b|\?\s*
 _SPECULATION = re.compile(r"\b(possible|could|may|might|warns?|threat\w*|prepar\w*|plans?|"
                           r"considers?|weighs?|reportedly)\b", re.IGNORECASE)
 
-#: ...nor is one the headline denies, rules out, or calls unlikely. The negation has
-#: to be about the attack itself: "US attacks Iran, Pentagon denies civilian
-#: casualties" or "Iran rejects ceasefire, launches new attacks" are real events.
-_ACT = r"(?:attacks?|strikes?|invasions?|invad\w+|war|military action)\b"
+#: ...nor is one the headline denies or calls unlikely. Deliberately narrow: a false
+#: alert is cheap, suppressing a real attack is not. The hedge or denial must sit
+#: right against the attack noun and end the clause ("attacks on Iran highly
+#: unlikely", "Iran denies attacks on Israel"), and it must not follow a clause
+#: connector or comma, so a second clause never vetoes an attack clause.
+_ACT = r"(?:attacks?|strikes?|invasions?|war|military action)\b"
+_TARGET = r"(?:\s+(?:on|against|of|in)\s+(?:the\s+)?[\w.’'-]+)?"
+#: End of the clause: closing quote, full stop, a time phrase, or nothing.
+_END = r"(?=\s*['\"”’]*\s*(?:$|[.!]|\s(?:this|next|today|tonight)\b))"
+_HEDGE = (r"(?:(?:is|are|seems?)\s+)?(?:(?:highly|very)\s+)?(?:unlikely|not\s+(?:likely|expected))"
+          r"(?:\s+to\s+(?:happen|occur|materiali[sz]e|take\s+place))?")
 _DENIAL = re.compile(
-    # "more US attacks on Iran 'highly unlikely'" / "... not likely" / "... not expected"
-    rf"\b{_ACT}[^,;:.]{{0,40}}?\b"
-    r"(?:(?:highly |very )?unlikely\b(?! to\b)|not (?:likely|expected)\b)"
+    # "more US attacks on Iran 'highly unlikely'", "An invasion of Taiwan is unlikely to happen"
+    rf"\b{_ACT}{_TARGET}\s+['\"“‘]?{_HEDGE}{_END}"
     # "no attack on Israel is planned"
-    rf"|\bno {_ACT}[^,;:.]{{0,30}}?\b(?:is|are|was|will be) (?:planned|expected|imminent|coming)\b"
-    # "Israel rules out strikes on Iran", "no plans for an invasion"
-    rf"|\b(?:rul(?:es|ed|ing) out|no plans? (?:for|to)|no intention of|not planning|"
-    rf"denies (?:any )?plans? (?:for|to))\s+(?:[\w'’-]+\s+){{0,2}}{_ACT}"
-    # "Iran won't attack Israel"
-    rf"|\b(?:will not|won['’]t) (?:attack|strike|invade)\b",
+    rf"|\bno\s+{_ACT}{_TARGET}\s+(?:(?:is|are)\s+)?(?:planned|expected|imminent){_END}"
+    # "Israel rules out strikes on Iran", "China denies invasion of Taiwan"
+    rf"|\b(?:rul(?:es|ed|ing)\s+out|denies|denied|no\s+plans?\s+(?:for|to)|no\s+intention\s+of|"
+    rf"not\s+planning)\s+(?:(?:any|more|new|further|a|an|the|military)\s+){{0,2}}{_ACT}{_TARGET}{_END}"
+    # "Iran won't attack Israel", "US will not launch an attack on Iran"
+    r"|\b(?:will\s+not|won['’]t)\s+(?:attack|strike|invade)\b"
+    rf"|\b(?:will\s+not|won['’]t)\s+(?:launch|carry\s+out)\s+(?:an?|any)\s+{_ACT}",
     re.IGNORECASE)
+
+#: A denial after one of these belongs to a different clause than the attack.
+_CLAUSE_BREAK = re.compile(r"[,;]|\b(as|after|and|but|while|amid|despite|though|although|if|"
+                           r"when|before|since|with)\b", re.IGNORECASE)
+
+
+def _denied(headline: str) -> bool:
+    found = _DENIAL.search(headline)
+    return bool(found) and not _CLAUSE_BREAK.search(headline[: found.start()])
 
 
 def match_rule(headline: str, source: str) -> Rule | None:
@@ -111,7 +127,7 @@ def match_rule(headline: str, source: str) -> Rule | None:
         ):
             continue
         if rule.key == "conflict" and (
-            _SPECULATION.search(headline) or _DENIAL.search(headline)
+            _SPECULATION.search(headline) or _denied(headline)
         ):
             continue
         if rule.pattern.search(headline):
