@@ -398,3 +398,62 @@ def test_purpose_clause_with_its_own_event_alerts(headline):
 ])
 def test_bare_noun_phrases_and_denied_reports_are_quiet(headline):
     assert B.match_rule(headline, "bbc_world") is None
+
+
+ROUND4_ALERT = [
+    "US plans strikes on Iran and attacks on Israel, killing 20",
+    "US plans strikes on Iran and attacks on Israel in the Gulf, killing 20",
+    "US plans strikes on Iran and invasion of Taiwan as Chinese troops cross the border",
+    "US weighs response to Iran and invasion of Taiwan by China",
+    "US plans strikes on Iran and attacks on Israel by Hezbollah",
+    "US plans strikes on Iran and an invasion of Taiwan by China",
+    "US weighs response to stop attacks on Israel by Hezbollah",
+    "US plans aid to stop invasion of Taiwan by China",
+    "US plans strikes on Iran and invasion of Taiwan by Friday as troops cross",
+    "US plans strikes on Iran and invasion of Taiwan by Friday as 20 die",
+    "US plans strikes on Iran to stop attacks on Israel with 20 killed",
+    "US plans strikes on Iran. And attacks on Israel",
+    "US plans strikes on Iran; and attacks on Israel",
+    "US plans strikes on Iran to stop attacks on Israel that have killed 40",
+]
+
+
+@pytest.mark.parametrize("headline", ROUND4_ALERT)
+def test_inheritance_fails_toward_alerting(headline):
+    assert B.match_rule(headline, "bbc_world").key == "conflict"
+
+
+@pytest.mark.parametrize("headline", [
+    "US plans strikes on Iran and invasion of Taiwan",
+    "US plans strikes on Iran and invasion of Taiwan next week",
+    "US plans strikes on Iran and invasion of Taiwan by Friday",
+    "US plans strikes on Iran and invasion of Taiwan by the end of the week",
+    "US plans strikes on Iran, and an invasion of Taiwan",
+    "US plans strikes on Iran, to prevent war",
+    "US plans strikes on Iran to prevent war",
+    "US plans strikes on Iran and invasion of Taiwan, officials say",
+])
+def test_whitelisted_bare_noun_phrases_stay_quiet(headline):
+    assert B.match_rule(headline, "bbc_world") is None
+
+
+ACTORS = ["by China", "by Hezbollah", "by Iranian forces", "by the Houthis"]
+TAILS = [", killing 20", " as troops cross the border", " as 20 die", " with 20 killed",
+         ", 20 dead", "; 40 killed", " - dozens dead", " after troops cross the border"]
+HARD_JOINERS = [". And ", "; and ", ". To prevent ", "; to stop ", ": and "]
+
+
+def test_generated_actor_tail_and_punctuation_variants_alert():
+    wrong = []
+    for plan in PLANS:
+        for bare in BARE:
+            for joiner in JOINERS:
+                base = f"{plan}{joiner}{bare}"
+                if "war" != bare and "nuclear" not in bare:
+                    wrong += [f"{base} {a}" for a in ACTORS
+                              if B.match_rule(f"{base} {a}", "bbc_world") is None]
+                wrong += [f"{base}{t}" for t in TAILS
+                          if B.match_rule(f"{base}{t}", "bbc_world") is None]
+            wrong += [f"{plan}{j}{bare}" for j in HARD_JOINERS
+                      if B.match_rule(f"{plan}{j}{bare}", "bbc_world") is None]
+    assert wrong == []

@@ -106,15 +106,26 @@ _ATTACK_TERM = re.compile(
 _TARGET = r"(?: (?:on|against|of|in) (?:the )?[\w.'-]+)?"
 _TIME = r"(?: (?:this|next) \w+| today| tonight)?"
 #: One rule for when a clause may inherit the hedge of the speculative clause before it
-#: (after "and", or as a purpose clause "to prevent ..."): it must be only a bare noun
-#: phrase, optionally with a time or place modifier. Any predicate ("begins", "kill 40"),
-#: relative clause, participle or casualty phrase makes it a report of its own.
+#: (after "and", or as a purpose clause "to prevent ..."). It fails toward alerting: the
+#: clause must match this closed shape end to end -- attack noun, optional target, at
+#: most one listed time or place modifier -- and nothing but more of the same or an
+#: attribution ("officials say") may follow it in the headline. An actor ("by China"),
+#: a predicate, or an event tail (", killing 20", "as troops cross") makes it a report.
 _ADJ = r"(?:(?:more|further|new|a|an|the|another|any|military|nuclear) ){0,3}"
-_MODIFIER = (r"(?: (?:(?:this|next|by|on|until) [\w.'-]+|today|tonight|tomorrow"
-             r"|in the [\w.'-]+))?")
+_DAY = r"(?:mon|tues|wednes|thurs|fri|satur|sun)day"
+_MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november"
+          r"|december)(?: \d{1,2})?")
+_WHEN = (rf"(?:{_DAY}|{_MONTH}|noon|midnight|tomorrow|tonight|"
+         r"(?:this|next) (?:week|weekend|month|year)|the end of (?:the|this|next) "
+         r"(?:day|week|month|year))")
+_MODIFIER = (rf"(?: (?:(?:by|on|until|before) {_WHEN}|(?:this|next) (?:week|weekend|month|year"
+             rf"|{_DAY})|today|tonight|tomorrow"
+             r"|in the (?:gulf|region|middle east|pacific|red sea|strait|south china sea)))?")
 _BARE_NOUN = re.compile(
     rf"^{_ADJ}{_ACT}(?: (?:on|against|of|in) (?:the )?[\w.'-]+)?{_MODIFIER}$", re.IGNORECASE)
 _SHARING_SEPARATOR = re.compile(r"^(?:and|to \w+(?: off)?|in order to|so as to)$", re.IGNORECASE)
+_ATTRIBUTION = re.compile(r"^[\w.'-]+(?: [\w.'-]+)? (?:says?|said|reports?|reported)$",
+                          re.IGNORECASE)
 #: Matched against one whitespace-normalised clause; each form must end the clause.
 _NEGATED = re.compile(
     # "more US attacks on Iran highly unlikely", "an invasion of Taiwan is unlikely to happen"
@@ -160,15 +171,34 @@ def _hedged_attack(headline: str) -> bool:
     text = " ".join(headline.replace("\u2019", "'").replace("\u2018", "'").split())
     text = _QUOTES.sub("", text)
     parts = _CLAUSE_SPLIT.split(text)  # clause, separator, clause, separator, ...
+    # Non-empty clauses, each with the separators since the previous non-empty clause.
+    clauses: list[tuple[list[str], str]] = []
+    seps: list[str] = []
+    for i, part in enumerate(parts):
+        part = " ".join(part.split())
+        if i % 2:
+            seps.append(part)
+        elif part:
+            clauses.append((seps, part))
+            seps = []
+
+    def may_inherit(seps: list[str], clause: str) -> bool:
+        # Only a comma may sit before the joiner: ", and" yes, ". And" / "; and" no.
+        joined = len(seps) in (1, 2) and seps[:-1] in ([], [","])
+        return (joined and bool(_SHARING_SEPARATOR.match(seps[-1]))
+                and bool(_BARE_NOUN.match(clause)))
+
+    # quiet_after[k]: everything after clause k is inheriting noun phrases or attribution.
+    quiet_after = [True] * len(clauses)
+    for k in range(len(clauses) - 2, -1, -1):
+        nxt_seps, nxt = clauses[k + 1]
+        quiet_after[k] = quiet_after[k + 1] and (
+            may_inherit(nxt_seps, nxt) or bool(_ATTRIBUTION.match(nxt)))
+
     hedged = []
     speculative = False
-    for i in range(0, len(parts), 2):
-        clause = " ".join(parts[i].split())
-        if not clause:
-            continue  # ", and" / ", to ..." leave an empty clause: keep the hedge going
-        sep = " ".join(parts[i - 1].split()) if i > 0 else ""
-        shares = (speculative and bool(_SHARING_SEPARATOR.match(sep))
-                  and bool(_BARE_NOUN.match(clause)))
+    for k, (clause_seps, clause) in enumerate(clauses):
+        shares = speculative and quiet_after[k] and may_inherit(clause_seps, clause)
         speculative = shares or bool(_SPECULATION.search(clause))
         if _ATTACK_TERM.search(clause):
             hedged.append(speculative or _clause_negated(clause))
