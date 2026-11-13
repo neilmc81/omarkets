@@ -184,6 +184,8 @@ class TreasuryAuctions:
         history_days: int = 400,
         retries: int = 2,
         retry_pause: float = 3.0,
+        retry_cooldown: timedelta = timedelta(seconds=15),
+        results_deadline: float = 45.0,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._client = client
@@ -192,14 +194,19 @@ class TreasuryAuctions:
         self._history_days = history_days
         self._retries = retries
         self._retry_pause = retry_pause
+        self._retry_cooldown = retry_cooldown
+        self._results_deadline = results_deadline
         self._clock = clock
         # Last good rows per security type, so one slow type never wipes the others.
         self._kinds: dict[str, tuple[datetime, list[object]]] = {}
+        # A failed type is not asked again before this time (keeps last-good rows).
+        self._next_try: dict[str, datetime] = {}
         self._upcoming: tuple[datetime, list[Auction]] | None = None
         self._results: tuple[datetime, list[Auction]] | None = None
         self.last_error: str | None = None
-        # One fetch at a time, so concurrent readers share a single request.
-        self._lock = asyncio.Lock()
+        # Separate locks: a slow results refresh never blocks the cached schedule.
+        self._upcoming_lock = asyncio.Lock()
+        self._results_lock = asyncio.Lock()
 
     async def _get(self, path: str, params: dict[str, str]) -> object:
         client = self._client or httpx.AsyncClient(timeout=30.0)
@@ -216,7 +223,7 @@ class TreasuryAuctions:
                 await client.aclose()
 
     async def upcoming(self) -> list[Auction]:
-        async with self._lock:
+        async with self._upcoming_lock:
             return await self._upcoming_locked()
 
     async def _upcoming_locked(self) -> list[Auction]:
@@ -242,44 +249,69 @@ class TreasuryAuctions:
 
     async def results(self) -> list[Auction]:
         """Auctions with results over roughly the last year, oldest first."""
-        async with self._lock:
+        # A refresh is already running: readers with data serve it rather than queue
+        # behind a slow upstream; readers with nothing wait and share that attempt.
+        if self._results_lock.locked() and self._results is not None:
+            return self._results[1]
+        async with self._results_lock:
             return await self._results_locked()
 
     async def _fetch_kind(self, kind: str) -> list[object]:
         payload = await self._get("auctioned", {"type": kind, "days": str(self._history_days)})
-        return payload if isinstance(payload, list) else []
+        if not isinstance(payload, list):
+            # An error body is not "no auctions": keep the last good rows.
+            raise ValueError(f"unexpected {type(payload).__name__} body")
+        return payload
+
+    async def _refresh_kind(self, kind: str, now: datetime, attempts: int) -> Exception | None:
+        """Fetch one type, retrying only it; store rows on success."""
+        error: Exception | None = None
+        for attempt in range(attempts):
+            if attempt and self._retry_pause > 0:
+                await asyncio.sleep(self._retry_pause)
+            try:
+                self._kinds[kind] = (now, await self._fetch_kind(kind))
+                return None
+            except Exception as exc:  # noqa: BLE001 - provider isolation
+                error = exc
+        return error
 
     async def _results_locked(self) -> list[Auction]:
         now = self._clock()
         awaiting = self._awaiting_results(now)
         fresh = self._results_poll if awaiting else self._ttl
-        due = [k for k in KINDS if k not in self._kinds or now - self._kinds[k][0] >= fresh]
-        if not due and self._results is not None:
-            return self._results[1]
-        # After the close TreasuryDirect can be slow: fetch the types together and
-        # retry just the ones that failed, instead of waiting out the poll interval.
-        failed: dict[str, Exception] = {}
-        for attempt in range(1 + (self._retries if awaiting else 0)):
-            if attempt and self._retry_pause > 0:
-                await asyncio.sleep(self._retry_pause)
-            outcomes = await asyncio.gather(*(self._fetch_kind(k) for k in due),
-                                            return_exceptions=True)
-            failed, retry = {}, []
-            for kind, outcome in zip(due, outcomes, strict=True):
-                if isinstance(outcome, Exception):
-                    failed[kind] = outcome
-                    retry.append(kind)
-                elif isinstance(outcome, BaseException):
-                    raise outcome
-                else:
-                    self._kinds[kind] = (now, outcome)
-            due = retry
-            if not due:
-                break
-        if failed:
-            name = type(next(iter(failed.values()))).__name__
+        due = [k for k in KINDS
+               if (k not in self._kinds or now - self._kinds[k][0] >= fresh)
+               and now >= self._next_try.get(k, now)]
+        if not due:
+            return self._results[1] if self._results else []
+        # After the close TreasuryDirect can be slow: fetch the types together, retry
+        # just the ones that fail, and bound the whole refresh.
+        attempts = 1 + (self._retries if awaiting else 0)
+        errors: dict[str, Exception] = {}
+
+        async def run(kind: str) -> None:
+            if (error := await self._refresh_kind(kind, now, attempts)) is not None:
+                errors[kind] = error
+
+        try:
+            async with asyncio.timeout(self._results_deadline):
+                await asyncio.gather(*(run(k) for k in due))
+        except TimeoutError:
+            for kind in due:
+                if kind not in errors and self._kinds.get(kind, (None,))[0] != now:
+                    errors[kind] = TimeoutError("refresh deadline")
+        cooldown = self._retry_cooldown if awaiting else max(self._retry_cooldown,
+                                                             self._results_poll)
+        for kind in due:
+            if kind in errors:
+                self._next_try[kind] = now + cooldown
+            else:
+                self._next_try.pop(kind, None)
+        if errors:
+            name = type(next(iter(errors.values()))).__name__
             self.last_error = f"Treasury auction results unavailable ({name})"
-            logger.warning("treasury results fetch failed: %s (%s)", name, ", ".join(failed))
+            logger.warning("treasury results fetch failed: %s (%s)", name, ", ".join(errors))
         else:
             self.last_error = None
         if not self._kinds:
