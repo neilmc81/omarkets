@@ -88,7 +88,7 @@ _SPECULATION = re.compile(r"\b(possible|could|may|might|warns?|threat\w*|prepar\
 #: itself a plain denial or hedge of that attack.
 _CLAUSE_SPLIT = re.compile(
     r"[;:,!?\u2014\u2013]| - |\.(?= |$)|"
-    r"\b(?:but|while|as|after|and|amid|despite|though|although|before|when|since|then|yet|with)\b",
+    r"\b(?:but|while|as|after|and|amid|despite|though|although|before|when|since|then|with)\b",
     re.IGNORECASE)
 #: Any of these in a clause makes it an attack clause (broad on purpose).
 _ATTACK_TERM = re.compile(
@@ -115,10 +115,19 @@ _NEGATED = re.compile(
 _QUOTES = re.compile(r"[\"\u201c\u201d]|(?<![a-z])'|'(?![a-z])", re.IGNORECASE)
 
 
+#: "has not ruled out", "refuses to rule out", "no one has denied": the opposite of a denial.
+_INVERTED = re.compile(r"\b(?:not|never|yet to|refus\w+ to|declin\w+ to|no one|nobody|"
+                       r"neither|nor|fail\w* to)\b|n't\b", re.IGNORECASE)
+
+
 def _clause_negated(clause: str) -> bool:
     found = _NEGATED.search(clause)
-    # An attack reported before the denial ("Iran strikes Israel denies ...") still counts.
-    return bool(found) and not _ATTACK_TERM.search(clause[: found.start()])
+    if not found:
+        return False
+    before = clause[: found.start()]
+    # An attack reported before the denial ("Iran strikes Israel denies ...") still counts,
+    # and an inverted denial is not a denial.
+    return not _ATTACK_TERM.search(before) and not _INVERTED.search(before)
 
 
 def _denied(headline: str) -> bool:
