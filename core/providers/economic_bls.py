@@ -50,6 +50,16 @@ def near_release(now: datetime) -> bool:
     return False
 
 
+def _year_ago_gap(definition, observation) -> str | None:
+    """Precise note when only the year-ago month of a y/y series has no value."""
+    if definition.transform != "yoy" or len(observation.metadata.inputs) != 2:
+        return None
+    current, previous = observation.metadata.inputs
+    if current.value is None or previous.value is not None:
+        return None
+    return f"Year-ago month {previous.period} is not published by BLS; year over year unavailable."
+
+
 class BLSEconomicProvider(HttpEconomicProvider):
     provider_name = "bls"
 
@@ -149,8 +159,20 @@ class BLSEconomicProvider(HttpEconomicProvider):
                         if history:
                             observations.extend(history)
                             checked.append(definition.id)
-                            if history[-1].value is None:
-                                issues.append(f"{definition.id}: required period value unavailable")
+                            latest = history[-1]
+                            if latest.value is None:
+                                gap = _year_ago_gap(definition, latest)
+                                if gap is None:
+                                    issues.append(
+                                        f"{definition.id}: required period value unavailable"
+                                    )
+                                else:
+                                    # A year-over-year gap is a fixed hole in BLS history, not a
+                                    # fault: no retry, no degraded provider. Note it on the
+                                    # observation only.
+                                    observations[-1] = latest.model_copy(
+                                        update={"notes": [*latest.notes, gap]}
+                                    )
                         else:
                             issues.append(f"{definition.id}: empty series")
             except (ValueError, KeyError, TypeError):
