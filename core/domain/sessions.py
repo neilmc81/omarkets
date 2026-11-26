@@ -29,9 +29,10 @@ Rules:
 * All wall-clock times are localized per calendar date with ``zoneinfo``, so DST
   transitions are handled by the tz database and never by a fixed UTC offset.
 * Exchange holidays and early-close (half) days are modeled by
-  :mod:`core.domain.market_calendar` and consulted here. CME's 2026 Labor Day
-  exception has a Sunday pre-open and Monday midday halt; other ad-hoc exchange
-  schedules are not guessed from the NYSE calendar.
+  :mod:`core.domain.market_calendar` and consulted here. CME's holiday sessions
+  (2026 Labor Day, Thanksgiving) trade until a 13:00 ET halt on the holiday
+  under the next trade date; other ad-hoc exchange schedules are not guessed
+  from the NYSE calendar.
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from core.domain.market_calendar import (
     is_trading_day,
     previous_trading_day,
     rth_close_time,
+    thanksgiving,
 )
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -66,13 +68,25 @@ PREMARKET_OPEN = time(8, 0)
 #: Cboe computes VIX and VXN from 03:15 to 16:15 ET (global and regular hours).
 VOLATILITY_INDEX_HOURS = (time(3, 15), time(16, 15))
 
-# CME lists the 2026 Labor Day Sunday pre-open under Tuesday's trade date.
-# Index futures trade Sunday evening through Monday 13:00 ET, then reopen
-# Monday 18:00 ET. Keep this exchange schedule separate from the NYSE calendar.
-# Source: https://www.cmegroup.com/trading-hours.html (2026 Globex schedule).
+# Some exchange holidays still have a shortened futures session. CME lists the
+# hours traded on the holiday under the *next* trade date: the session opens
+# 18:00 ET before the holiday, halts at 13:00 ET on the holiday, reopens 18:00
+# ET and closes on the next trade date. Kept separate from the NYSE calendar.
+# Source: https://www.cmegroup.com/trading-hours.html (Globex holiday schedule).
+#  * 2026 Labor Day: Sunday 18:00 ET to Monday 13:00 ET, under Tuesday.
+#  * Thanksgiving (every year): Wednesday 18:00 ET to Thursday 13:00 ET, under
+#    Friday, which then closes early at 13:15 ET.
+_HOLIDAY_HALT = time(13, 0)
 _LABOR_DAY_2026 = date(2026, 9, 7)
-_LABOR_DAY_TRADE_DATE = date(2026, 9, 8)
-_LABOR_DAY_HALT = time(13, 0)
+
+
+def _is_halt_holiday(day: date) -> bool:
+    """Whether futures trade the morning of holiday ``day`` and halt at 13:00 ET."""
+    return day == _LABOR_DAY_2026 or day == thanksgiving(day.year)
+
+
+def _in_holiday_halt(day: date, local: time) -> bool:
+    return _is_halt_holiday(day) and _HOLIDAY_HALT <= local < GLOBEX_OPEN
 
 
 class SessionPhase(StrEnum):
@@ -182,9 +196,9 @@ def globex_session(trade_date: date) -> GlobexSession:
     cached = _SESSION_CACHE.get(trade_date)
     if cached is not None:
         return cached
-    prior = (
-        date(2026, 9, 6) if trade_date == _LABOR_DAY_TRADE_DATE else trade_date - timedelta(days=1)
-    )
+    prior = trade_date - timedelta(days=1)
+    if _is_halt_holiday(prior):
+        prior -= timedelta(days=1)
     session = GlobexSession(
         trade_date=trade_date,
         opens_at=_et_utc(prior, GLOBEX_OPEN),
@@ -279,14 +293,15 @@ def session_phase(moment: datetime) -> SessionPhase:
 
     A session for trade date T opens 18:00 ET on T−1, so Sunday evening is
     already the Monday session's overnight phase. Holidays and weekends are
-    normally closed all day, except the 2026 Labor Day futures schedule; on an
+    normally closed all day, except the holiday futures sessions (2026
+    Labor Day, Thanksgiving) until their 13:00 ET halt; on an
     early-close day RTH ends at 13:00 ET and futures close at 13:15 ET. The
-    17:00–18:00 ET maintenance halt is reported only when the next trading day
-    is the next calendar day.
+    17:00–18:00 ET maintenance halt is reported only when the next session
+    reopens the same evening.
     """
     now = _require_aware(moment)
     day, local = local_parts(now)
-    if day == _LABOR_DAY_2026 and _LABOR_DAY_HALT <= local < GLOBEX_OPEN:
+    if _in_holiday_halt(day, local):
         return SessionPhase.CLOSED
     for trade_date in (day, day + timedelta(days=1), day + timedelta(days=2)):
         if not is_trading_day(trade_date):
@@ -296,18 +311,21 @@ def session_phase(moment: datetime) -> SessionPhase:
             return SessionPhase.RTH if session.in_rth(now) else SessionPhase.OVERNIGHT
     # Not inside any session: either the weekday maintenance halt or a closure.
     if is_trading_day(day) and local >= globex_close_time(day):
-        if next_trade_date(day) == day + timedelta(days=1) and local < GLOBEX_OPEN:
+        reopens_tonight = globex_session(next_trade_date(day)).opens_at == _et_utc(day, GLOBEX_OPEN)
+        if reopens_tonight and local < GLOBEX_OPEN:
             return SessionPhase.MAINTENANCE
     return SessionPhase.CLOSED
 
 
 def trading_windows(session: GlobexSession) -> list[tuple[datetime, datetime]]:
     """The spans of ``session`` when futures trade, in UTC: the whole session,
-    except the 2026 Labor Day session, which leaves out its Monday halt."""
-    if session.trade_date != _LABOR_DAY_TRADE_DATE:
+    except a session with a holiday halt (2026 Labor Day, Thanksgiving),
+    which leaves out the halt."""
+    holiday = session.trade_date - timedelta(days=1)
+    if not _is_halt_holiday(holiday):
         return [(session.opens_at, session.closes_at)]
-    return [(session.opens_at, _et_utc(_LABOR_DAY_2026, _LABOR_DAY_HALT)),
-            (_et_utc(_LABOR_DAY_2026, GLOBEX_OPEN), session.closes_at)]
+    return [(session.opens_at, _et_utc(holiday, _HOLIDAY_HALT)),
+            (_et_utc(holiday, GLOBEX_OPEN), session.closes_at)]
 
 
 def market_closed(moment: datetime) -> bool:
@@ -340,7 +358,7 @@ def next_session_open(moment: datetime) -> datetime:
     """
     now = _require_aware(moment)
     day, local = local_parts(now)
-    if day == _LABOR_DAY_2026 and _LABOR_DAY_HALT <= local < GLOBEX_OPEN:
+    if _in_holiday_halt(day, local):
         return _et_utc(day, GLOBEX_OPEN)
     for offset in range(0, 15):
         trade_date = day + timedelta(days=offset)

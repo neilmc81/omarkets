@@ -47,9 +47,10 @@ def test_levels_prints_the_monday_after_the_half_day(monkeypatch, memory_repo, c
     assert "ES levels for trade date 2026-11-30  contract ESZ26  delayed feed" in out
     assert "as of Mon Nov 30 08:00 ET" in out
     lines = {line.split("  ")[0]: line for line in out.splitlines() if "  " in line}
-    # Prior day is the short Friday: Thursday 18:00 ET to the 13:15 ET early close.
+    # Prior day is the short Friday: Wednesday 18:00 ET (it includes Thanksgiving
+    # morning) to the 13:15 ET early close.
     assert "6,844.00" in lines["Prior day high"]
-    assert "Thu Nov 26 18:00 -> Fri Nov 27 13:15 ET" in lines["Prior day high"]
+    assert "Wed Nov 25 18:00 -> Fri Nov 27 13:15 ET" in lines["Prior day high"]
     assert "Sun Nov 22 18:00 -> Fri Nov 27 13:15 ET" in lines["Prior week low"]
     assert "6,842.00" in lines["Prior settle"]
     assert "+8.00 (+0.12%)" in lines["Gap vs settle"]

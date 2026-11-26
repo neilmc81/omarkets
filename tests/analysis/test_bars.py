@@ -129,9 +129,11 @@ def test_dst_change_moves_the_globex_open_by_an_hour_in_utc(memory_repo):
 
 
 def test_holidays_are_skipped_and_their_quotes_left_out(memory_repo):
-    # Thanksgiving (Thu Nov 26 2026) is not a session in the exchange calendar.
+    # Thanksgiving (Thu Nov 26 2026) is not its own session; its morning trades
+    # under Friday's trade date. A quote after Friday's 13:15 ET early close is
+    # outside every session.
     now = at(2026, 11, 30, 15, 0)
-    memory_repo.store([obs(at(2026, 11, 26, 15, 0), 999), obs(at(2026, 11, 25, 15, 0), 100)])
+    memory_repo.store([obs(at(2026, 11, 27, 20, 0), 999), obs(at(2026, 11, 25, 15, 0), 100)])
     sessions, built = read(memory_repo, ChartRange.FIVE_DAYS, Interval.H1, now)
     assert [s.trade_date.day for s in sessions] == [23, 24, 25, 27, 30]
     assert [b.close for b in built] == [100]

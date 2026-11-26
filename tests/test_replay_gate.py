@@ -54,7 +54,7 @@ MOMENTS: dict[str, datetime] = {
     "sat_closed": datetime(2026, 10, 24, 16, 0, tzinfo=UTC),     # Saturday noon
     "sun_reopen": datetime(2026, 10, 25, 22, 30, tzinfo=UTC),    # Sunday 18:30 EDT
     "mon_after_dst": datetime(2026, 11, 2, 15, 0, tzinfo=UTC),   # 10:00 EST
-    "thanksgiving": datetime(2026, 11, 26, 17, 0, tzinfo=UTC),   # holiday noon
+    "thanksgiving": datetime(2026, 11, 26, 20, 0, tzinfo=UTC),   # holiday halt
     "early_close": datetime(2026, 11, 27, 17, 0, tzinfo=UTC),    # 12:00 EST, half day
     "after_early": datetime(2026, 11, 27, 19, 0, tzinfo=UTC),    # 14:00 EST, shut
 }

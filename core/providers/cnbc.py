@@ -351,12 +351,16 @@ class CNBCMarketDataProvider(MarketDataProvider):
         iterator never busy-loops and stops promptly on cancellation.
         """
         backoff = self._update_interval
+        # Fetch once even when the market is closed, so a start during a
+        # weekend or holiday picks up the last settle instead of showing
+        # whatever was stored before the service was stopped.
+        caught_up = False
         try:
             while not self._closed:
                 # Recheck wall-clock session state promptly after laptop resume.
                 # A long monotonic sleep can remain pending across suspension.
                 quiet_delay = closed_market_delay(self._clock(), maximum_seconds=30.0)
-                if quiet_delay > 0:
+                if quiet_delay > 0 and caught_up:
                     await asyncio.sleep(quiet_delay)
                     continue
                 try:
@@ -370,6 +374,7 @@ class CNBCMarketDataProvider(MarketDataProvider):
                     backoff = min(backoff * 2, 60.0)
                     continue
                 backoff = self._update_interval
+                caught_up = True
                 if observations:
                     self._last_success = self._clock()
                     self._last_error = None

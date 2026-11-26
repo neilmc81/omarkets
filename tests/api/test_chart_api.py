@@ -141,7 +141,8 @@ def es_client(memory_repo):
     memory_repo.store([
         # Wed Nov 25 session (settle of Tue: 6,760).
         es_quote(utc(2026, 11, 25, 16, 0), 6_820.0, 6_760.0),
-        # Fri Nov 27: overnight from Thu 18:00 ET, then the short cash session.
+        # Fri Nov 27: overnight from Wed 18:00 ET (the Thanksgiving halt is inside),
+        # then the short cash session.
         es_quote(utc(2026, 11, 27, 9, 0), 6_830.0, 6_800.0),
         es_quote(utc(2026, 11, 27, 14, 30), 6_812.0, 6_800.0),
         es_quote(utc(2026, 11, 27, 17, 55), 6_840.0, 6_800.0),
@@ -177,7 +178,7 @@ def test_es_levels_for_a_past_half_day_use_that_days_quotes(es_client):
     assert levels["prior_settle"]["value"] == 6_800.0
     assert levels["gap_vs_settle"]["value"] == 12.0
     assert levels["overnight_high"]["value"] == 6_830.0
-    assert levels["overnight_high"]["window_start"] == "2026-11-26T23:00:00Z"
+    assert levels["overnight_high"]["window_start"] == "2026-11-25T23:00:00Z"
     assert levels["prior_day_high"]["value"] == 6_820.0
     assert levels["prior_day_high"]["window_end"] == "2026-11-25T22:00:00Z"
 

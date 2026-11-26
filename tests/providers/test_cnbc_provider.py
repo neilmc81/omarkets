@@ -9,7 +9,7 @@ from core.providers.cnbc import CNBCMarketDataProvider, _ProviderFailure, _RateL
 NOW = datetime(2026, 9, 18, 6, 15, tzinfo=UTC)
 
 
-async def test_weekend_stream_does_not_request_quotes():
+async def test_weekend_stream_fetches_once_then_goes_quiet():
     calls = 0
 
     def handler(request):
@@ -25,8 +25,9 @@ async def test_weekend_stream_does_not_request_quotes():
     )
     task = asyncio.create_task(anext(p.stream_updates()))
     try:
-        await asyncio.sleep(0.02)
-        assert calls == 0
+        await asyncio.sleep(0.05)
+        # One catch-up fetch for the last settle, then no polling while closed.
+        assert calls == 1
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
@@ -348,7 +349,8 @@ async def test_closed_stream_rechecks_wall_clock_promptly_after_laptop_resume(mo
         sleeps.append(seconds)
         # Wall time jumps while the sleeping laptop's monotonic timer remains
         # pending. The stream must recheck within one bounded sleep on resume.
-        now[0] = datetime(2026, 10, 5, 12, 8, tzinfo=UTC)
+        if seconds == 30.0:
+            now[0] = datetime(2026, 10, 5, 12, 8, tzinfo=UTC)
 
     async def collect():
         return batches[0]
@@ -356,8 +358,12 @@ async def test_closed_stream_rechecks_wall_clock_promptly_after_laptop_resume(mo
     monkeypatch.setattr("core.providers.cnbc.asyncio.sleep", sleep)
     monkeypatch.setattr(p, "_collect", collect)
     stream = p.stream_updates()
+    # Catch-up fetch on start even though the market is closed.
     assert await anext(stream) == batches[0]
-    assert sleeps == [30.0]
+    assert sleeps == []
+    # The next pass is quiet until the wall clock reaches the open.
+    assert await anext(stream) == batches[0]
+    assert sleeps == [p._update_interval, 30.0]
     await stream.aclose()
 
 

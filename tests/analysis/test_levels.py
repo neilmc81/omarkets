@@ -101,7 +101,8 @@ def test_quotes_from_another_contract_are_not_mixed_in(memory_repo):
 
 # ES around the Thanksgiving half day. In late November New York is UTC−5.
 # Thu Nov 26 2026 is a holiday; Fri Nov 27 closes early: cash 13:00 ET (18:00 UTC),
-# Globex 13:15 ET (18:15 UTC). Its session opens Thu 18:00 ET (23:00 UTC).
+# Globex 13:15 ET (18:15 UTC). Its session opens Wed 18:00 ET (23:00 UTC), with
+# Thursday halted 13:00-18:00 ET.
 
 
 def es_obs(ts: datetime, value: float, contract: str = "ESZ26") -> MarketObservation:
@@ -145,9 +146,10 @@ def test_es_levels_on_the_friday_half_day(memory_repo):
     levels = by_key(result)
     assert result.trade_date.isoformat() == "2026-11-27"
     assert result.contract == "ESZ26"
-    # Overnight: Thu 18:00 ET to the 09:30 ET cash open (no holiday-day quotes exist).
+    # Overnight: Wed 18:00 ET (the session includes Thanksgiving morning, halted
+    # 13:00-18:00 ET) to the 09:30 ET cash open.
     assert (levels["overnight_high"].value, levels["overnight_low"].value) == (6_830.0, 6_790.0)
-    assert levels["overnight_high"].window_start == at(2026, 11, 26, 23, 0)
+    assert levels["overnight_high"].window_start == at(2026, 11, 25, 23, 0)
     assert levels["overnight_high"].window_end == at(2026, 11, 27, 14, 30)
     assert levels["overnight_high"].partial is False
     # Prior day skips the Thanksgiving holiday: it is Wednesday's full session.
@@ -180,11 +182,11 @@ def test_es_monday_prior_day_is_the_short_friday_session(memory_repo):
     now = at(2026, 11, 30, 13, 0)
     levels = by_key(key_levels("ES", es(value=6_850.0, settle=6_840.0), memory_repo.ohlc,
                                now=now))
-    # Prior day = Fri Nov 27, Thu 18:00 ET to the 13:15 ET early close. The 13:10 ET
+    # Prior day = Fri Nov 27, Wed 18:00 ET to the 13:15 ET early close. The 13:10 ET
     # print is in; the 13:40 ET (6,999) and 15:00 ET (6,600) prints are not.
     day_high, day_low = levels["prior_day_high"], levels["prior_day_low"]
     assert (day_high.value, day_low.value) == (6_845.0, 6_790.0)
-    assert day_high.window_start == at(2026, 11, 26, 23, 0)
+    assert day_high.window_start == at(2026, 11, 25, 23, 0)
     assert day_high.window_end == at(2026, 11, 27, 18, 15)
     # Prior week = Mon Nov 23 – Fri Nov 27 (four sessions), ending at the early close.
     week_high, week_low = levels["prior_week_high"], levels["prior_week_low"]

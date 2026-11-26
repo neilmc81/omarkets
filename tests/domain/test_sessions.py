@@ -269,3 +269,39 @@ def test_volatility_index_hours_end_at_13_15_et_on_an_early_close():
     assert not volatility_index_open(datetime(2026, 11, 27, 18, 15, tzinfo=UTC))
     assert volatility_index_window(date(2026, 11, 27)) == (
         datetime(2026, 11, 27, 8, 15, tzinfo=UTC), datetime(2026, 11, 27, 18, 15, tzinfo=UTC))
+
+
+def test_thanksgiving_morning_trades_under_friday_until_the_halt():
+    from core.domain.sessions import (
+        SessionPhase,
+        active_session,
+        globex_session,
+        next_session_open,
+        session_phase,
+        trading_windows,
+    )
+
+    def at(text):
+        return datetime.fromisoformat(text).replace(tzinfo=UTC)
+
+    friday = date(2026, 11, 27)
+    session = globex_session(friday)
+    # Opens Wednesday 18:00 ET, closes Friday at the 13:15 ET early close.
+    assert session.opens_at == at("2026-11-25T23:00")
+    assert session.closes_at == at("2026-11-27T18:15")
+    assert trading_windows(session) == [
+        (at("2026-11-25T23:00"), at("2026-11-26T18:00")),
+        (at("2026-11-26T23:00"), at("2026-11-27T18:15")),
+    ]
+    # Wednesday's 17:00-18:00 ET break is maintenance, not a closure.
+    assert session_phase(at("2026-11-25T22:30")) is SessionPhase.MAINTENANCE
+    # Thanksgiving morning trades, under Friday's trade date.
+    assert session_phase(at("2026-11-26T15:08")) is SessionPhase.OVERNIGHT
+    assert active_session(at("2026-11-26T15:08")).trade_date == friday
+    # 13:00-18:00 ET Thursday is halted, reopening 18:00 ET.
+    assert session_phase(at("2026-11-26T18:00")) is SessionPhase.CLOSED
+    assert next_session_open(at("2026-11-26T18:00")) == at("2026-11-26T23:00")
+    assert session_phase(at("2026-11-26T23:00")) is SessionPhase.OVERNIGHT
+    # Friday closes early; nothing until Sunday evening.
+    assert session_phase(at("2026-11-27T18:15")) is SessionPhase.CLOSED
+    assert next_session_open(at("2026-11-27T18:15")) == at("2026-11-29T23:00")

@@ -87,9 +87,9 @@ def test_btc_is_never_market_closed_at_any_hour():
             btc = state_of("BTC", moment - age, moment)
             assert btc.status is DataStatus.STALE and not btc.market_closed, moment
         moment += timedelta(minutes=30)
-    # The same quote ages on NQ do get excused over Thanksgiving.
-    thanksgiving = datetime(2026, 11, 26, 17, 0, tzinfo=UTC)
-    assert state_of("NQ", datetime(2026, 11, 25, 21, 0, tzinfo=UTC), thanksgiving).market_closed
+    # NQ's last print before the Thanksgiving 13:00 ET halt is excused during it.
+    halt = datetime(2026, 11, 26, 20, 0, tzinfo=UTC)
+    assert state_of("NQ", datetime(2026, 11, 26, 17, 55, tzinfo=UTC), halt).market_closed
 
 
 def test_risk_tone_says_markets_closed():
