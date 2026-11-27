@@ -82,14 +82,14 @@ def playbook_indicator(slot: F.ReleaseSlot, playbook: Playbook) -> PlaybookIndic
 
 
 def playbook_line(slot: F.ReleaseSlot, playbook: Playbook | None) -> str | None:
-    """'Above forecast (3): NQ fell 2, rose 1 in 15 min · …' for the slot's main figure."""
+    """'Above forecast (3): NQ fell 2 times, rose 1 time · …' for the slot's main figure."""
     if playbook is None:
         return None
     indicator = playbook_indicator(slot, playbook)
     if indicator is not None:
         parts = []
         for bucket in indicator.buckets:
-            counts = ", ".join(f"{word} {n}" for word, n in (
+            counts = ", ".join(f"{word} {n} {'time' if n == 1 else 'times'}" for word, n in (
                 ("rose", bucket.first_up), ("fell", bucket.first_down),
                 ("barely moved", bucket.first_flat)) if n)
             parts.append(f"{VERDICT_WORDS[bucket.verdict]} ({bucket.count}): NQ {counts}")

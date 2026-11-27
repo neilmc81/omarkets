@@ -22,7 +22,9 @@ TOPICS: tuple[tuple[str, str, re.Pattern[str]], ...] = tuple(
                                  r"results)\b"),
         ("jobs", "Jobs", r"\b(jobs?|jobless|payrolls?|unemployment|layoffs?|claims|hiring|"
                          r"wages?)\b"),
-        ("inflation", "Inflation", r"\b(inflation|cpi|ppi|pce|prices? index|core)\b"),
+        # "core" alone also starts "core retail sales"; only core inflation counts.
+        ("inflation", "Inflation", r"\b(inflation|cpi|ppi|pce|prices? index|"
+                                   r"core (cpi|pce|ppi|inflation|prices?))\b"),
         ("fed", "The Fed", r"\b(fed|federal reserve|fomc|rate (cut|hike)s?|dot plot|powell)\b"),
         ("market", "Market moves", r"\b(vix|risk-(on|off)|divergence|futures|flight to safety|"
                                    r"surprise|gap|sell-?off|rally|momentum)\b"),

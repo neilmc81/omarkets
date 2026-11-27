@@ -126,6 +126,10 @@ def test_instruments_listing(client):
     assert (btc["venue"], btc["session_calendar"]) == ("BINANCE", "24x7")
     us2y = next(i for i in body["instruments"] if i["symbol"] == "US2Y")
     assert us2y["currency"] is None and us2y["price_precision"] == 3
+    # Stocks and VIX are charted on Globex sessions but the label names their hours.
+    by_symbol = {i["symbol"]: i for i in body["instruments"]}
+    assert by_symbol["NVDA"]["session_calendar_label"].startswith("US stocks (09:30–16:00 ET)")
+    assert by_symbol["VIX"]["session_calendar_label"].startswith("Cboe (03:15–16:15 ET)")
 
 
 def test_instrument_lookup_is_case_insensitive(client):

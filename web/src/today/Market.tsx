@@ -50,21 +50,29 @@ export function SessionTimeline({ calendar, pins, now }: { calendar: SessionCale
     ...(session.early_close ? ["Early close today: cash 13:00 ET, futures 13:15 ET."] : []),
     ...(calendar.maintenance_starts_at && calendar.maintenance_ends_at
       ? [`Daily break ${etTime(calendar.maintenance_starts_at)}–${etTime(calendar.maintenance_ends_at)} ET`] : []),
-    ...calendar.holidays.map((h) => `${h.early_close ? "" : "Closed "}${new Date(`${h.date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}: ${h.name}`),
+    // Today's own early close is already said above; list only other days.
+    ...calendar.holidays.filter((h) => !(h.early_close && session.early_close && h.date === session.trade_date)).map((h) => `${h.early_close ? "" : "Closed "}${new Date(`${h.date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}: ${h.name}`),
   ];
   return <section className="timeline" aria-label="Session timeline">
     <div className="timeline-bar">
-      {session.segments.map((segment) => { const narrow = at(segment.ends_at) - at(segment.starts_at) < 9; return <div key={segment.name} className={`timeline-seg seg-${segment.name}`}
+      {session.segments.map((segment) => {
+        const width = at(segment.ends_at) - at(segment.starts_at);
+        // A long session (a holiday one spans two days) squeezes short segments:
+        // shorten their label, and hide it (still read out) when it cannot fit.
+        const narrow = width < 9;
+        const tiny = width < 4;
+        const text = segment.name === "cash" ? (narrow ? "Cash" : `US cash ${etTime(segment.starts_at)}–${etTime(segment.ends_at)}`)
+          : segment.name === "asia" ? `Globex open ${etTime(segment.starts_at)}`
+          : segment.name === "after_hours" ? (narrow ? "Close" : `Close ${etTime(segment.ends_at)}`)
+          : narrow ? segment.label : `${segment.label} ${etTime(segment.starts_at)}`;
+        return <div key={segment.name} className={`timeline-seg seg-${segment.name}`}
         style={{ left: `${at(segment.starts_at)}%`, width: `${at(segment.ends_at) - at(segment.starts_at)}%` }}>
         <Explain title={segment.label} lines={[
           `${etDayClock(segment.starts_at)} – ${etDayClock(segment.ends_at)} ET`,
           `${yourTime(segment.starts_at)} – ${yourTime(segment.ends_at)}`,
           ...(segment.explainer ? [segment.explainer] : []),
         ]} className="timeline-label">
-          {segment.name === "cash" ? `US cash ${etTime(segment.starts_at)}–${etTime(segment.ends_at)}`
-            : segment.name === "asia" ? `Globex open ${etTime(segment.starts_at)}`
-            : segment.name === "after_hours" ? (narrow ? "Close" : `Close ${etTime(segment.ends_at)}`)
-            : narrow ? segment.label : `${segment.label} ${etTime(segment.starts_at)}`}
+          {tiny ? <span className="visually-hidden">{text}</span> : text}
         </Explain>
       </div>; })}
       {shown.map((pin) => <span key={pin.at + pin.title} className={`timeline-pin imp-${pin.importance}`} style={{ left: `${at(pin.at)}%` }}>

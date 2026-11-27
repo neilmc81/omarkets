@@ -81,7 +81,7 @@ def test_next_event_is_the_next_high_release_with_its_playbook_line():
     assert event.at == nxt_at and event.importance == "high" and event.kind == "economic"
     assert event.forecast_text == "Unemployment Claims: forecast 201K"
     assert event.playbook_text == (
-        "Unemployment Claims, first 15 min: Below forecast (3): NQ fell 3. "
+        "Unemployment Claims, first 15 min: Below forecast (3): NQ fell 3 times. "
         "Only 3 measured: examples, not a pattern.")
 
 

@@ -21,10 +21,10 @@ from core.api.schemas import (
     NewsHealth,
     ProvidersResponse,
 )
-from core.domain.calendars import calendar_for
+from core.domain.calendars import CME_GLOBEX, calendar_for
 from core.domain.contracts import DEFAULT_FUTURES_ROOTS, contract_for_symbol
 from core.domain.cross_market import CrossMarketState
-from core.domain.instruments import Instrument, get_instrument, normalize_symbol
+from core.domain.instruments import AssetClass, Instrument, get_instrument, normalize_symbol
 from core.domain.models import InstrumentState, MarketState
 from core.providers.registry import ProviderRegistry
 from core.services.market_state import MarketStateService
@@ -149,8 +149,19 @@ async def instrument(symbol: str, service: ServiceDep) -> InstrumentDetail:
     return _detail(definition, current.instruments[canonical])
 
 
+#: Instruments charted on the Globex session calendar that really trade other
+#: hours: the label names their own hours so the table does not misstate them.
+_OWN_HOURS = {
+    AssetClass.EQUITY: "US stocks (09:30–16:00 ET); charted on CME Globex sessions",
+    AssetClass.VOLATILITY_INDEX: "Cboe (03:15–16:15 ET); charted on CME Globex sessions",
+}
+
+
 def _detail(definition: Instrument, state: InstrumentState) -> InstrumentDetail:
     calendar = calendar_for(definition)
+    label = calendar.label
+    if calendar is CME_GLOBEX and state.asset_class in _OWN_HOURS:
+        label = _OWN_HOURS[state.asset_class]
     return InstrumentDetail(
         symbol=state.symbol,
         display_name=state.display_name,
@@ -161,7 +172,7 @@ def _detail(definition: Instrument, state: InstrumentState) -> InstrumentDetail:
         venue=definition.venue,
         currency=definition.currency,
         session_calendar=calendar.calendar_id.value,
-        session_calendar_label=calendar.label,
+        session_calendar_label=label,
         price_precision=definition.price_precision,
         stale_after_seconds=state.stale_after_seconds,
         metadata=definition.metadata,

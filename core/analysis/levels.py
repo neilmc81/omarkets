@@ -26,15 +26,17 @@ explainers are rules of thumb, not advice.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from core.desk import explainers as X
 from core.domain.chart import KeyLevel, KeyLevels
 from core.domain.instruments import get_instrument
 from core.domain.sessions import (
+    GlobexSession,
     active_session,
     previous_session,
     previous_week_sessions,
+    volatility_index_window,
     without_holiday_halts,
 )
 from core.storage.base import OhlcBucket
@@ -44,6 +46,10 @@ OhlcFn = Callable[..., Sequence[OhlcBucket]]
 #: Bucket size for reading a window; levels are window-wide so the size only
 #: changes how many rows are read.
 _BUCKET_SECONDS = 3600
+#: A prior day or week is only measured when stored quotes cover at least this
+#: share of its trading hours; a window with big holes (the service was off)
+#: would give a high and low that are not the real ones.
+_MIN_COVERAGE = 0.9
 
 #: Explainer text per level, from the explainer library (``core/desk/explainers.py``).
 EXPLAINERS: dict[str, str] = {e.name: e.full_text for e in X.LEVELS}
@@ -74,6 +80,7 @@ class _Window:
     def __init__(self, buckets: Sequence[OhlcBucket], contract: str | None) -> None:
         rows = sorted(buckets, key=lambda b: b.start)
         self.reason: str | None = None
+        self.buckets: Sequence[OhlcBucket] = rows
         self.high = self.low = self.first = self.last = None
         if not rows:
             self.reason = "no stored quotes for this window"
@@ -87,6 +94,42 @@ class _Window:
         self.low = min(b.low for b in rows)
         self.first = rows[0].open
         self.last = rows[-1].close
+
+
+#: Cboe cash indexes: quoted only in Cboe's hours, not the Globex session.
+_CBOE_INDEXES = frozenset({"VIX", "VXN"})
+
+
+def _hour(moment: datetime) -> datetime:
+    return moment.replace(minute=0, second=0, microsecond=0)
+
+
+def trading_hours(symbol: str, sessions: Sequence[GlobexSession]) -> set[datetime]:
+    """Starts of the hour buckets ``symbol`` trades in over ``sessions``: Cboe's
+    hours for VIX/VXN, otherwise the Globex session without any holiday halt."""
+    hours: set[datetime] = set()
+    for session in sessions:
+        if symbol in _CBOE_INDEXES:
+            windows = [volatility_index_window(session.trade_date)]
+        else:
+            windows = without_holiday_halts(session.opens_at, session.closes_at)
+        for a, b in windows:
+            cursor = _hour(a)
+            while cursor < b:
+                hours.add(cursor)
+                cursor += timedelta(hours=1)
+    return hours
+
+
+def _check_coverage(window: _Window, expected: set[datetime]) -> None:
+    """Mark ``window`` unavailable when its quotes miss too many trading hours."""
+    if window.high is None or not expected:
+        return
+    covered = len(expected & {_hour(b.start) for b in window.buckets})
+    if covered < _MIN_COVERAGE * len(expected):
+        window.high = window.low = window.first = window.last = None
+        window.reason = (f"stored quotes cover only {covered} of {len(expected)} trading hours "
+                         "(Omarkets was not running for the rest)")
 
 
 def _level(key: str, value: float | None, *, start: datetime | None = None,
@@ -113,9 +156,9 @@ def key_levels(symbol: str, instrument, ohlc: OhlcFn, *, now: datetime) -> KeyLe
         if end <= start:
             return _Window([], contract)
         # Quotes stamped in a CME holiday halt are not trading; leave them out.
-        return _Window(ohlc(symbol, start=start, end=end, bucket_seconds=_BUCKET_SECONDS,
-                            within=without_holiday_halts(start, end)),
-                       contract)
+        buckets = ohlc(symbol, start=start, end=end, bucket_seconds=_BUCKET_SECONDS,
+                       within=without_holiday_halts(start, end))
+        return _Window(buckets, contract)
 
     session = active_session(now)
     overnight_end = min(now, session.rth_opens_at)
@@ -123,6 +166,7 @@ def key_levels(symbol: str, instrument, ohlc: OhlcFn, *, now: datetime) -> KeyLe
     partial = now < session.rth_opens_at
     prior = previous_session(now)
     day = read(prior.opens_at, prior.closes_at)
+    _check_coverage(day, trading_hours(symbol, [prior]))
     _, _, week_sessions = previous_week_sessions(now)
     week_start = week_sessions[0].opens_at if week_sessions else None
     week_end = week_sessions[-1].closes_at if week_sessions else None
@@ -130,6 +174,8 @@ def key_levels(symbol: str, instrument, ohlc: OhlcFn, *, now: datetime) -> KeyLe
             else _Window([], contract))
     if not week_sessions:
         week.reason = "no trading sessions last week"
+    else:
+        _check_coverage(week, trading_hours(symbol, week_sessions))
 
     levels = [
         _level("overnight_high", overnight.high, start=session.opens_at, end=overnight_end,

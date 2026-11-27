@@ -484,6 +484,15 @@ def _census_actuals(events: list[EconomicEvent], now: datetime | None) -> list[E
     return _fold_issuers(events, schedules, issuers, matches, "metric, title and covered month")
 
 
+def _previous_is_same_quarter(schedule: EconomicEvent) -> bool:
+    """A Prelim/Second/Final quarterly release's calendar "previous" is the earlier
+    estimate of the *same* quarter, while an issuer's previous is the quarter
+    before, so the two are not a revision of each other."""
+    name = schedule.name
+    return bool(re.search(r"\bgdp\b", name, re.I)
+                and re.search(r"\b(prelim|preliminary|second|third|final)\b", name, re.I))
+
+
 def _fold_issuers(
     events, schedules, issuers, matches, matched: str, *, consume: bool = True
 ) -> list[EconomicEvent]:
@@ -504,6 +513,7 @@ def _fold_issuers(
             if issuer.previous is not None
             and schedule.previous is not None
             and issuer.previous != schedule.previous
+            and not _previous_is_same_quarter(schedule)
             else None
         )
         payload = schedule.model_dump()

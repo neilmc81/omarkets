@@ -79,6 +79,26 @@ def test_release_day_value_fills_the_matching_row_and_flags_revised_previous():
     assert "GDP" not in rows  # issuer row is folded into the schedule
 
 
+def test_prelim_gdp_previous_is_the_advance_estimate_so_no_revision_is_flagged():
+    # A Prelim release's calendar "previous" is the Advance estimate of the same
+    # quarter; BEA's previous is the quarter before. They are not a revision.
+    rows = by_name(
+        project_calendar(
+            [
+                schedule("GDP", "Prelim GDP q/q", previous=3.4),
+                schedule("GDP_PRICE_INDEX", "Prelim GDP Price Index q/q", previous=2.3),
+                bea("GDP", "2026-Q3", 4.3),
+                bea("GDP_PRICE_INDEX", "2026-Q3", 1.9, previous=6.1),
+            ],
+            now=NOW,
+        )
+    )
+    assert rows["Prelim GDP q/q"].actual == 4.3
+    assert rows["Prelim GDP q/q"].revised_previous is None
+    assert rows["Prelim GDP Price Index q/q"].actual == 1.9
+    assert rows["Prelim GDP Price Index q/q"].revised_previous is None
+
+
 def test_stale_table_does_not_fill_todays_row():
     rows = by_name(
         project_calendar(

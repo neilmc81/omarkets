@@ -281,7 +281,7 @@ class DeskService:
         return DeskView(
             generated_at=now,
             session_text=self.session_text(now),
-            quotes=F.quote_strip(state),
+            quotes=F.quote_strip(state, self._fact_symbols()),
             rates=rates,
             notes=self.store.recent(limit),
             upcoming=await self.upcoming(now, days=7),
