@@ -241,3 +241,44 @@ def test_prior_week_with_big_holes_is_unavailable_not_a_misleading_range(memory_
     week = levels["prior_week_high"]
     assert week.value is None
     assert week.unavailable_reason.startswith("stored quotes cover only 4 of ")
+
+
+def test_trading_hours_counts_known_sessions_independently():
+    from core.analysis.levels import trading_hours
+    from core.domain.sessions import globex_session
+
+    def count(symbol, *days):
+        return len(trading_hours(symbol, [globex_session(d) for d in days]))
+
+    # Ordinary Globex day: 18:00 to 17:00 ET is 23 hours.
+    assert count("NQ", date(2026, 11, 24)) == 23
+    # DST ends Sun Nov 1: Monday's session (Sun 18:00 EST to Mon 17:00 EST) is 23 hours.
+    assert count("NQ", date(2026, 11, 2)) == 23
+    # Fri Nov 27: Wed 18:00 to Thu 13:00 (19h), Thu 18:00 to Fri 13:15 (19h + a partial hour).
+    assert count("NQ", date(2026, 11, 27)) == 39
+    # VIX: Cboe 03:15-16:15 ET touches 14 hour buckets; 03:15-13:15 on Nov 27 touches 11.
+    assert count("VIX", date(2026, 11, 24)) == 14
+    assert count("VIX", date(2026, 11, 27)) == 11
+
+
+def test_coverage_threshold_is_ninety_percent(memory_repo):
+    from core.analysis.levels import trading_hours
+    from core.domain.sessions import globex_session
+
+    hours = sorted(trading_hours("NQ", [globex_session(date(2026, 11, 24))]))  # 23 hours
+    now = at(2026, 11, 25, 12, 0)  # Wed pre-market: prior day is Tue Nov 24
+    memory_repo.store([obs(h + timedelta(minutes=5), 29_000.0) for h in hours[:21]])
+    assert by_key(key_levels("NQ", nq(), memory_repo.ohlc, now=now))["prior_day_high"].value \
+        == 29_000.0  # 21 of 23 = 91%
+
+
+def test_coverage_below_ninety_percent_is_unavailable(memory_repo):
+    from core.analysis.levels import trading_hours
+    from core.domain.sessions import globex_session
+
+    hours = sorted(trading_hours("NQ", [globex_session(date(2026, 11, 24))]))
+    memory_repo.store([obs(h + timedelta(minutes=5), 29_000.0) for h in hours[:20]])
+    level = by_key(key_levels("NQ", nq(), memory_repo.ohlc,
+                              now=at(2026, 11, 25, 12, 0)))["prior_day_high"]
+    assert level.value is None  # 20 of 23 = 87%
+    assert level.unavailable_reason.startswith("stored quotes cover only 20 of 23 ")
