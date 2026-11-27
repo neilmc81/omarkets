@@ -213,17 +213,24 @@ def _series_card(spec: Spec, state: Any, also: list[Any], slots, events) -> Macr
     status = str(getattr(state.status, "value", state.status))
     direction = trend(values, window=spec.window, steady=spec.steady)
     signed = spec.series == "PAYROLLS" or d.transform == "mom"
+    # No latest reading (e.g. the year-ago figure was never published): a trend
+    # or a "last release" verdict under an empty value would describe older data.
+    missing = latest is None or latest.value is None
+    if missing:
+        direction = "unknown"
     return MacroCard(
         key=spec.key, group=spec.group, title=spec.title,
         value=latest.value if latest is not None else None,
         value_text=(_value_text(latest.value, d.unit, signed=signed)
                     if latest is not None and latest.value is not None else "—"),
         period_text=_period_text(latest.period) if latest is not None else None,
-        trend=direction, trend_text=_trend_text(direction, spec.window, d.frequency),
+        trend=direction,
+        trend_text=("no trend: the latest reading is unavailable" if missing
+                    else _trend_text(direction, spec.window, d.frequency)),
         nq_when_rising=spec.nq_when_rising, nq_text=_NQ_TEXT[spec.nq_when_rising],
         nq_effect=nq_effect(direction, spec.nq_when_rising),
         points=values[-24:],
-        release=last_release(spec, slots, events),
+        release=None if missing else last_release(spec, slots, events),
         explainer_key=spec.explainer if spec.explainer in X.LIBRARY else None,
         sources=_sources(state, also),
         stale=status != "live",

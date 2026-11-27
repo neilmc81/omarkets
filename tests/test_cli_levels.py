@@ -35,6 +35,10 @@ def serve(monkeypatch, payload):
 
 
 def test_levels_prints_the_monday_after_the_half_day(monkeypatch, memory_repo, capsys):
+    from datetime import date
+
+    from tests.analysis.test_levels import fill
+    memory_repo.store(fill(quote, [date(2026, 11, d) for d in (23, 24, 25, 27)], 6_820.0, "ES"))
     memory_repo.store([quote(at(2026, 11, 27, 14, 30), 6_812.0),
                        quote(at(2026, 11, 27, 18, 10), 6_844.0)])
     es = SimpleNamespace(value=6_850.0, previous_close=6_842.0, contract_code="ESZ26",

@@ -40,3 +40,10 @@ def test_library_counts_topics_and_most_taught():
     assert [(t.key, t.count) for t in found.topics] == [("auctions", 1), ("yields", 2)]
     assert [e.heading for e in found.most_taught] == ["Basis point (bp)", "Yield curve"]
     assert found.entries[2].topic_label == "Auctions"
+
+
+def test_core_retail_sales_is_not_an_inflation_lesson():
+    from core.desk.lessons import topic
+    assert topic("Core retail sales leave out car sales, which swing a lot.") == "market"
+    assert topic("Core PCE leaves out food and energy.") == "inflation"
+    assert topic("Core inflation strips out volatile prices.") == "inflation"

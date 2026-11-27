@@ -171,3 +171,16 @@ def test_writer_last_release_names_a_different_figure_and_an_older_date():
     rows = {row["name"]: row["last_release"] for row in trends["inflation"]}
     assert rows["PPI year over year"] == "PPI m/m above forecast (Oct 14)"
     assert rows["CPI year over year"] == "CPI y/y above forecast (Sep 14)"
+
+
+def test_a_missing_latest_reading_shows_no_trend_and_no_release_verdict():
+    # BLS left out the year-ago index, so the newest CPI y/y is unavailable: the
+    # older readings must not lend the empty card a trend or a forecast verdict.
+    cpi = series("CPI_YOY", [4.2, 3.5, 3.3, 3.4, 3.7], status="unavailable", period="2026-10")
+    cpi.latest.value = None
+    events = [event("CPI", "CPI y/y", CPI_AT, 3.7376, 3.6)]
+    found = M.board([cpi], events, None, now=NOW)
+    c = card(found, "cpi")
+    assert c.value_text == "—" and c.trend == "unknown"
+    assert c.trend_text == "no trend: the latest reading is unavailable"
+    assert c.release is None

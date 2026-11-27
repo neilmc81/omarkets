@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 from core.analysis.levels import key_levels
@@ -17,6 +17,17 @@ def obs(ts: datetime, value: float, contract: str = "NQZ26") -> MarketObservatio
     return MarketObservation(symbol="NQ", timestamp=ts, value=value, unit="index points",
                              source="cnbc", received_at=ts + timedelta(minutes=10),
                              metadata={"feed_status": "delayed", "contract_code": contract})
+
+
+def fill(make, trade_dates, value, symbol="NQ"):
+    """A quote five minutes into every trading hour of these sessions, at ``value``, so a
+    window counts as covered (the service was running) without moving its high
+    or low when ``value`` is inside the range a test checks."""
+    from core.analysis.levels import trading_hours
+    from core.domain.sessions import globex_session
+
+    hours = trading_hours(symbol, [globex_session(day) for day in trade_dates])
+    return [make(hour + timedelta(minutes=5), value) for hour in sorted(hours)]
 
 
 def nq(value=29_175.0, settle=29_150.0, contract="NQZ26"):
@@ -34,6 +45,8 @@ AFTER_OPEN = at(2026, 10, 22, 15, 0)
 
 
 def seed(repo):
+    repo.store(fill(obs, [date(2026, 10, d) for d in (12, 13, 14, 15, 16)], 29_500.0)
+               + fill(obs, [date(2026, 10, 21)], 29_930.0))
     repo.store([
         # Previous week (Oct 12–16).
         obs(at(2026, 10, 13, 15, 0), 30_212.0), obs(at(2026, 10, 15, 15, 0), 29_142.0),
@@ -117,6 +130,9 @@ def es(value=6_805.0, settle=6_800.0, contract="ESZ26"):
 
 
 def seed_es_thanksgiving(repo):
+    repo.store(fill(es_obs, [date(2026, 11, d) for d in (16, 17, 18, 19, 20)], 6_800.0)
+               + fill(es_obs, [date(2026, 11, d) for d in (23, 24, 25)], 6_800.0)
+               + fill(es_obs, [date(2026, 11, 27)], 6_810.0))
     repo.store([
         # Week of Nov 16–20 (prior week for Fri Nov 27).
         es_obs(at(2026, 11, 16, 15, 0), 6_900.0), es_obs(at(2026, 11, 19, 15, 0), 6_700.0),
@@ -216,3 +232,53 @@ def test_ym_levels_are_written_in_whole_points(memory_repo):
     assert levels["overnight_low"].value_text == "51,701"
     assert levels["prior_settle"].value_text == "52,512"
     assert levels["gap_vs_settle"].value_text == "-584 (-1.11%)"
+
+
+def test_prior_week_with_big_holes_is_unavailable_not_a_misleading_range(memory_repo):
+    # The service ran only four hours of Mon Nov 16's session that week.
+    memory_repo.store([obs(at(2026, 11, 16, 15 + h, 0), 27_000.0 + 100 * h) for h in range(4)])
+    levels = by_key(key_levels("NQ", nq(), memory_repo.ohlc, now=at(2026, 11, 23, 12, 0)))
+    week = levels["prior_week_high"]
+    assert week.value is None
+    assert week.unavailable_reason.startswith("stored quotes cover only 4 of ")
+
+
+def test_trading_hours_counts_known_sessions_independently():
+    from core.analysis.levels import trading_hours
+    from core.domain.sessions import globex_session
+
+    def count(symbol, *days):
+        return len(trading_hours(symbol, [globex_session(d) for d in days]))
+
+    # Ordinary Globex day: 18:00 to 17:00 ET is 23 hours.
+    assert count("NQ", date(2026, 11, 24)) == 23
+    # DST ends Sun Nov 1: Monday's session (Sun 18:00 EST to Mon 17:00 EST) is 23 hours.
+    assert count("NQ", date(2026, 11, 2)) == 23
+    # Fri Nov 27: Wed 18:00 to Thu 13:00 (19h), Thu 18:00 to Fri 13:15 (19h + a partial hour).
+    assert count("NQ", date(2026, 11, 27)) == 39
+    # VIX: Cboe 03:15-16:15 ET touches 14 hour buckets; 03:15-13:15 on Nov 27 touches 11.
+    assert count("VIX", date(2026, 11, 24)) == 14
+    assert count("VIX", date(2026, 11, 27)) == 11
+
+
+def test_coverage_threshold_is_ninety_percent(memory_repo):
+    from core.analysis.levels import trading_hours
+    from core.domain.sessions import globex_session
+
+    hours = sorted(trading_hours("NQ", [globex_session(date(2026, 11, 24))]))  # 23 hours
+    now = at(2026, 11, 25, 12, 0)  # Wed pre-market: prior day is Tue Nov 24
+    memory_repo.store([obs(h + timedelta(minutes=5), 29_000.0) for h in hours[:21]])
+    assert by_key(key_levels("NQ", nq(), memory_repo.ohlc, now=now))["prior_day_high"].value \
+        == 29_000.0  # 21 of 23 = 91%
+
+
+def test_coverage_below_ninety_percent_is_unavailable(memory_repo):
+    from core.analysis.levels import trading_hours
+    from core.domain.sessions import globex_session
+
+    hours = sorted(trading_hours("NQ", [globex_session(date(2026, 11, 24))]))
+    memory_repo.store([obs(h + timedelta(minutes=5), 29_000.0) for h in hours[:20]])
+    level = by_key(key_levels("NQ", nq(), memory_repo.ohlc,
+                              now=at(2026, 11, 25, 12, 0)))["prior_day_high"]
+    assert level.value is None  # 20 of 23 = 87%
+    assert level.unavailable_reason.startswith("stored quotes cover only 20 of 23 ")

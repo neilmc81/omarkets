@@ -138,6 +138,13 @@ def es_quote(ts, value, settle, *, received=None, **extra):
 @pytest.fixture
 def es_client(memory_repo):
     """ES on Mon Nov 30 2026, 10:00 ET, after the Thanksgiving half day."""
+    from datetime import date
+
+    from tests.analysis.test_levels import fill
+    # Hourly quotes so both sessions count as covered (the service was running).
+    memory_repo.store(
+        fill(lambda ts, v: es_quote(ts, v, 6_760.0), [date(2026, 11, 25)], 6_800.0, "ES")
+        + fill(lambda ts, v: es_quote(ts, v, 6_800.0), [date(2026, 11, 27)], 6_820.0, "ES"))
     memory_repo.store([
         # Wed Nov 25 session (settle of Tue: 6,760).
         es_quote(utc(2026, 11, 25, 16, 0), 6_820.0, 6_760.0),

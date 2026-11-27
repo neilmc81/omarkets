@@ -18,6 +18,7 @@ export const quoteRowSchema = z.object({
     value: price,
     change: price,
     change_pct: price,
+    quote_type: z.string().nullable().default(null),
     timestamp: z.string().nullable().default(null),
     status: z.string(),
     feed_status: z.string(),

@@ -46,6 +46,14 @@ export function badgeOf(row: QuoteRow | undefined): Badge {
 const fixed = (value: number | null, digits: number) => value === null ? "—" : value.toFixed(digits);
 const signed = (value: number | null, digits: number, suffix = "") =>
   value === null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(digits)}${suffix}`;
+/** A yield's change in basis points (1bp = 0.01 percentage point); a percent
+ *  change of a yield is not how rates moves are read. Others: percent change. */
+function relativeChange(row: QuoteRow): string {
+  if (row.state.quote_type === "yield") {
+    return row.state.change === null ? "—" : signed(row.state.change * 100, 1, "bp");
+  }
+  return signed(row.state.change_pct, 2, "%");
+}
 const direction = (value: number | null) => value === null || value === 0 ? "" : value > 0 ? "up" : "down";
 
 function rowLines(symbol: string, inst: ChartInstrument | undefined, row: QuoteRow | undefined, entry?: Explainer): string[] {
@@ -56,7 +64,7 @@ function rowLines(symbol: string, inst: ChartInstrument | undefined, row: QuoteR
     ...(inst ? [] : [`${symbol} is not in the instrument registry; the core will refuse to save it.`]),
     ...(row && badge !== "none" ? [
       `Last: ${fixed(row.state.value, digits)}${inst?.unit ? ` ${inst.unit}` : ""}`,
-      `Reported change: ${signed(row.state.change, digits)} (${signed(row.state.change_pct, 2, "%")})`,
+      `Reported change: ${signed(row.state.change, digits)} (${relativeChange(row)})`,
       row.state.timestamp ? `As of ${etTime(row.state.timestamp)}${row.state.source ? ` · ${row.state.source}` : ""}` : "Time unavailable",
     ] : []),
     BADGE_LINE[badge],
@@ -180,7 +188,7 @@ export function WatchlistsPage() {
 
       {draft.symbols.length === 0 ? <p className="t-muted wl-empty">The list is empty. Add at least one instrument to save it.</p>
         : <table className="status-table wl-table" aria-label={`${draft.name.trim() || "Watchlist"} instruments`}>
-          <thead><tr><th>#</th><th>Instrument</th><th>Last</th><th>Change</th><th>%</th><th>Feed</th><th><span className="visually-hidden">Order and remove</span></th></tr></thead>
+          <thead><tr><th>#</th><th>Instrument</th><th>Last</th><th>Change</th><th>% / bp</th><th>Feed</th><th><span className="visually-hidden">Order and remove</span></th></tr></thead>
           <tbody>{draft.symbols.map((symbol, index) => {
             const inst = registry.get(symbol);
             const row = quoteBy.get(symbol);
@@ -198,7 +206,7 @@ export function WatchlistsPage() {
               <td className={`wl-num t-chg ${badge === "closed" ? "" : direction(row?.state.change ?? null)}`}>
                 {badge === "none" ? "—" : signed(row!.state.change, digits)}</td>
               <td className={`wl-num t-chg ${badge === "closed" ? "" : direction(row?.state.change_pct ?? null)}`}>
-                {badge === "none" ? "—" : signed(row!.state.change_pct, 2, "%")}</td>
+                {badge === "none" ? "—" : relativeChange(row!)}</td>
               <td><span className={`wl-badge wl-${badge}`}>{BADGE_TEXT[badge]}</span></td>
               <td className="wl-row-actions">
                 <button type="button" className="t-link" aria-label={`Move ${symbol} up`} disabled={saving || index === 0} onClick={() => move(index, -1)}>↑</button>

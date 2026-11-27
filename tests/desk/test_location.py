@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from core.analysis.levels import key_levels
@@ -12,7 +12,7 @@ from core.desk.prompts import facts_text
 from core.desk.service import DeskService, DeskSources
 from core.desk.store import DeskStore
 from core.desk.writer import invented_numbers
-from tests.analysis.test_levels import AFTER_OPEN, PREMARKET, at, nq, obs, seed
+from tests.analysis.test_levels import AFTER_OPEN, PREMARKET, at, fill, nq, obs, seed
 
 
 def location(repo, *, now=PREMARKET, value=29_175.0, **kwargs):
@@ -53,7 +53,8 @@ def test_exactly_at_a_level_and_fractional_points(memory_repo):
 
 def test_unmeasured_levels_are_left_out_never_zero(memory_repo):
     # Only last week's quotes stored, and no settle from the quote source.
-    memory_repo.store([obs(at(2026, 10, 13, 15, 0), 30_212.0)])
+    memory_repo.store([obs(at(2026, 10, 13, 15, 0), 30_212.0)]
+                      + fill(obs, [date(2026, 10, d) for d in (12, 13, 14, 15, 16)], 30_000.0))
     result = location(memory_repo, settle=None)
     assert [row["level"] for row in result["levels"]] == ["Prior week high", "Prior week low"]
 
@@ -128,7 +129,7 @@ def test_each_level_carries_its_window_in_et(memory_repo):
 
 def test_holiday_monday_dates_show_which_week_is_meant(memory_repo):
     # Memorial Day 2026: the levels still belong to Friday May 22's session.
-    memory_repo.store([obs(at(2026, 5, 13, 15, 0), 29_000.0)])
+    memory_repo.store(fill(obs, [date(2026, 5, d) for d in (11, 12, 13, 14, 15)], 29_000.0))
     result = F.price_location(key_levels("NQ", nq(), memory_repo.ohlc,
                                          now=at(2026, 5, 25, 14, 0)), 29_175.0)
     [high, low] = result["levels"][1:]
