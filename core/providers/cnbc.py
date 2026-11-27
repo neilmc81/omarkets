@@ -134,6 +134,9 @@ def _stamp(record: dict, now: datetime) -> tuple[datetime, bool]:
     return now, False
 
 
+#: Fetches tried on a closed-market start before waiting for the open.
+_CATCH_UP_ATTEMPTS = 3
+
 class CNBCMarketDataProvider(MarketDataProvider):
     """Free, no-key quote provider for futures, indices, yields and equities."""
 
@@ -353,8 +356,10 @@ class CNBCMarketDataProvider(MarketDataProvider):
         backoff = self._update_interval
         # Fetch once even when the market is closed, so a start during a
         # weekend or holiday picks up the last settle instead of showing
-        # whatever was stored before the service was stopped.
+        # whatever was stored before the service was stopped. A failing
+        # catch-up is retried at most a few times, then waits for the open.
         caught_up = False
+        catch_up_attempts = 0
         try:
             while not self._closed:
                 # Recheck wall-clock session state promptly after laptop resume.
@@ -370,6 +375,9 @@ class CNBCMarketDataProvider(MarketDataProvider):
                 except Exception as exc:
                     self._register_failure(type(exc).__name__)
                     self._reconnects += 1
+                    catch_up_attempts += 1
+                    if catch_up_attempts >= _CATCH_UP_ATTEMPTS:
+                        caught_up = True
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 60.0)
                     continue

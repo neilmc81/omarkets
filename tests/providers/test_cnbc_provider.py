@@ -526,3 +526,30 @@ async def test_ym_parses_a_live_cbot_dow_quote():
     assert (meta["open"], meta["high"], meta["low"]) == (52499.0, 52662.0, 51701.0)
     assert meta["volume"] == 106912
     assert meta["feed_status"] == "delayed" and meta["expected_delay_seconds"] == 600
+
+
+async def test_failed_closed_market_catch_up_gives_up_after_a_few_tries(monkeypatch):
+    p = CNBCMarketDataProvider(clock=lambda: datetime(2026, 11, 28, 12, tzinfo=UTC))
+    calls = 0
+    quiet = asyncio.Event()
+
+    async def collect():
+        nonlocal calls
+        calls += 1
+        raise _ProviderFailure("down")
+
+    async def sleep(seconds):
+        if seconds == 30.0:
+            quiet.set()
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(p, "_collect", collect)
+    monkeypatch.setattr("core.providers.cnbc.asyncio.sleep", sleep)
+    stream = p.stream_updates()
+    task = asyncio.create_task(anext(stream))
+    try:
+        await asyncio.wait_for(quiet.wait(), timeout=1)
+        assert calls == 3
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

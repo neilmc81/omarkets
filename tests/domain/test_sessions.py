@@ -305,3 +305,23 @@ def test_thanksgiving_morning_trades_under_friday_until_the_halt():
     # Friday closes early; nothing until Sunday evening.
     assert session_phase(at("2026-11-27T18:15")) is SessionPhase.CLOSED
     assert next_session_open(at("2026-11-27T18:15")) == at("2026-11-29T23:00")
+
+
+def test_without_holiday_halts_splits_around_the_thanksgiving_and_labor_day_halts():
+    from core.domain.sessions import without_holiday_halts
+
+    def at(text):
+        return datetime.fromisoformat(text).replace(tzinfo=UTC)
+
+    assert without_holiday_halts(at("2026-11-25T23:00"), at("2026-11-27T18:15")) == [
+        (at("2026-11-25T23:00"), at("2026-11-26T18:00")),
+        (at("2026-11-26T23:00"), at("2026-11-27T18:15")),
+    ]
+    assert without_holiday_halts(at("2026-09-06T22:00"), at("2026-09-08T21:00")) == [
+        (at("2026-09-06T22:00"), at("2026-09-07T17:00")),
+        (at("2026-09-07T22:00"), at("2026-09-08T21:00")),
+    ]
+    # Ordinary days and a range wholly inside a halt.
+    assert without_holiday_halts(at("2026-11-23T23:00"), at("2026-11-24T22:00")) == [
+        (at("2026-11-23T23:00"), at("2026-11-24T22:00"))]
+    assert without_holiday_halts(at("2026-11-26T19:00"), at("2026-11-26T20:00")) == []

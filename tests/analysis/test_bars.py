@@ -133,7 +133,10 @@ def test_holidays_are_skipped_and_their_quotes_left_out(memory_repo):
     # under Friday's trade date. A quote after Friday's 13:15 ET early close is
     # outside every session.
     now = at(2026, 11, 30, 15, 0)
-    memory_repo.store([obs(at(2026, 11, 27, 20, 0), 999), obs(at(2026, 11, 25, 15, 0), 100)])
+    # A quote in Thursday's 13:00-18:00 ET halt (888) and one after Friday's
+    # 13:15 ET early close (999) are both left out.
+    memory_repo.store([obs(at(2026, 11, 27, 20, 0), 999), obs(at(2026, 11, 26, 20, 0), 888),
+                       obs(at(2026, 11, 25, 15, 0), 100)])
     sessions, built = read(memory_repo, ChartRange.FIVE_DAYS, Interval.H1, now)
     assert [s.trade_date.day for s in sessions] == [23, 24, 25, 27, 30]
     assert [b.close for b in built] == [100]

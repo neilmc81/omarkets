@@ -328,6 +328,27 @@ def trading_windows(session: GlobexSession) -> list[tuple[datetime, datetime]]:
             (_et_utc(holiday, GLOBEX_OPEN), session.closes_at)]
 
 
+def without_holiday_halts(start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:
+    """``[start, end)`` split around any holiday futures halt (13:00-18:00 ET on
+    2026 Labor Day or Thanksgiving), so quotes stamped in a halt are left out."""
+    start, end = _require_aware(start), _require_aware(end)
+    windows: list[tuple[datetime, datetime]] = []
+    cursor = start
+    day, _ = local_parts(start)
+    last, _ = local_parts(end)
+    while day <= last:
+        if _is_halt_holiday(day):
+            halt_start, halt_end = _et_utc(day, _HOLIDAY_HALT), _et_utc(day, GLOBEX_OPEN)
+            if halt_start < end and halt_end > cursor:
+                if halt_start > cursor:
+                    windows.append((cursor, halt_start))
+                cursor = max(cursor, halt_end)
+        day += timedelta(days=1)
+    if cursor < end:
+        windows.append((cursor, end))
+    return windows
+
+
 def market_closed(moment: datetime) -> bool:
     """True on a weekend, holiday or the daily maintenance break."""
     return session_phase(moment) in (SessionPhase.CLOSED, SessionPhase.MAINTENANCE)
@@ -479,6 +500,7 @@ __all__ = [
     "session_range",
     "session_segments",
     "trading_windows",
+    "without_holiday_halts",
     "volatility_index_open",
     "volatility_index_window",
     "week_start",

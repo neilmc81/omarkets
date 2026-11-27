@@ -31,7 +31,12 @@ from datetime import datetime
 from core.desk import explainers as X
 from core.domain.chart import KeyLevel, KeyLevels
 from core.domain.instruments import get_instrument
-from core.domain.sessions import active_session, previous_session, previous_week_sessions
+from core.domain.sessions import (
+    active_session,
+    previous_session,
+    previous_week_sessions,
+    without_holiday_halts,
+)
 from core.storage.base import OhlcBucket
 
 OhlcFn = Callable[..., Sequence[OhlcBucket]]
@@ -107,7 +112,9 @@ def key_levels(symbol: str, instrument, ohlc: OhlcFn, *, now: datetime) -> KeyLe
     def read(start: datetime, end: datetime) -> _Window:
         if end <= start:
             return _Window([], contract)
-        return _Window(ohlc(symbol, start=start, end=end, bucket_seconds=_BUCKET_SECONDS),
+        # Quotes stamped in a CME holiday halt are not trading; leave them out.
+        return _Window(ohlc(symbol, start=start, end=end, bucket_seconds=_BUCKET_SECONDS,
+                            within=without_holiday_halts(start, end)),
                        contract)
 
     session = active_session(now)
