@@ -64,6 +64,7 @@ from core.desk.prompts import (
     EVENT_VERSIONS,
     FRESH_VERSIONS,
     PROMPT_VERSION,
+    REAL_YIELD_VERSIONS,
     RECENT_LESSONS_VERSIONS,
     WHY_VERSIONS,
     has_profile,
@@ -83,6 +84,7 @@ from core.domain.sessions import (
 from core.providers.earnings_nasdaq import EarningsDate, NasdaqEarningsCalendar
 from core.providers.news.evidence import article_allowed, plain_text
 from core.providers.treasury_auctions import Auction, TreasuryAuctions
+from core.providers.treasury_yields import TreasuryYields
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +196,7 @@ class DeskService:
         writer: DeskWriter,
         earnings: NasdaqEarningsCalendar | None = None,
         auctions: TreasuryAuctions | None = None,
+        real_yields: TreasuryYields | None = None,
         notify: Notify | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         move_threshold_pct: float = 0.8,
@@ -211,6 +214,8 @@ class DeskService:
         self.writer = writer
         self.earnings = earnings
         self.auctions = auctions
+        #: Treasury's daily real yields; refreshed each pass at versions that take them.
+        self.real_yields = real_yields
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
@@ -661,6 +666,10 @@ class DeskService:
             jobs.append((week.note_id, NoteKind.REVIEW,
                          lambda w=week: self.build_review(w.note_id, w, now)))
 
+        # Treasury's daily real yields: cached, so notes read them without a fetch.
+        if self.real_yields is not None and self.prompt_version in REAL_YIELD_VERSIONS:
+            await self.real_yields.rows()
+
         # Treasury auctions with notably strong or weak demand.
         if self.auctions is not None:
             results = await self.auctions.results()
@@ -847,7 +856,15 @@ class DeskService:
                 ],
                 "curve": rates.curve_text,
             },
+            **self._real_yields(now),
         }, rates
+
+    def _real_yields(self, now: datetime) -> dict[str, Any]:
+        """Treasury's latest daily real yield, at versions that take it (else nothing)."""
+        if self.prompt_version not in REAL_YIELD_VERSIONS:
+            return {}
+        rows = self.real_yields.cached if self.real_yields is not None else []
+        return {"real_yields": F.real_yields(rows, now=now)}
 
     def _macro_trends(self, now: datetime, rates: Any) -> dict[str, Any]:
         """The Macro page's trends as writer facts, if the series are available."""

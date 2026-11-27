@@ -32,6 +32,7 @@ V10 = "desk:v10"
 V11 = "desk:v11"
 V12 = "desk:v12"
 V13 = "desk:v13"
+V14 = "desk:v14"
 #: The version production writes by default (``desk_prompt_version`` overrides;
 #: desk:v8 stays selectable for NQ-only desks and replays; desk:v10 adds a labelled
 #: "why" to move and ask notes, written from ``why_evidence``).
@@ -406,22 +407,25 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
 BASIS_POINT = "1 basis point (bp) = 0.01 percentage point."
 #: Versions whose facts carry ``recent_lessons`` (the Learn boxes of the latest
 #: notes) so a note doesn't teach the same lesson again. desk:v8 never did.
-RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11, V12, V13})
+RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11, V12, V13, V14})
 #: Versions whose move and ask notes must say why, from ``why_evidence``.
-WHY_VERSIONS = frozenset({V10, V11, V12, V13})
+WHY_VERSIONS = frozenset({V10, V11, V12, V13, V14})
 #: Versions that write one note for several instruments moving in the same hour
 #: (``DeskService.due_jobs``). Earlier versions write one move note per instrument.
-EVENT_VERSIONS = frozenset({V11, V12, V13})
+EVENT_VERSIONS = frozenset({V11, V12, V13, V14})
 #: Versions whose why_evidence knows the move window: each item says when it was
 #: published against the move, and the ranking weighs that (``core.desk.evidence``).
-FRESH_VERSIONS = frozenset({V12, V13})
+FRESH_VERSIONS = frozenset({V12, V13, V14})
 #: Versions that must hedge the headline when the why is "likely" (the writer asks
 #: once more when it doesn't).
-HEDGE_VERSIONS = frozenset({V12, V13})
+HEDGE_VERSIONS = frozenset({V12, V13, V14})
 #: Versions whose NQ, ES and YM notes are told how chip stocks did (``chip_stocks``)
 #: and how chip stocks and each megacap moved over a move's own window
 #: (``tech_stocks_same_window``).
-CHIP_VERSIONS = frozenset({V13})
+CHIP_VERSIONS = frozenset({V13, V14})
+#: Versions whose notes get Treasury's daily 10-year real yield and breakeven
+#: inflation (``real_yields``).
+REAL_YIELD_VERSIONS = frozenset({V14})
 #: Words that hedge a headline: "likely"/"appears" and their kin.
 HEDGES = ("likely", "appears", "appear", "may", "might", "could", "seems", "possibly",
           "probably", "desk's read")
@@ -439,7 +443,8 @@ VERSION_FACTS: Mapping[str, frozenset[str]] = {"recent_lessons": RECENT_LESSONS_
                                                "why_evidence": WHY_VERSIONS,
                                                "the_event": EVENT_VERSIONS,
                                                "chip_stocks": CHIP_VERSIONS,
-                                               "tech_stocks_same_window": CHIP_VERSIONS}
+                                               "tech_stocks_same_window": CHIP_VERSIONS,
+                                               "real_yields": REAL_YIELD_VERSIONS}
 
 
 def facts_at(version: str | None, facts: Mapping[str, Any]) -> dict[str, Any]:
@@ -797,6 +802,30 @@ def _v13(spec: InstrumentSpec) -> Profile:
     if not spec.participation:
         return _v12(spec)
     return _v12(replace(spec, megacap_rule=spec.megacap_rule + _V13_CHIP_RULE))
+
+
+#: desk:v14 is desk:v13 plus Treasury's daily real yield and breakeven inflation, for
+#: every instrument.
+_V14_REAL_YIELD_RULE = (
+    " \"real_yields\" is Treasury's end-of-day 10-year real yield and breakeven inflation "
+    "(\"what\" says what each is; \"as_of\" says which day's close). They are daily, "
+    "never live: quote them only when \"status\" is \"available\", always with their "
+    "day (for example \"at Tuesday's close\"), and never as a move in this note's window or "
+    "today's session. Explain each in plain words the first time. A real yield is the part "
+    "of a Treasury yield left after expected inflation; rising real yields have tended to "
+    "weigh on big tech stocks and on gold, and falling ones to help them, but that is a "
+    "tendency, not a rule, and never the reason for a move unless why_evidence says so. "
+    "Breakeven inflation shows whether a change in yields came from inflation worries or "
+    "from real yields. Never work out a real yield or breakeven yourself, and if the "
+    "status is not \"available\", leave them out.")
+
+
+def _v14(spec: InstrumentSpec) -> Profile:
+    """desk:v13's profile plus the real-yields rule."""
+    if not spec.participation:
+        return _v12(replace(spec, macro_rule=spec.macro_rule + _V14_REAL_YIELD_RULE))
+    return _v12(replace(spec, megacap_rule=spec.megacap_rule + _V13_CHIP_RULE,
+                        macro_rule=spec.macro_rule + _V14_REAL_YIELD_RULE))
 
 
 def _profile(spec: InstrumentSpec, system_text: str, instrument_tasks: Mapping[NoteKind, str],
@@ -1259,6 +1288,7 @@ PROMPTS: Mapping[str, Mapping[str, Profile]] = {
     V11: {symbol: _v11(spec) for symbol, spec in SPECS.items()},
     V12: {symbol: _v12(spec) for symbol, spec in SPECS.items()},
     V13: {symbol: _v13(spec) for symbol, spec in SPECS.items()},
+    V14: {symbol: _v14(spec) for symbol, spec in SPECS.items()},
 }
 VERSIONS = tuple(PROMPTS)
 

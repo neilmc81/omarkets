@@ -1020,6 +1020,54 @@ def _bp_text(value: float | None) -> str:
     return "—" if value is None else signed(value, "bp")
 
 
+#: What ``real_yields`` measures, told to the writer with every value.
+_REAL_YIELDS_ARE = (
+    "US Treasury's official end-of-day curve, published each business day after the close: "
+    "the 10-year real yield (what a 10-year inflation-protected Treasury, a TIPS, pays above "
+    "inflation) and the 10-year breakeven inflation rate (the 10-year yield minus the real "
+    "yield: the average yearly inflation the bond market is pricing in). Daily only, never "
+    "a live price")
+#: An end-of-day curve older than this (calendar days) is stale: long weekends and
+#: Treasury's one-evening publishing lag stay inside it.
+REAL_YIELDS_STALE_DAYS = 5
+
+
+def real_yields(rows: Sequence[Any], *, now: datetime) -> dict[str, Any]:
+    """The latest 10-year real yield and breakeven from Treasury's daily curves, with
+    the change on the prior business day and over about a week. ``rows`` are
+    ``DailyYields``-like (``day``, ``real_10y``, ``nominal_10y``), oldest first."""
+    usable = [r for r in rows if r.real_10y is not None]
+    if not usable:
+        return {"what": _REAL_YIELDS_ARE, "status": "unavailable"}
+    last = usable[-1]
+    as_of = last.day.strftime("%a %b %d") + " close"
+    if (now.astimezone(_NEW_YORK).date() - last.day).days > REAL_YIELDS_STALE_DAYS:
+        return {"what": _REAL_YIELDS_ARE, "status": "stale", "as_of": as_of}
+    prior = usable[-2] if len(usable) > 1 else None
+    week = next((r for r in reversed(usable) if (last.day - r.day).days >= 7), None)
+
+    def bp(new: float | None, old: float | None) -> str:
+        return "unavailable" if new is None or old is None \
+            else signed(round((new - old) * 100.0, 1), "bp")
+
+    def breakeven(row: Any) -> float | None:
+        if row is None or row.nominal_10y is None:
+            return None
+        return round(row.nominal_10y - row.real_10y, 2)
+
+    out: dict[str, Any] = {
+        "what": _REAL_YIELDS_ARE, "status": "available", "as_of": as_of,
+        "ten_year_real_yield": f"{last.real_10y:.2f}%",
+        "real_yield_change_prior_day": bp(last.real_10y, prior.real_10y if prior else None),
+        "real_yield_change_past_week": bp(last.real_10y, week.real_10y if week else None),
+    }
+    level = breakeven(last)
+    out["ten_year_breakeven_inflation"] = "unavailable" if level is None else f"{level:.2f}%"
+    out["breakeven_change_prior_day"] = bp(level, breakeven(prior))
+    out["breakeven_change_past_week"] = bp(level, breakeven(week))
+    return out
+
+
 def rates_view(state: Any, history: HistoryFn, *, now: datetime) -> RatesView:
     """2-year, 10-year and the 10y-2y curve with day and one-week changes."""
     lines: list[YieldLine] = []
