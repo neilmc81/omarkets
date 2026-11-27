@@ -257,6 +257,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
     from core.providers.earnings_nasdaq import NasdaqEarningsCalendar
     from core.providers.news.evidence import EvidenceFeeds
     from core.providers.treasury_auctions import TreasuryAuctions
+    from core.providers.treasury_yields import TreasuryYields
 
     def calendar_events(start, end):
         if economics is None or economics.mode.value == "disabled":
@@ -306,6 +307,7 @@ def build_desk_service(settings: Settings, *, market, economics, news_service, c
         writer=writer,
         earnings=NasdaqEarningsCalendar(),
         auctions=TreasuryAuctions(),
+        real_yields=TreasuryYields(),
         notify=notify if settings.desk_notify else None,
         move_threshold_pct=settings.desk_move_threshold_pct,
         move_threshold_bp=settings.desk_move_threshold_bp,

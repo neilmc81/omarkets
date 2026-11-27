@@ -554,7 +554,34 @@ earlier versions get neither fact (`VERSION_FACTS` in `core/desk/prompts.py`).
 Ask notes get `chip_stocks` only. Known limit, shared with the megacaps: outside US
 stock hours a stock's last quote is labelled `stale`, not `closed`, because registry
 stocks use the futures session calendar (the rule above keeps a stale change from being
-quoted as current). Not built here: real yields.
+quoted as current). Real yields came next, in `desk:v14`.
+
+## Real yields and breakeven inflation (`desk:v14`)
+
+`desk:v14` is `desk:v13` plus one fact, `real_yields`, on every note of every
+instrument. Earlier versions neither fetch it nor get it (`REAL_YIELD_VERSIONS` and
+`VERSION_FACTS` in `core/desk/prompts.py`).
+
+- **Source:** US Treasury's daily par yield curves, public XML from
+  home.treasury.gov, no key (`core/providers/treasury_yields.py`): the real (TIPS)
+  curve `TC_10YEAR` and the nominal curve `BC_10YEAR`, this month and last. Treasury
+  publishes each business day's curve after the close, so this is **end of day only**.
+  The desk starts a background refresh at most once an hour (45 s limit for the whole
+  fetch; a failed fetch keeps the last good rows and is retried after 30 minutes);
+  notes read the cache and never wait on Treasury.
+- **Fact** (`F.real_yields`): the latest 10-year real yield, its change on the prior
+  business day (within 5 calendar days) and over about a week (the latest day 7 to 11
+  days earlier), and the
+  10-year breakeven inflation rate (nominal minus real, on the same day from the same
+  source) with the same two changes. Every value is pre-formatted text; a change with
+  no earlier day is `unavailable`, never zero. `as_of` names the day's close. A curve
+  more than 5 calendar days old is `stale` and carries no number; no rows is
+  `unavailable`; a row dated after today (ET) is dropped as untrusted.
+- **Rule** (appended to the macro rule): quote only when available, always with its
+  day, never as a move in the note's window or today's session; explain both terms the
+  first time; rising real yields have tended to weigh on big tech and gold (a
+  tendency, never the reason unless `why_evidence` says so); never compute either
+  number.
 
 ## Did it hold? (release, Fed, earnings and move notes)
 

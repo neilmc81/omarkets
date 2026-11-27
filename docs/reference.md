@@ -322,6 +322,7 @@ synthetic provider. A failed live feed is never silently replaced by demo data.
 | --- | --- | --- | --- | --- |
 | CNBC quote webservice | HTTPS polling (5s default) | NQ, ES, WTI (explicit front-month futures), US2Y, US10Y, DXY, VIX, VXN, WTI, GOLD, NVDA, MSFT, AAPL, AMZN, META, GOOGL, AVGO, TSLA, SMH | NQ/ES ~10 min **delayed**; yields/DXY ~seconds; index/equity closes after hours | none |
 | Binance spot | HTTPS polling (10s default) | BTC | seconds | none |
+| US Treasury daily yield curves (desk:v14) | HTTPS XML, hourly | 10-year real (TIPS) and nominal yield, for `real_yields` | end of day, published after the close | none |
 
 Verified real fetch on 2026-09-18: NQZ26 29,918, ESZ26 7,734, US10Y 4.922%,
 DXY 100.24, .VIX 15.44, .VXN 19.96, WTI, GOLD, BTC (WTI as `CLZ26` verified
