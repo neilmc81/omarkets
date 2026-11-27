@@ -566,16 +566,17 @@ instrument. Earlier versions neither fetch it nor get it (`REAL_YIELD_VERSIONS` 
   home.treasury.gov, no key (`core/providers/treasury_yields.py`): the real (TIPS)
   curve `TC_10YEAR` and the nominal curve `BC_10YEAR`, this month and last. Treasury
   publishes each business day's curve after the close, so this is **end of day only**.
-  The desk refreshes it once an hour during its pass (a failed fetch keeps the last
-  good rows and is retried after 30 minutes); notes read the cache and never wait on
-  Treasury.
+  The desk starts a background refresh at most once an hour (45 s limit for the whole
+  fetch; a failed fetch keeps the last good rows and is retried after 30 minutes);
+  notes read the cache and never wait on Treasury.
 - **Fact** (`F.real_yields`): the latest 10-year real yield, its change on the prior
-  business day and over about a week (the latest day at least 7 days earlier), and the
+  business day (within 5 calendar days) and over about a week (the latest day 7 to 11
+  days earlier), and the
   10-year breakeven inflation rate (nominal minus real, on the same day from the same
   source) with the same two changes. Every value is pre-formatted text; a change with
   no earlier day is `unavailable`, never zero. `as_of` names the day's close. A curve
   more than 5 calendar days old is `stale` and carries no number; no rows is
-  `unavailable`.
+  `unavailable`; a row dated after today (ET) is dropped as untrusted.
 - **Rule** (appended to the macro rule): quote only when available, always with its
   day, never as a move in the note's window or today's session; explain both terms the
   first time; rising real yields have tended to weigh on big tech and gold (a

@@ -216,6 +216,7 @@ class DeskService:
         self.auctions = auctions
         #: Treasury's daily real yields; refreshed each pass at versions that take them.
         self.real_yields = real_yields
+        self._yields_task: asyncio.Task[None] | None = None
         self.notify = notify
         self.clock = clock
         self.move_threshold_pct = move_threshold_pct
@@ -667,8 +668,10 @@ class DeskService:
                          lambda w=week: self.build_review(w.note_id, w, now)))
 
         # Treasury's daily real yields: cached, so notes read them without a fetch.
-        if self.real_yields is not None and self.prompt_version in REAL_YIELD_VERSIONS:
-            await self.real_yields.rows()
+        # Refreshed in the background so a slow Treasury never delays a note.
+        if (self.real_yields is not None and self.prompt_version in REAL_YIELD_VERSIONS
+                and (self._yields_task is None or self._yields_task.done())):
+            self._yields_task = asyncio.create_task(self._refresh_real_yields())
 
         # Treasury auctions with notably strong or weak demand.
         if self.auctions is not None:
@@ -858,6 +861,12 @@ class DeskService:
             },
             **self._real_yields(now),
         }, rates
+
+    async def _refresh_real_yields(self) -> None:
+        try:
+            await self.real_yields.rows()
+        except Exception:  # noqa: BLE001 - optional context, never breaks the desk
+            logger.exception("real yields refresh failed")
 
     def _real_yields(self, now: datetime) -> dict[str, Any]:
         """Treasury's latest daily real yield, at versions that take it (else nothing)."""

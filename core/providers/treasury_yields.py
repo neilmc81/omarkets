@@ -107,11 +107,14 @@ class TreasuryYields:
         client: httpx.AsyncClient | None = None,
         ttl: timedelta = timedelta(hours=1),
         retry_after: timedelta = timedelta(minutes=30),
+        deadline: float = 45.0,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._client = client
         self._ttl = ttl
         self._retry_after = retry_after
+        #: Whole-refresh limit in seconds (the client timeout is per operation).
+        self._deadline = deadline
         self._clock = clock
         self._rows: list[DailyYields] = []
         self._next: datetime | None = None
@@ -141,9 +144,10 @@ class TreasuryYields:
             client = self._client or httpx.AsyncClient(timeout=15.0)
             try:
                 months = _months(now.date())
-                texts = await asyncio.gather(*(self._get(client, curve, month)
-                                               for curve in (REAL, NOMINAL)
-                                               for month in months))
+                async with asyncio.timeout(self._deadline):
+                    texts = await asyncio.gather(*(self._get(client, curve, month)
+                                                   for curve in (REAL, NOMINAL)
+                                                   for month in months))
             except Exception as exc:  # noqa: BLE001 - provider isolation
                 self.last_error = f"Treasury yields unavailable ({type(exc).__name__})"
                 logger.warning("treasury yields fetch failed: %s", type(exc).__name__)

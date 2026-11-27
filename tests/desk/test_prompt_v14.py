@@ -146,6 +146,61 @@ def test_no_rows_or_an_old_curve_gives_no_number():
     assert old == {"what": F._REAL_YIELDS_ARE, "status": "stale", "as_of": "Fri Nov 13 close"}
 
 
+def test_a_future_dated_row_is_never_quoted():
+    rows = [day(date(2026, 11, 25), 2.73, 4.85), day(date(2026, 11, 27), 1.0, 9.0)]
+    out = F.real_yields(rows, now=WED)  # Wed Nov 25 evening ET
+    assert out["as_of"] == "Wed Nov 25 close" and out["ten_year_real_yield"] == "2.73%"
+    assert F.real_yields(rows[1:], now=WED)["status"] == "unavailable"
+
+
+def test_a_gap_in_the_data_gives_unavailable_changes_not_a_longer_one():
+    rows = [day(date(2026, 10, 1), 3.28, 5.40), day(date(2026, 11, 25), 2.73, 4.85)]
+    out = F.real_yields(rows, now=WED)
+    assert out["real_yield_change_prior_day"] == "unavailable"
+    assert out["real_yield_change_past_week"] == "unavailable"
+    assert out["breakeven_change_past_week"] == "unavailable"
+
+
+def test_the_week_change_survives_a_holiday_gap():
+    # Nov 18 missing: the latest day 7 to 11 days back (Nov 17) is used.
+    rows = [day(date(2026, 11, 17), 2.90, 5.10), day(date(2026, 11, 24), 2.79, 4.91),
+            day(date(2026, 11, 25), 2.73, 4.85)]
+    assert F.real_yields(rows, now=WED)["real_yield_change_past_week"] == "-17.0bp"
+
+
+async def test_a_stalled_treasury_does_not_delay_notes():
+    import asyncio
+
+    class Stalled(StubYields):
+        async def rows(self):
+            self.fetches += 1
+            await asyncio.sleep(3600)
+
+    from tests.desk.test_prompt_v13 import falling, make
+    service, _, _ = make(NOW, series={"NQ": falling(30000.0, NOW)}, instruments=("NQ",))
+    service.prompt_version = P.V14
+    service.real_yields = Stalled(ROWS)
+    await asyncio.wait_for(service.tick(), timeout=5)
+    facts = next(f for k, f in service.writer.calls if k is NoteKind.MOVE)
+    assert facts["real_yields"]["status"] == "available"  # read from the cache
+    service._yields_task.cancel()
+
+
+async def test_the_whole_refresh_has_a_deadline():
+    import asyncio
+
+    async def slow(request):
+        await asyncio.sleep(5)
+        return httpx.Response(200, text="")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(slow))
+    feed = TreasuryYields(client=client, deadline=0.05,
+                          clock=lambda: datetime(2026, 11, 27, tzinfo=UTC))
+    assert await asyncio.wait_for(feed.rows(), timeout=2) == []
+    assert "TimeoutError" in feed.last_error
+    await client.aclose()
+
+
 def test_a_long_weekend_is_not_stale():
     # Thanksgiving: Wed's curve is still the latest on the following Monday morning.
     monday = datetime(2026, 11, 30, 14, tzinfo=UTC)

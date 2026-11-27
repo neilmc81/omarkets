@@ -1030,21 +1030,31 @@ _REAL_YIELDS_ARE = (
 #: An end-of-day curve older than this (calendar days) is stale: long weekends and
 #: Treasury's one-evening publishing lag stay inside it.
 REAL_YIELDS_STALE_DAYS = 5
+#: "Past week" compares with the latest day 7 to 11 calendar days earlier (a holiday
+#: can remove the exact day); nothing in that range gives "unavailable".
+WEEK_MIN_DAYS, WEEK_MAX_DAYS = 7, 11
 
 
 def real_yields(rows: Sequence[Any], *, now: datetime) -> dict[str, Any]:
     """The latest 10-year real yield and breakeven from Treasury's daily curves, with
     the change on the prior business day and over about a week. ``rows`` are
     ``DailyYields``-like (``day``, ``real_10y``, ``nominal_10y``), oldest first."""
-    usable = [r for r in rows if r.real_10y is not None]
+    today = now.astimezone(_NEW_YORK).date()
+    # A day after today's date cannot be a published close: untrusted input, dropped.
+    usable = [r for r in rows if r.real_10y is not None and r.day <= today]
     if not usable:
         return {"what": _REAL_YIELDS_ARE, "status": "unavailable"}
     last = usable[-1]
     as_of = last.day.strftime("%a %b %d") + " close"
-    if (now.astimezone(_NEW_YORK).date() - last.day).days > REAL_YIELDS_STALE_DAYS:
+    if (today - last.day).days > REAL_YIELDS_STALE_DAYS:
         return {"what": _REAL_YIELDS_ARE, "status": "stale", "as_of": as_of}
+    # Comparisons only against a day close enough to mean "prior day" / "a week ago";
+    # a gap in the data gives "unavailable", never a longer change under that name.
     prior = usable[-2] if len(usable) > 1 else None
-    week = next((r for r in reversed(usable) if (last.day - r.day).days >= 7), None)
+    if prior is not None and (last.day - prior.day).days > REAL_YIELDS_STALE_DAYS:
+        prior = None
+    week = next((r for r in reversed(usable)
+                 if WEEK_MIN_DAYS <= (last.day - r.day).days <= WEEK_MAX_DAYS), None)
 
     def bp(new: float | None, old: float | None) -> str:
         return "unavailable" if new is None or old is None \
