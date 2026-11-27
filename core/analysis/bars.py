@@ -37,7 +37,7 @@ from core.domain.chart import (
     Sparkline,
     SparklinePoint,
 )
-from core.domain.sessions import TradingSession
+from core.domain.sessions import GlobexSession, TradingSession, without_holiday_halts
 from core.storage.base import OhlcBucket
 
 OhlcFn = Callable[..., Sequence[OhlcBucket]]
@@ -130,6 +130,9 @@ def read_bars(
     early close. Returns the bars and the raw buckets.
     """
     within = [(s.opens_at, min(s.closes_at, end)) for s in sessions if s.opens_at < end]
+    if any(isinstance(s, GlobexSession) for s in sessions):
+        # A CME holiday halt sits inside its session; its quotes are left out.
+        within = [w for a, b in within for w in without_holiday_halts(a, b)]
     if not within:
         return [], []
     buckets = list(ohlc(symbol, start=within[0][0], end=within[-1][1],

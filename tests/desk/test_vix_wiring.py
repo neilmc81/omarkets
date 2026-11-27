@@ -791,7 +791,7 @@ def test_vix_s_prior_day_after_an_early_close_is_measured_to_13_15_and_the_rule_
     assert day.window_end.astimezone(NEW_YORK).strftime("%a %H:%M") == "Fri 13:15"
     location = F.price_location(levels, 17.42)
     [row] = [r for r in location["levels"] if r["level"] == "Prior day high"]
-    assert row["measured"] == "Thu Nov 26 18:00 ET to Fri Nov 27 13:15 ET"
+    assert row["measured"] == "Wed Nov 25 18:00 ET to Fri Nov 27 13:15 ET"
     fifteen = rule(15)
     assert "on a regular day Cboe calculates it only from 03:15 ET to 16:15 ET" in fifteen
     assert ("both end early on an early-close day, so state the times its \"measured\" "
