@@ -185,7 +185,7 @@ def test_the_writer_drops_both_facts_below_v13():
 
 
 def test_v13_is_selectable_layered_on_v12_and_not_the_default():
-    assert P.PROMPT_VERSION == P.V9 and P.CHIP_VERSIONS == {P.V13, P.V14}
+    assert P.PROMPT_VERSION == P.V9 and P.CHIP_VERSIONS >= {P.V13, P.V14}
     assert Settings(_env_file=None, desk_prompt_version=P.V13).desk_prompt_version == P.V13
     for versions in (P.WHY_VERSIONS, P.EVENT_VERSIONS, P.FRESH_VERSIONS, P.HEDGE_VERSIONS,
                      P.RECENT_LESSONS_VERSIONS):

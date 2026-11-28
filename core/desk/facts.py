@@ -1035,7 +1035,7 @@ REAL_YIELDS_STALE_DAYS = 5
 WEEK_MIN_DAYS, WEEK_MAX_DAYS = 7, 11
 
 
-def real_yields(rows: Sequence[Any], *, now: datetime) -> dict[str, Any]:
+def real_yields(rows: Sequence[Any], *, now: datetime, split: bool = False) -> dict[str, Any]:
     """The latest 10-year real yield and breakeven from Treasury's daily curves, with
     the change on the prior business day and over about a week. ``rows`` are
     ``DailyYields``-like (``day``, ``real_10y``, ``nominal_10y``), oldest first."""
@@ -1075,7 +1075,35 @@ def real_yields(rows: Sequence[Any], *, now: datetime) -> dict[str, Any]:
     out["ten_year_breakeven_inflation"] = "unavailable" if level is None else f"{level:.2f}%"
     out["breakeven_change_prior_day"] = bp(level, breakeven(prior))
     out["breakeven_change_past_week"] = bp(level, breakeven(week))
+    if split:
+        out["past_week_split"] = week_split(last, week)
     return out
+
+
+#: Below this (bp, absolute) a weekly change in the 10-year yield is "little changed".
+SPLIT_FLAT_BP = 3.0
+
+
+def week_split(last: Any, week: Any) -> str:
+    """Which part moved the 10-year yield over the past week: the real yield or
+    breakeven inflation (the two add up to the 10-year yield, same day, same source).
+    Worked out here so the writer only explains it."""
+    if week is None or last.nominal_10y is None or week.nominal_10y is None:
+        return "unavailable"
+    real = round((last.real_10y - week.real_10y) * 100.0, 1)
+    nominal = round((last.nominal_10y - week.nominal_10y) * 100.0, 1)
+    be = round(nominal - real, 1)
+    head = (f"10-year yield {signed(nominal, 'bp')} over the past week = real yield "
+            f"{signed(real, 'bp')} + breakeven inflation {signed(be, 'bp')}")
+    if abs(nominal) < SPLIT_FLAT_BP and abs(real) < SPLIT_FLAT_BP and abs(be) < SPLIT_FLAT_BP:
+        return f"{head}: little changed"
+    if (real > 0) != (be > 0) and min(abs(real), abs(be)) >= SPLIT_FLAT_BP:
+        return f"{head}: the two moved in opposite directions"
+    if abs(real) >= 2 * abs(be):
+        return f"{head}: mostly the real yield"
+    if abs(be) >= 2 * abs(real):
+        return f"{head}: mostly inflation expectations (breakeven)"
+    return f"{head}: both parts"
 
 
 def rates_view(state: Any, history: HistoryFn, *, now: datetime) -> RatesView:

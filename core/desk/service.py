@@ -64,6 +64,7 @@ from core.desk.prompts import (
     EVENT_VERSIONS,
     FRESH_VERSIONS,
     PROMPT_VERSION,
+    REAL_YIELD_SPLIT_VERSIONS,
     REAL_YIELD_VERSIONS,
     RECENT_LESSONS_VERSIONS,
     WHY_VERSIONS,
@@ -873,7 +874,8 @@ class DeskService:
         if self.prompt_version not in REAL_YIELD_VERSIONS:
             return {}
         rows = self.real_yields.cached if self.real_yields is not None else []
-        return {"real_yields": F.real_yields(rows, now=now)}
+        return {"real_yields": F.real_yields(
+            rows, now=now, split=self.prompt_version in REAL_YIELD_SPLIT_VERSIONS)}
 
     def _macro_trends(self, now: datetime, rates: Any) -> dict[str, Any]:
         """The Macro page's trends as writer facts, if the series are available."""

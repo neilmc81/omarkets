@@ -271,7 +271,8 @@ def test_the_writer_drops_real_yields_below_v14():
 
 
 def test_v14_is_selectable_layered_on_v13_and_not_the_default():
-    assert P.PROMPT_VERSION == P.V9 and P.REAL_YIELD_VERSIONS == {P.V14}
+    assert P.PROMPT_VERSION == P.V9 and P.REAL_YIELD_VERSIONS >= {P.V14}
+    assert P.V13 not in P.REAL_YIELD_VERSIONS
     assert Settings(_env_file=None, desk_prompt_version=P.V14).desk_prompt_version == P.V14
     for versions in (P.WHY_VERSIONS, P.EVENT_VERSIONS, P.FRESH_VERSIONS, P.HEDGE_VERSIONS,
                      P.RECENT_LESSONS_VERSIONS, P.CHIP_VERSIONS):

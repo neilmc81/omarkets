@@ -33,6 +33,7 @@ V11 = "desk:v11"
 V12 = "desk:v12"
 V13 = "desk:v13"
 V14 = "desk:v14"
+V15 = "desk:v15"
 #: The version production writes by default (``desk_prompt_version`` overrides;
 #: desk:v8 stays selectable for NQ-only desks and replays; desk:v10 adds a labelled
 #: "why" to move and ask notes, written from ``why_evidence``).
@@ -407,25 +408,28 @@ ASSET_DEFAULTS: Mapping[AssetClass, AssetDefaults] = {
 BASIS_POINT = "1 basis point (bp) = 0.01 percentage point."
 #: Versions whose facts carry ``recent_lessons`` (the Learn boxes of the latest
 #: notes) so a note doesn't teach the same lesson again. desk:v8 never did.
-RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11, V12, V13, V14})
+RECENT_LESSONS_VERSIONS = frozenset({V9, V10, V11, V12, V13, V14, V15})
 #: Versions whose move and ask notes must say why, from ``why_evidence``.
-WHY_VERSIONS = frozenset({V10, V11, V12, V13, V14})
+WHY_VERSIONS = frozenset({V10, V11, V12, V13, V14, V15})
 #: Versions that write one note for several instruments moving in the same hour
 #: (``DeskService.due_jobs``). Earlier versions write one move note per instrument.
-EVENT_VERSIONS = frozenset({V11, V12, V13, V14})
+EVENT_VERSIONS = frozenset({V11, V12, V13, V14, V15})
 #: Versions whose why_evidence knows the move window: each item says when it was
 #: published against the move, and the ranking weighs that (``core.desk.evidence``).
-FRESH_VERSIONS = frozenset({V12, V13, V14})
+FRESH_VERSIONS = frozenset({V12, V13, V14, V15})
 #: Versions that must hedge the headline when the why is "likely" (the writer asks
 #: once more when it doesn't).
-HEDGE_VERSIONS = frozenset({V12, V13, V14})
+HEDGE_VERSIONS = frozenset({V12, V13, V14, V15})
 #: Versions whose NQ, ES and YM notes are told how chip stocks did (``chip_stocks``)
 #: and how chip stocks and each megacap moved over a move's own window
 #: (``tech_stocks_same_window``).
-CHIP_VERSIONS = frozenset({V13, V14})
+CHIP_VERSIONS = frozenset({V13, V14, V15})
 #: Versions whose notes get Treasury's daily 10-year real yield and breakeven
 #: inflation (``real_yields``).
-REAL_YIELD_VERSIONS = frozenset({V14})
+REAL_YIELD_VERSIONS = frozenset({V14, V15})
+#: Versions whose pre-market and weekly review must cover real yields, with the
+#: past week's split of the 10-year yield (``real_yields.past_week_split``).
+REAL_YIELD_SPLIT_VERSIONS = frozenset({V15})
 #: Words that hedge a headline: "likely"/"appears" and their kin.
 HEDGES = ("likely", "appears", "appear", "may", "might", "could", "seems", "possibly",
           "probably", "desk's read")
@@ -449,8 +453,14 @@ VERSION_FACTS: Mapping[str, frozenset[str]] = {"recent_lessons": RECENT_LESSONS_
 
 def facts_at(version: str | None, facts: Mapping[str, Any]) -> dict[str, Any]:
     """A copy of ``facts`` without the fields prompt ``version`` doesn't take."""
-    return {key: value for key, value in facts.items()
-            if key not in VERSION_FACTS or version in VERSION_FACTS[key]}
+    out = {key: value for key, value in facts.items()
+           if key not in VERSION_FACTS or version in VERSION_FACTS[key]}
+    # A field inside a shared fact that only some versions take.
+    real = out.get("real_yields")
+    if (isinstance(real, Mapping) and "past_week_split" in real
+            and version not in REAL_YIELD_SPLIT_VERSIONS):
+        out["real_yields"] = {k: v for k, v in real.items() if k != "past_week_split"}
+    return out
 
 _V9_SYSTEM = """\
 You are the Omarkets desk writer. Your reader is a new trader who is learning how \
@@ -826,6 +836,29 @@ def _v14(spec: InstrumentSpec) -> Profile:
         return _v12(replace(spec, macro_rule=spec.macro_rule + _V14_REAL_YIELD_RULE))
     return _v12(replace(spec, megacap_rule=spec.megacap_rule + _V13_CHIP_RULE,
                         macro_rule=spec.macro_rule + _V14_REAL_YIELD_RULE))
+
+
+#: desk:v15 is desk:v14 with real yields required in the pre-market and weekly review.
+_V15_REAL_YIELD_TASK = (
+    " In rates_read, always cover real yields from \"real_yields\" when its status is "
+    "\"available\": the 10-year real yield's level and past-week change, named with its "
+    "day (\"as_of\", for example \"at Wednesday's close\"), and in one plain sentence "
+    "what \"past_week_split\" says moved the 10-year yield this week (the real yield, "
+    "inflation expectations, both, or little change), with what that tends to mean for "
+    "{symbol}: a rising real yield has tended to weigh on big tech, while yields rising "
+    "on inflation expectations alone is usually a milder story for it. Use only the "
+    "supplied figures and the split's wording; never work them out yourself. If the "
+    "status is not \"available\", say in one short clause that real yields are not "
+    "available.")
+
+
+def _v15(spec: InstrumentSpec) -> Profile:
+    """desk:v14's profile; the pre-market and weekly review must cover real yields."""
+    v14 = _v14(spec)
+    extra = _V15_REAL_YIELD_TASK.format(symbol=spec.symbol)
+    tasks = {kind: text + extra if kind in (NoteKind.PREMARKET, NoteKind.REVIEW) else text
+             for kind, text in v14.tasks.items()}
+    return replace(v14, tasks=tasks)
 
 
 def _profile(spec: InstrumentSpec, system_text: str, instrument_tasks: Mapping[NoteKind, str],
@@ -1289,6 +1322,7 @@ PROMPTS: Mapping[str, Mapping[str, Profile]] = {
     V12: {symbol: _v12(spec) for symbol, spec in SPECS.items()},
     V13: {symbol: _v13(spec) for symbol, spec in SPECS.items()},
     V14: {symbol: _v14(spec) for symbol, spec in SPECS.items()},
+    V15: {symbol: _v15(spec) for symbol, spec in SPECS.items()},
 }
 VERSIONS = tuple(PROMPTS)
 
