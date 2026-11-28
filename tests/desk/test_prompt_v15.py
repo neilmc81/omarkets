@@ -80,3 +80,11 @@ def test_nq_has_both_required_tasks():
     tasks = P.PROMPTS[P.V15]["NQ"].tasks
     assert "past_week_split" in tasks[NoteKind.PREMARKET]
     assert "past_week_split" in tasks[NoteKind.REVIEW]
+
+
+def test_the_writer_drops_the_split_below_v15():
+    facts = {"real_yields": {"status": "available", "past_week_split": "x"}, "now": "n"}
+    assert P.facts_at(P.V14, facts) == {"real_yields": {"status": "available"}, "now": "n"}
+    assert P.facts_at(P.V15, facts) == facts
+    assert facts["real_yields"]["past_week_split"] == "x"  # the input is not changed
+    assert set(P.facts_at(P.V13, facts)) == {"now"}

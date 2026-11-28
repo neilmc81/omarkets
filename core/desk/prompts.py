@@ -453,8 +453,14 @@ VERSION_FACTS: Mapping[str, frozenset[str]] = {"recent_lessons": RECENT_LESSONS_
 
 def facts_at(version: str | None, facts: Mapping[str, Any]) -> dict[str, Any]:
     """A copy of ``facts`` without the fields prompt ``version`` doesn't take."""
-    return {key: value for key, value in facts.items()
-            if key not in VERSION_FACTS or version in VERSION_FACTS[key]}
+    out = {key: value for key, value in facts.items()
+           if key not in VERSION_FACTS or version in VERSION_FACTS[key]}
+    # A field inside a shared fact that only some versions take.
+    real = out.get("real_yields")
+    if (isinstance(real, Mapping) and "past_week_split" in real
+            and version not in REAL_YIELD_SPLIT_VERSIONS):
+        out["real_yields"] = {k: v for k, v in real.items() if k != "past_week_split"}
+    return out
 
 _V9_SYSTEM = """\
 You are the Omarkets desk writer. Your reader is a new trader who is learning how \
