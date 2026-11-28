@@ -583,6 +583,23 @@ instrument. Earlier versions neither fetch it nor get it (`REAL_YIELD_VERSIONS` 
   tendency, never the reason unless `why_evidence` says so); never compute either
   number.
 
+## Real yields required in the pre-market and weekly review (`desk:v15`)
+
+`desk:v15` is `desk:v14` with one change for the notes a trader reads for the day's
+and the week's backdrop. The pre-market and weekly review tasks must cover real yields
+in `rates_read` (level and past-week change, named with its day) and say what moved
+the 10-year yield this week. Move, ask and every other note are `desk:v14`'s text.
+
+- **`real_yields.past_week_split`** (v15 only, `F.week_split`): the 10-year yield's
+  past-week change as real yield plus breakeven inflation (they add up: same day, same
+  source), and which part moved it: "mostly the real yield" (at least twice the other),
+  "mostly inflation expectations (breakeven)", "both parts", "the two moved in opposite
+  directions" (both at least 3bp, opposite signs) or "little changed" (all under 3bp).
+  Without a week-ago day or nominal yields: `unavailable`.
+- Why: a rising real yield has tended to weigh on high-valuation tech; yields rising on
+  inflation expectations alone is usually milder. The writer explains the split and
+  never computes it. If real yields are unavailable the note says so in one clause.
+
 ## Did it hold? (release, Fed, earnings and move notes)
 
 No AI call. After a note is written, the desk measures NQ, ES and the 2- and
